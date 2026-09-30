@@ -149,21 +149,11 @@ CREATE INDEX idx_costs_category ON costs(category);
 ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS cost_usd numeric;
 ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS leads_contacted int;
 
--- collection_runs exists in the collector but was never migrated; create it
--- with every column the collectors write (api_calls/stages come from
--- collect_instantly.record_run).
-CREATE TABLE IF NOT EXISTS collection_runs (
-    id bigserial PRIMARY KEY,
-    ran_at timestamptz NOT NULL DEFAULT now(),
-    collector text NOT NULL DEFAULT 'instantly',
-    ok boolean,
-    api_calls int,
-    campaigns_collected int,
-    campaigns_persisted int,
-    stages jsonb,
-    errors jsonb,
-    UNIQUE (collector, ran_at)
-);
+-- collection_runs exists in the collector but was never migrated; add the
+-- collector column and unique index. The table already exists in the live DB;
+-- never use CREATE TABLE IF NOT EXISTS for it.
+ALTER TABLE collection_runs ADD COLUMN IF NOT EXISTS collector text NOT NULL DEFAULT 'instantly';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_collection_runs_collector_ran_at ON collection_runs (collector, ran_at);
 
 -- RLS: session-scoped reads for the signed-in dashboard user, mirroring the
 -- existing tables. The service_role key used by collectors bypasses RLS.
@@ -176,20 +166,20 @@ ALTER TABLE verification_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE domains ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inboxes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE costs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE collection_runs ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE t text;
 BEGIN
     FOREACH t IN ARRAY ARRAY[
         'ideas','channels','angles','angle_daily_metrics','leads',
-        'verification_runs','domains','inboxes','costs','collection_runs'
+        'verification_runs','domains','inboxes','costs'
     ] LOOP
-        -- Reads: anon + authenticated. This matches migration 001's effective
-        -- openness (no RLS there); the middleware allow-list is the access
-        -- gate. Writes below stay authenticated-only.
+        -- Reads: authenticated only. Mirror the Jacob-scoped policy used on
+        -- the four pre-existing tables (campaigns, daily_metrics, accounts,
+        -- collection_runs). Do NOT use USING (true) which would grant anon
+        -- read access to collected health data.
         EXECUTE format(
-            'CREATE POLICY authenticated_read ON %I FOR SELECT TO anon, authenticated USING (true)', t);
+            'CREATE POLICY authenticated_read ON %I FOR SELECT TO authenticated USING (auth.email() = %L)', t, 'yaakovytroutai@gmail.com');
     END LOOP;
 END $$;
 
