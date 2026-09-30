@@ -46,7 +46,7 @@ class TestSupabaseUpsert:
         
         mock_supabase = Mock()
         mock_response = Mock()
-        mock_response.data = [{"id": 1, "campaign_id": "uuid-1", "metric_date": "2024-01-15", "emails_sent": 100, "replies_human": 50, "replies_autoresponder": 10, "opportunities": 20, "bounces": 5, "open_rate": None, "unsubscribe": None}]
+        mock_response.data = [{"id": 1, "campaign_id": "uuid-1", "metric_date": "2024-01-15", "emails_sent": 100, "replies_unique": 50, "replies_automatic_unique": 10, "replies_all": 60, "opportunities": 20, "bounces": 5, "opens_unique": None, "unsubscribed": None, "open_reported": False, "unsub_reported": False}]
         mock_response.error = None
         mock_supabase.table.return_value.upsert.return_value.execute.return_value = mock_response
         
@@ -55,14 +55,19 @@ class TestSupabaseUpsert:
                 "campaign_id": "uuid-1",
                 "metric_date": "2024-01-15",
                 "emails_sent": 100,
-                "replies_total": 60,
-                "replies_human": 50,
-                "replies_autoresponder": 10,
+                "replies_unique": 50,
+                "replies_automatic_unique": 10,
+                "replies_all": 60,
                 "opportunities": 20,
                 "bounces": 5,
-                "open_rate": None,
-                "unsubscribe": None,
-                "source_updated_at": "2024-01-15T12:00:00Z"
+                "opens_unique": None,
+                "unsubscribed": None,
+                "open_reported": False,
+                "unsub_reported": False,
+                "rate_trusted": True,
+                "rate_untrusted_reason": None,
+                "denominator_source": "emails_sent",
+                "partial": False
             }
         ]
         
@@ -106,9 +111,9 @@ class TestSupabaseUpsert:
 
 
 class TestAutoresponderSeparation:
-    """Tests that autoresponder replies are excluded from human replies."""
+    """Autoresponder counters stay separate rather than being differenced."""
     
-    def test_replies_human_excludes_autoresponders(self):
+    def test_reply_counters_are_stored_independently(self):
         """reply_count_unique is human replies; reply_count includes autoresponders."""
         from collect_instantly import process_campaign_analytics
         
@@ -127,12 +132,16 @@ class TestAutoresponderSeparation:
         
         result = process_campaign_analytics(analytics)
         
-        # Human replies should use reply_count_unique, NOT reply_count
-        assert result["replies_human"] == 500
-        assert result["replies_autoresponder"] == 100
-        assert result["replies_total"] == 600
-        # Rate should be computed from human replies only
-        assert result["reply_rate"] == 0.5  # 500/1000
+        # Three independent raw counters. There is no replies_human column:
+        # the automatic count is not a subset of the unique count (see the
+        # TapDash campaign, where 10 > 8), so differencing them is invalid.
+        assert result["replies_unique"] == 500
+        assert result["replies_automatic_unique"] == 100
+        assert result["replies_all"] == 600
+        assert "replies_human" not in result
+        assert "replies_autoresponder" not in result
+        # Rate is computed from replies_unique only, never from replies_all.
+        assert result["_reply_rate"] == 0.5  # 500/1000
         # NOT 0.6 (which would be 600/1000 including autoresponders)
     
     def test_overview_reply_rate_uses_human_only(self):
@@ -154,10 +163,14 @@ class TestAutoresponderSeparation:
         result = compute_account_rates(overview)
         
         # Must use human replies only. compute_rate rounds to 4 places.
-        assert result["reply_rate"] == round(1910 / 45251, 4)  # 0.0422
-        assert result["reply_rate"] != round(2350 / 45251, 4)  # NOT 0.0519
-        assert result["replies_human"] == 1910
-        assert result["replies_autoresponder"] == 39
+        assert result["_reply_rate"] == round(1910 / 45251, 4)  # 0.0422
+        assert result["_reply_rate"] != round(2350 / 45251, 4)  # NOT 0.0519
+        # Both counters stored raw. No derived human count exists.
+        assert result["replies_unique"] == 1910
+        assert result["replies_automatic_unique"] == 39
+        assert "replies_human" not in result
+        assert result["rate_trusted"] is True
+        assert result["rate_untrusted_reason"] is None
 
 
 class TestNullHandling:
@@ -181,10 +194,13 @@ class TestNullHandling:
         
         result = process_campaign_analytics(analytics)
         
-        # open_rate should be None (NULL in DB), not 0.0
-        assert result["open_rate"] is None
-        assert result["open_rate"] != 0
-        assert result["open_rate"] != 0.0
+        # The raw count is NULL and the flag says the source never populated
+        # it. The API reads the flag, so a placeholder 0 never becomes 0.0%.
+        assert result["opens_unique"] is None
+        assert result["opens_unique"] != 0
+        assert result["open_reported"] is False
+        # No rate is stored for opens at all.
+        assert "open_rate" not in result
     
     def test_unsubscribe_is_null_when_api_does_not_report(self):
         """unsubscribed_count is 0 from API -> unsubscribe should be NULL, not 0."""
@@ -204,9 +220,11 @@ class TestNullHandling:
         
         result = process_campaign_analytics(analytics)
         
-        # unsubscribe should be None (NULL in DB), not 0
-        assert result["unsubscribe"] is None
-        assert result["unsubscribe"] != 0
+        # unsubscribed should be None (NULL in DB), not 0, and the flag must
+        # say the source never populated the field.
+        assert result["unsubscribed"] is None
+        assert result["unsubscribed"] != 0
+        assert result["unsub_reported"] is False
     
     def test_rate_is_null_when_denominator_missing(self):
         """When sent is None or 0, rate must be None, not 0."""

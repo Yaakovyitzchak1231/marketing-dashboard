@@ -317,6 +317,7 @@ for x in items:
 def collect() -> dict:
     api = Instantly()
     errors: list[dict] = []
+    run_started = _now()
 
     overview: dict = {}
     try:
@@ -348,7 +349,8 @@ def collect() -> dict:
         errors.append(_err("senders", exc))
 
     return {"overview": overview, "campaigns": campaigns, "senders": senders,
-            "errors": errors, "calls": api.calls}
+            "errors": errors, "calls": api.calls, "campaign_ids": ids,
+            "run_started_at": run_started}
 
 
 def rollup(overview: dict, campaigns: list[dict], senders: list[dict]) -> dict:
@@ -370,7 +372,13 @@ def rollup(overview: dict, campaigns: list[dict], senders: list[dict]) -> dict:
         return _num(node) or 0
 
     t: dict = {
+        # Surviving rows only -- NOT the inventory. Kept for dashboard.json's
+        # local consumers, but it is wrong to render as the campaign count:
+        # during a partial run it reported 5 for an 8-campaign account. The
+        # honest counts are campaigns_inventory_count and
+        # campaigns_collected_count, which persist() writes to accounts.
         "campaigns_total": len(campaigns),
+        "campaigns_surviving": len(campaigns),
         "campaigns_active": len(active),
         "campaigns_paused": sum(1 for c in campaigns if c.get("status") == "paused"),
         "campaigns_draft": sum(1 for c in campaigns if c.get("status") == "draft"),
@@ -472,11 +480,26 @@ def rollup(overview: dict, campaigns: list[dict], senders: list[dict]) -> dict:
 # =====================================================================
 
 
+# Reasons a rate is not publishable. These strings are the same ones T3's
+# lib/rates.ts emits, because the collector stores the reason and the API reads
+# it. If the two ever disagree, the UI renders a number the API called untrusted.
+REASON_NOT_COLLECTED = "not_collected"
+REASON_NO_SENDS = "no_sends"
+REASON_NUMERATOR_EXCEEDS = "numerator_exceeds_denominator"
+REASON_PARTIAL = "collector_error"
+REASON_SOURCE_UNREPORTED = "source_not_reported"
+
+
 def compute_rate(numerator, denominator, places: int = 4):
     """numerator/denominator, or None when either is absent or the base is 0.
 
-    "No sends yet" is not "0% replied". A rate over 1.0 is a bug upstream in
-    the numerator, never a result worth printing.
+    "No sends yet" is not "0% replied".
+
+    This function deliberately does NOT gate rates above 1.0 -- `rate_gate`
+    below owns that. The earlier version of this docstring claimed a rate over
+    1.0 was "never a result worth printing" while the code returned 4.5 for the
+    IRS Penalty Back campaign (9 unique replies from 2 sends). The claim was
+    wrong; the code now enforces it.
     """
     n, d = _num(numerator), _num(denominator)
     if n is None or d is None or d == 0:
@@ -484,110 +507,259 @@ def compute_rate(numerator, denominator, places: int = 4):
     return round(n / d, places)
 
 
+def rate_gate(numerator, denominator, *, partial: bool = False,
+              error_reason: str | None = None) -> tuple:
+    """The publishability decision for one rate.
+
+    Returns (rate, trusted, reason). Mirrors T3's `rateFrom` in lib/rates.ts.
+
+    The >100% case is the important one. reply_count_unique exceeds
+    emails_sent_count on two real campaigns (9 from 2, 10 from 3), which is
+    arithmetically impossible. No other field in the payload resolves it:
+    contacted_count and new_leads_contacted_count are <= emails_sent_count, and
+    leads_count -- the largest at 4 -- is still below 9. The rate is therefore
+    suppressed and the reason stored, rather than clamped to 100% (a claim) or
+    published as 450% (the bug this dashboard exists to fix).
+
+    A rate from a partial collection is arithmetically valid but is not a
+    measurement of the campaign, so it is withheld and marked untrusted.
+    """
+    if partial or error_reason:
+        return None, False, (error_reason or REASON_PARTIAL)
+    n, d = _num(numerator), _num(denominator)
+    if n is None or d is None:
+        return None, False, REASON_NOT_COLLECTED
+    if d <= 0:
+        return None, False, REASON_NO_SENDS
+    if n > d:
+        return None, False, REASON_NUMERATOR_EXCEEDS
+    return round(n / d, 4), True, None
+
+
 # Instantly reports open and unsubscribe tracking as a hard 0 on every
 # campaign and on the account overview. That is the API declining to populate
-# the field, not a measurement of zero opens. We treat a non-positive count
-# as "not reported" so the column lands as NULL rather than 0.0%.
-def _reported(value):
-    """A count the API actually measured, or None when it reported nothing."""
+# the field, not a measurement of zero opens.
+#
+# The old `_reported` returned None for any value <= 0. That conflated two
+# different things: "the API did not populate this" and "the API measured zero"
+# and they are different claims. It also meant open_reported could never be set
+# true, because a genuine zero opens would be discarded as unreported first.
+#
+# The rule below decides from evidence instead. A field is considered populated
+# for this account if ANY campaign in the portfolio reports a non-zero count. If
+# every campaign returns 0, the API is not populating the field, and a 0 on any
+# individual campaign is a placeholder rather than a measurement.
+#
+# That distinction is the whole of bug 3. If Instantly starts populating opens
+# tomorrow, the first run after the change reports open_reported = true and a
+# genuine 0 renders as 0.0%, which is correct. Until then it renders as null.
+def source_populates(overview: dict, campaigns: list[dict]) -> dict:
+    """Which optional metrics Instantly actually populates for this account.
+
+    Returns a dict of flag -> bool. Evaluated across the whole portfolio, not
+    per campaign, because "does this API report opens at all" is an account
+    property while "how many opens did this campaign get" is per campaign.
+    """
+    def any_positive(field: str) -> bool:
+        o = overview.get(field) if isinstance(overview, dict) else None
+        if (_num(o) or 0) > 0:
+            return True
+        for c in campaigns or []:
+            a = (c.get("analytics") or {}) if isinstance(c, dict) else {}
+            if (_num(a.get(field)) or 0) > 0:
+                return True
+        return False
+
+    return {
+        "open_reported": any_positive("open_count_unique"),
+        "unsub_reported": any_positive("unsubscribed_count"),
+    }
+
+
+def _reported(value, populated: bool = False):
+    """A count the API measured, or None when it did not populate the field.
+
+    `populated` comes from source_populates(). When the source does not populate
+    the field, a 0 is a placeholder and must become NULL. When it does populate,
+    a 0 is a real measurement and is preserved -- otherwise a genuine 0 would
+    be silently upgraded to "unknown", which is its own kind of lie.
+    """
     n = _num(value)
-    if n is None or n <= 0:
+    if n is None:
+        return None
+    if n == 0 and not populated:
         return None
     return n
 
 
-def process_campaign_analytics(analytics: dict) -> dict:
+def process_campaign_analytics(analytics: dict, *, populated: dict | None = None,
+                                partial: bool = False,
+                                error_reason: str | None = None) -> dict:
     """One campaign's analytics block -> the daily_metrics columns.
 
-    The reply split is the whole point. Instantly gives three numbers:
-      reply_count                 -- every reply, autoresponders included
-      reply_count_unique          -- replies from distinct leads; the human
-                                    figure
-      reply_count_automatic_unique -- autoresponders (OOO, "we never reply")
-    Rates here are built from reply_count_unique. Using reply_count is what
-    produced 333% and 450% on a campaign with far more autoreplies than sends.
+    Column names match migration 002 exactly. This is the contract the API
+    routes read, so a rename here is a 500 on /api/campaigns.
+
+    The reply counters are stored raw and independent:
+      replies_unique            <- reply_count_unique
+      replies_automatic_unique  <- reply_count_automatic_unique
+      replies_all               <- reply_count
+
+    There is deliberately NO replies_human column. On the TapDash campaign
+    reply_count_automatic_unique is 10 against reply_count_unique of 8, so
+    unique - automatic = -2. The automatic counter is not a subset of the
+    unique one; they are separate counters over different populations. Any
+    derived "human" count would be a negative number that passes every rate
+    check because -2/2126 looks like a valid percentage.
+
+    No rate is stored. Rates are recomputed by the API from raw counts on every
+    read, so a stored rate cannot go stale. What IS stored is the trust decision
+    and its reason, so the UI's words and the API's number cannot disagree.
     """
     a = analytics if isinstance(analytics, dict) else {}
+    populated = populated or {}
     sent = _num(a.get("emails_sent_count"))
-    human = _num(a.get("reply_count_unique"))
-    auto = _num(a.get("reply_count_automatic_unique"))
-    total = _num(a.get("reply_count"))
-    bounces = _num(a.get("bounced_count"))
-    opps = _num(a.get("total_opportunities"))
-    opens = _reported(a.get("open_count_unique"))
-    unsub = _reported(a.get("unsubscribed_count"))
+
+    reply_rate, reply_trusted, reply_reason = rate_gate(
+        a.get("reply_count_unique"), sent,
+        partial=partial, error_reason=error_reason)
+    bounce_rate, bounce_trusted, bounce_reason = rate_gate(
+        a.get("bounced_count"), sent,
+        partial=partial, error_reason=error_reason)
 
     return {
         "emails_sent": sent,
-        "replies_total": total,
-        # reply_count_unique is the human figure. If the API omits it we
-        # leave it NULL rather than falling back to the combined count.
-        "replies_human": human,
-        "replies_autoresponder": auto,
-        "opportunities": opps,
-        "bounces": bounces,
-        # NULL when the API did not report opens. Never 0.
-        "open_rate": compute_rate(opens, sent),
-        # NULL when the API did not report unsubscribes. Never 0.
-        "unsubscribe": unsub,
-        "reply_rate": compute_rate(human, sent),
-        "bounce_rate": compute_rate(bounces, sent),
+        "contacted_count": _num(a.get("contacted_count")),
+        "new_leads_contacted": _num(a.get("new_leads_contacted_count")),
+        "leads_count": _num(a.get("leads_count")),
+
+        "replies_unique": _num(a.get("reply_count_unique")),
+        "replies_automatic_unique": _num(a.get("reply_count_automatic_unique")),
+        "replies_all": _num(a.get("reply_count")),
+
+        "bounces": _num(a.get("bounced_count")),
+        "opportunities": _num(a.get("total_opportunities")),
+        "opportunity_value": _num(a.get("total_opportunity_value")),
+
+        # Raw counts, not rates. The API derives the rate and knows to return
+        # null because open_reported is false.
+        "opens_unique": _reported(a.get("open_count_unique"),
+                                  populated.get("open_reported", False)),
+        "unsubscribed": _reported(a.get("unsubscribed_count"),
+                                  populated.get("unsub_reported", False)),
+        "open_reported": bool(populated.get("open_reported", False)),
+        "unsub_reported": bool(populated.get("unsub_reported", False)),
+
+        "denominator_source": "emails_sent",
+        "rate_trusted": reply_trusted,
+        "rate_untrusted_reason": reply_reason,
+        "bounce_rate_trusted": bounce_trusted,
+        "bounce_rate_untrusted_reason": bounce_reason,
+        "partial": partial,
+
+        # Retained for the local print path and dashboard.json. Never persisted.
+        "_reply_rate": reply_rate,
+        "_bounce_rate": bounce_rate,
     }
 
 
 def build_daily_metrics(campaign: dict, campaign_id: str,
-                        metric_date: str | None = None) -> dict:
+                        metric_date: str | None = None, *,
+                        populated: dict | None = None, partial: bool = False,
+                        error_reason: str | None = None) -> dict:
     """The row to upsert into daily_metrics for one campaign on one day."""
-    metrics = process_campaign_analytics(campaign.get("analytics") or {})
+    m = process_campaign_analytics(
+        campaign.get("analytics") or {}, populated=populated,
+        partial=partial, error_reason=error_reason)
     day = metric_date or datetime.now(timezone.utc).date().isoformat()
-    # Only the persisted columns; the computed rates are deliberately NOT
-    # stored. A stored rate goes stale the moment the underlying count is
-    # re-read, and the API layer recomputes rates from raw counts anyway.
+    # No per-run timestamp: a second run on the same day must produce a
+    # byte-identical row. `metric_date` is the stable key and the database
+    # fills collected_at via its DEFAULT. Adding _now() here broke the
+    # idempotency guarantee that AC1 asserts.
     return {
         "campaign_id": campaign_id,
         "metric_date": day,
-        "emails_sent": metrics["emails_sent"],
-        "replies_total": metrics["replies_total"],
-        "replies_human": metrics["replies_human"],
-        "replies_autoresponder": metrics["replies_autoresponder"],
-        "opportunities": metrics["opportunities"],
-        "bounces": metrics["bounces"],
-        "open_rate": metrics["open_rate"],
-        "unsubscribe": metrics["unsubscribe"],
-        "source_updated_at": _now(),
+        **{k: v for k, v in m.items() if not k.startswith("_")},
     }
 
 
-def compute_account_rates(overview: dict, senders: list[dict] | None = None) -> dict:
-    """Account-wide raw counts -> the accounts row plus derived rates.
+def compute_account_rates(overview: dict, senders: list[dict] | None = None,
+                          *, campaigns: list[dict] | None = None,
+                          inventory_count: int | None = None,
+                          partial: bool = False) -> dict:
+    """Account-wide raw counts -> the accounts row.
 
-    Note what is NOT here: open_rate and unsubscribe. Neither exists in the
-    `accounts` table by design, because the overview endpoint does not
-    populate them. The API layer emits them as null. Adding a column for a
-    number the source does not report is how "0.0%" got onto the page.
+    Column names match migration 002. The reply counters are the same three
+    independent raw values as the per-campaign rows; there is no replies_human
+    column at any level.
+
+    opens_unique and unsubscribed are stored as raw counts beside their
+    open_reported / unsub_reported flags. The API reads the FLAGS, not the
+    count's truthiness, which is how a placeholder 0 becomes null instead of
+    0.0%. When INSTANTLY_LIST_ACCOUNTS fails, mailbox_count and healthy_mailboxes
+    are None rather than 0 -- "we did not ask" is not "zero mailboxes".
     """
     o = overview if isinstance(overview, dict) else {}
     senders = senders or []
     sent = _num(o.get("emails_sent_count"))
-    human = _num(o.get("reply_count_unique"))
-    auto = _num(o.get("reply_count_automatic_unique"))
-    bounces = _num(o.get("bounced_count"))
+    populated = source_populates(o, campaigns or [])
 
-    healthy = sum(1 for s in senders if _num(s.get("status")) in (1, 2))
+    reply_rate, reply_trusted, reply_reason = rate_gate(
+        o.get("reply_count_unique"), sent, partial=partial)
+    bounce_rate, bounce_trusted, bounce_reason = rate_gate(
+        o.get("bounced_count"), sent, partial=partial)
 
     return {
         "emails_sent": sent,
-        "replies_human": human,
-        "replies_autoresponder": auto,
-        "bounces": bounces,
+        "contacted_count": _num(o.get("contacted_count")),
+        "new_leads_contacted": _num(o.get("new_leads_contacted_count")),
+
+        "replies_unique": _num(o.get("reply_count_unique")),
+        "replies_automatic_unique": _num(o.get("reply_count_automatic_unique")),
+        "replies_all": _num(o.get("reply_count")),
+
+        "bounces": _num(o.get("bounced_count")),
+        "unsubscribed": _reported(o.get("unsubscribed_count"),
+                                  populated["unsub_reported"]),
         "opportunities": _num(o.get("total_opportunities")),
         "opportunity_value": _num(o.get("total_opportunity_value")),
-        "mailbox_count": len(senders) or None,
-        "healthy_mailboxes": healthy or None,
-        # Recomputed from raw counts every time. Never averaged.
-        "reply_rate": compute_rate(human, sent),
-        "bounce_rate": compute_rate(bounces, sent),
+
+        "opens_unique": _reported(o.get("open_count_unique"),
+                                  populated["open_reported"]),
+        "open_reported": populated["open_reported"],
+        "unsub_reported": populated["unsub_reported"],
+
+        "mailbox_count": len(senders) if senders else None,
+        "healthy_mailboxes": (
+            sum(1 for s in senders if _num(s.get("status")) in (1, 2))
+            if senders else None
+        ),
+        "warmup_score_avg": _warmup_avg(senders),
+
+        "denominator_source": "emails_sent",
+        "rate_trusted": reply_trusted,
+        "rate_untrusted_reason": reply_reason,
+        "bounce_rate_trusted": bounce_trusted,
+        "bounce_rate_untrusted_reason": bounce_reason,
+        "partial": partial,
+
+        # The truncation canary. campaign_inventory_count is how many ids the
+        # collector found; campaign_collected_count is how many of those
+        # produced a row. When they differ the portfolio is short and the
+        # headline total is computed from a subset.
+        "campaigns_inventory_count": inventory_count,
+        "campaigns_collected_count": None,   # filled by persist()
+
+        "_reply_rate": reply_rate,
+        "_bounce_rate": bounce_rate,
     }
+
+
+def _warmup_avg(senders: list[dict]):
+    """Mean warmup score, or None. An average of raw scores, never of a rate."""
+    scores = [_num(s.get("warmup_score")) for s in senders]
+    scores = [x for x in scores if x is not None]
+    return round(sum(scores) / len(scores), 1) if scores else None
 
 
 # ---------------------------------------------------------------------
@@ -670,10 +842,72 @@ def supabase_client():
     return create_client(url, key)
 
 
-def persist(sb, got: dict, metric_date: str | None = None) -> dict:
+# The inventory is the set of ids found; the collected set is what produced a
+# row. They are equal on a clean run. On a run where a per-campaign API call
+# 502s they are not, and the difference is portfolio volume the page never saw.
+def _failed_campaign_ids(errors: list[dict]) -> set[str]:
+    """Campaign external_ids named by an error entry."""
+    out = set()
+    for e in errors or []:
+        stage = str(e.get("stage") or "")
+        if stage.startswith("campaign:"):
+            out.add(stage.split(":", 1)[1])
+    return out
+
+
+def _split_stage(stage: str) -> tuple[str, str | None]:
+    if ":" in stage:
+        prefix, cid = stage.split(":", 1)
+        return prefix, cid
+    return stage, None
+
+
+def record_collection_errors(sb, errors: list[dict],
+                            run_started_at: str | None = None) -> int:
+    """One row per failed call, in `collection_errors`.
+
+    This is the feed T3's /api/collection-errors reads for the partial-data
+    banner, and it is the ONLY source of "N of M campaigns collected". The
+    banner's count must be the collector's count, never a UI guess and never
+    len(campaigns) -- that is how 5 surviving rows came to be reported as the
+    portfolio.
+
+    Errors are appended, not upserted: each run's failures are a new
+    observation. `resolved` defaults FALSE so the banner shows until a later
+    clean run resolves them.
+    """
+    rows = []
+    for e in errors or []:
+        stage = str(e.get("stage") or "unknown")
+        _, cid = _split_stage(stage)
+        rows.append({
+            # The collector's own error timestamp, which is part of the
+            # observation. Not _now(): re-running would insert a fresh row for
+            # a failure that has not changed, and the banner would show the
+            # same outage once per run.
+            "collected_at": e.get("at") or run_started_at or _now(),
+            "run_started_at": run_started_at or e.get("at") or _now(),
+            "stage": stage,
+            "campaign_external_id": cid,
+            "error": str(e.get("error") or "")[:2000],
+            "resolved": False,
+        })
+    _upsert(sb, "collection_errors", rows, "collected_at,stage,campaign_external_id")
+    return len(rows)
+
+
+def persist(sb, got: dict, metric_date: str | None = None,
+            inventory_count: int | None = None) -> dict:
     """Write one collection into Supabase. Idempotent by construction."""
     day = metric_date or datetime.now(timezone.utc).date().isoformat()
     campaigns, overview, senders = got["campaigns"], got["overview"], got["senders"]
+    errors = got.get("errors") or []
+    run_started = got.get("run_started_at") or _now()
+
+    # Which campaigns failed to collect. A campaign with no analytics block is
+    # a partial row even when its identity upsert succeeded.
+    failed = _failed_campaign_ids(errors)
+    inventory = inventory_count if inventory_count is not None else len(got.get("campaign_ids") or []) or len(campaigns)
 
     # 1. Identity first: daily_metrics needs the campaigns.id uuid, which is
     #    only known after the upsert returns it.
@@ -689,36 +923,58 @@ def persist(sb, got: dict, metric_date: str | None = None) -> dict:
     #    failure look like a complete day.
     missing = [c["id"] for c in campaigns
                if c.get("id") and c["id"] not in id_map]
-    metrics = [build_daily_metrics(c, id_map[c["id"]], metric_date=day)
-               for c in campaigns if c.get("id") in id_map]
+
+    populated = source_populates(overview, campaigns)
+    metrics = []
+    for c in campaigns:
+        cid = c.get("id")
+        if not cid or cid not in id_map:
+            continue
+        short = str(cid)[:8]
+        is_partial = short in failed or bool(c.get("partial"))
+        metrics.append(build_daily_metrics(
+            c, id_map[cid], metric_date=day, populated=populated,
+            partial=is_partial,
+            error_reason=f"campaign:{short}" if is_partial else None))
     upsert_daily_metrics(sb, metrics)
 
     # 3. Account rollup. Skipped entirely when the overview call failed --
     #    an accounts row built from an empty overview would be a row of
     #    NULLs that reads as "zero activity" rather than "we could not ask".
     account_rows: list[dict] = []
+    partial_run = bool(errors) or bool(missing)
     if overview:
-        rates = compute_account_rates(overview, senders)
-        account_rows = [{**{k: v for k, v in rates.items()
-                             if k not in ("reply_rate", "bounce_rate")},
-                         "metric_date": day}]
+        rates = compute_account_rates(
+            overview, senders, campaigns=campaigns,
+            inventory_count=inventory, partial=partial_run)
+        rates["campaigns_collected_count"] = len(metrics)
+        account_rows = [{
+            **{k: v for k, v in rates.items() if not k.startswith("_")},
+            "metric_date": day,
+        }]
         upsert_accounts(sb, account_rows)
+
+    # 4. Per-campaign errors so the banner can name a failed campaign. Account
+    #    level stages have no campaign id and belong in the run record.
+    record_collection_errors(sb, errors, run_started_at=run_started)
 
     record_run(
         sb,
-        ok=bool(overview) and not got["errors"] and not missing,
+        ok=bool(overview) and not errors and not missing,
         stages=[{"stage": "overview", "ok": bool(overview)},
                 {"stage": "campaigns", "ok": len(metrics),
-                 "expected": len(campaigns)}],
+                 "expected": inventory}],
         api_calls=got["calls"],
         campaigns=len(campaigns),
         campaign_id_map=id_map,
-        errors=got["errors"] + [{"stage": "campaign_identity_missing",
-                                 "error": f"{len(missing)} campaign(s) had no id after upsert"}]
-        if missing else got["errors"],
+        errors=errors + [{"stage": "campaign_identity_missing",
+                          "error": f"{len(missing)} campaign(s) had no id after upsert"}]
+        if missing else errors,
     )
     return {"campaign_rows": len(campaign_rows), "metric_rows": len(metrics),
-            "account_rows": len(account_rows), "identity_missing": missing}
+            "account_rows": len(account_rows), "identity_missing": missing,
+            "inventory_count": inventory, "collected_count": len(metrics),
+            "partial": partial_run, "populated": populated}
 
 
 def write_history(totals: dict) -> None:
