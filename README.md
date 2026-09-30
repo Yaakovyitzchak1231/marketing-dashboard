@@ -8,30 +8,30 @@ Production: https://marketing-dashboard-xi-five.vercel.app
 
 Vercel project `marketing-dashboard` on team `yaakovyitzchak1231's projects` (hobby). Do not upgrade the plan.
 
-Production is deployment `dpl_HEByDdoHYB2VJ7XCkiJKrW6u6Hsg`, commit `cd9b916` on `task/t10-deploy`. That commit is `ccced4e` plus the trend order fix (`20c9988`) and the unreliable-rate copy fix (`ea6c446`). QA passed on `280974b`, which this commit contains. Do not push `main` and expect it to become production.
+Production is deployment `dpl_3aVhorP53DwzczC1TjzRZ4shwqWs`, commit `e0be1f1` on `task/t10-deploy`. That commit is `cd9b916` plus the session-scoped read path from `05cf06c`. The routes send the caller's session cookie to PostgREST. They do not use the service-role key. QA passed on `280974b`, which this commit contains. Do not push `main` and expect it to become production.
 
 Checked 2026-09-30 after that deploy, unauthenticated:
 
 - `GET /` → 307 to `/login`
-- `GET /login` → 200, email and password fields
+- `GET /login` → 200, email and password fields, no magic-link copy
 - `GET /api/overview` → 401 `{"error":"Unauthorized"}`
 - `GET /api/campaigns` → 401 `{"error":"Unauthorized"}`
 - `GET /api/campaigns/22961f82-4e5c-4be1-a576-aff39eab493f/trend?range=30d` → 401
 
 Those bodies do not include campaign rows.
 
-Signed in, the same check, the page is not showing the database:
+Signed in as the allow-listed user, the same check matches the database. `select count(*)` returns 8 campaigns, 8 daily-metric rows, and 1 account, latest metric date `2026-09-30`.
 
-- `GET /` → 200
-- `GET /api/overview?range=7d` → 200, every count `null`
-- `GET /api/campaigns?range=7d` → 200, `{"campaigns":[]}`
-- the trend URL above → 404 `{"error":"Campaign not found"}`
+- `GET /` → 200. The HTML names all 8 campaigns and includes 45,545 sent. It does not include the login form.
+- `GET /api/overview?range=7d` → 200. 45545 sent, 1910 human replies, 39 autoresponder replies, 174 bounces, 1335 opportunities, opportunity value 1335000. Open rate and unsubscribes are null, and the page says they are not reported.
+- `GET /api/campaigns?range=7d` → 200, 8 campaigns. Each reply rate is human replies divided by emails sent, not human plus autoresponder. Two source rows have more human replies than emails sent (IRS Penalty Back: 9 human / 2 sent; PB Signups / Leads (TEST): 10 human / 3 sent). The page says that rate is not reliable. It does not say autoresponders are in the rate.
+- The first campaign's trend URL → 200, one daily point. That is the one stored day, not a fetch error.
 
-`select count(*)` still returns 8 campaigns, 8 daily-metric rows, and 1 account, latest metric date `2026-09-30`. RLS is on. SELECT policies exist for `authenticated` only, scoped to `yaakovytroutai@gmail.com`. The live routes still query as the anon role, so PostgREST returns no rows. An empty 200 is not "the account sent nothing."
+The previous production deployment, `dpl_HEByDdoHYB2VJ7XCkiJKrW6u6Hsg` (`cd9b916`), returned an empty 200 while signed in because those routes still queried as anon after RLS. That is not the current response.
 
-An earlier signed-in check the same day, before RLS, showed 8 campaigns. Overview matched the accounts row: 45,545 sent, 1,910 human replies, 174 bounces, 1,335 opportunities, opportunity value 1335000. Open rate and unsubscribes were not reported. That check is not the current production response.
+Git pushes from this private repo can land as `BLOCKED` (Vercel hobby account-collaboration). A blocked git deployment is not a production release. The live deployment above was created from commit `e0be1f1` via the Vercel API, not by pushing `main`.
 
-Git pushes from this private repo can land as `BLOCKED` (Vercel hobby account-collaboration). A blocked git deployment is not a production release. The live deployment above was created from commit `cd9b916` via the Vercel API, not by pushing `main`.
+Jacob has not yet confirmed the page on a phone or a desktop. Layout and type are not verified until he says so.
 
 ## Setup
 
