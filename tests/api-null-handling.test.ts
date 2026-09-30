@@ -14,6 +14,16 @@ const mockSupabaseApi = vi.hoisted(() => ({
   inner: vi.fn().mockReturnThis()
 }))
 
+// Every API route builds its Supabase client through this module, which reads
+// the caller's session (bearer header, else the @supabase/ssr cookie jar).
+// The routes previously each built their own client inline, and the trend
+// route used the shared browser client -- so mocking '@/lib/supabase' no
+// longer intercepts any of them. Mocking the one seam the routes share is
+// what these tests actually need.
+vi.mock('@/lib/request-supabase', () => ({
+  getRequestSupabaseClient: vi.fn(async () => mockSupabaseApi),
+}))
+
 vi.mock('@/lib/supabase', () => ({
   supabase: mockSupabaseApi
 }))

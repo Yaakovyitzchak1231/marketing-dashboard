@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getRequestSupabaseClient } from '@/lib/request-supabase'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // This route previously imported the shared BROWSER client from
+  // `@/lib/supabase`. On the server that client has no request cookies, so
+  // every query went out unauthenticated and RLS returned nothing. Same class
+  // of bug as overview and campaigns: the read must carry the caller's
+  // session.
+  const supabase = await getRequestSupabaseClient(request)
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured' },
+      { status: 503 }
+    )
+  }
+
   const { id } = await params
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '30d'
@@ -39,7 +52,11 @@ export async function GET(
       `)
       .eq('id', id)
       .gte('daily_metrics.metric_date', cutoffStr)
-      .order('daily_metrics.metric_date', { ascending: true })
+      // Ordering by the qualified path "daily_metrics.metric_date" is invalid
+      // PostgREST syntax and returns PGRST100. The embedded column is named
+      // bare, with referencedTable pointing at the join -- the same pattern
+      // app/api/campaigns/route.ts uses.
+      .order('metric_date', { ascending: true, referencedTable: 'daily_metrics' })
       .single()
     
     if (error) {
