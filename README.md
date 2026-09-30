@@ -8,18 +8,22 @@ Production: https://marketing-dashboard-xi-five.vercel.app
 
 Vercel project `marketing-dashboard` on team `yaakovyitzchak1231's projects` (hobby). Do not upgrade the plan.
 
-The production deployment is commit `280974b` (`integrate/all`). QA passed on that commit. `main` is behind it. Do not push `main` and expect it to become production, and do not point the production branch at `main` unless you also deploy the commit you mean to ship.
+Production is deployment `dpl_3odzWgAYk2htLwSJAAFiP8nvqsWN`, commit `ccced4e`. QA passed on `280974b`, which this commit contains. `main` is behind it. Do not push `main` and expect it to become production, and do not point the production branch at `main` unless you also deploy the commit you mean to ship.
 
 Checked 2026-09-30, unauthenticated:
 
 - `GET /` → 307 to `/login`
-- `GET /login` → 200
+- `GET /login` → 200, email and password fields
 - `GET /api/overview` → 401 `{"error":"Unauthorized"}`
 - `GET /api/campaigns` → 401 `{"error":"Unauthorized"}`
 
 Those API responses do not include campaign rows.
 
-Git pushes from this private repo currently create deployments in state `BLOCKED` (Vercel hobby account-collaboration). The live deployment was not produced by a git push. A blocked git deployment must not be treated as a new production release.
+Signed in, the same day, the page showed 8 campaigns. That matches `select count(*) from campaigns`. The overview figures matched the `accounts` row: 45,545 sent, 1,910 human replies, 174 bounces, 1,335 opportunities, opportunity value 1335000. Open rate and unsubscribes rendered as not reported. `open_rate` and `unsubscribe` are null in `daily_metrics`.
+
+`GET /api/campaigns/22961f82-4e5c-4be1-a576-aff39eab493f/trend?range=30d` returned 500. The page shows the error sentence for the trend. It does not draw a chart from a failed response.
+
+Git pushes from this private repo can land as `BLOCKED` (Vercel hobby account-collaboration). A blocked git deployment is not a production release. The live deployment above was a redeploy of `ccced4e`, not a push to `main`.
 
 ## Setup
 
@@ -36,7 +40,7 @@ Set the same names in the Vercel project for Production. Never commit a filled e
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser and server. Project `zlbxjdueuhinywnovyoe`. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser. Public client key. Still do not commit it. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only. Not stored in this repo. Must not appear in the client bundle. |
-| `ALLOWED_USER_EMAIL` | Middleware allow-list. The code default is a placeholder (`jacob@example.com`). Production overrides it. One address only. |
+| `ALLOWED_USER_EMAIL` | Middleware allow-list. At `ccced4e` an unset value fails closed (`unset@invalid.local`). Production is set to the one confirmed auth user. One address only. |
 
 `COMPOSIO_API_KEY` and `INSTANTLY_ACCOUNT` are collector settings. The Next.js app does not call Instantly.
 
@@ -44,7 +48,7 @@ Set the same names in the Vercel project for Production. Never commit a filled e
 
 Unauthenticated page requests redirect to `/login`. Unauthenticated API requests return 401 and no data. A session whose email is not the allow-listed address is rejected.
 
-The deployment at `280974b` signs in with a magic link (`signInWithOtp`). Supabase's built-in SMTP does not reliably deliver that mail, so that sign-in cannot be finished from this host. Do not weaken the 401 to work around it.
+Sign-in is email and password (`signInWithPassword`). The magic link is gone. The only confirmed auth user is `yaakovytroutai@gmail.com`. The password is in `/home/hermes/.hermes/profiles/leaddesk/secrets/dashboard_login.env` (mode 600). Do not commit it, and do not put it in this file. Do not weaken the 401 to work around a failed sign-in.
 
 ## Refresh
 
