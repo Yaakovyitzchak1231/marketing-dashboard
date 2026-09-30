@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * The page ground.
+ *
+ * The tokens live in tailwind.config.ts; this file only establishes the
+ * document defaults. Keeping the palette in one place is what stops the
+ * dashboard drifting into a template look -- there is no second place to
+ * define a colour.
+ */
+html {
+  background-color: theme('colors.canvas');
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: theme('colors.canvas');
+  color: theme('colors.ink');
+  font-family: theme('fontFamily.sans');
+  /* Tabular figures are the default, not a per-component decision: a column
+     of numbers that does not align digit-for-digit is the fastest way to look
+     careless. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Respect the OS setting. A dashboard that animates regardless is a dashboard
+   that can make someone ill, and the only animation here is a fade. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The focus ring is the one place a second colour is acceptable: it has to
+   survive on the canvas and on the accent, and it must be visible on a phone
+   where nobody is using a mouse. */
+:focus-visible {
+  outline: 2px solid theme('colors.accent');
+  outline-offset: 2px;
+}
