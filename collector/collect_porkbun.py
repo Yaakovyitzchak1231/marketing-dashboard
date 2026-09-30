@@ -93,7 +93,7 @@ def main() -> int:
                 "dns_healthy": healthy,
                 "dns_last_checked_at": _now(),
                 "updated_at": _now(),
-                **({"notes": note} if note else {}),
+                "notes": note or None,
             })
     except Exception as exc:  # noqa: BLE001
         errors.append({"stage": "domain_list",
