@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+<<<<<<< HEAD
 import { NextRequest } from 'next/server'
 
 // Mock the API supabase client using vi.hoisted to avoid TDZ
@@ -18,10 +19,37 @@ vi.mock('@/lib/supabase', () => ({
   supabase: mockSupabaseApi
 }))
 
+=======
+>>>>>>> origin/task/t6-shell
 import { GET as overviewGET } from '@/app/api/overview/route'
 import { GET as campaignsGET } from '@/app/api/campaigns/route'
 import { GET as trendGET } from '@/app/api/campaigns/[id]/trend/route'
 
+<<<<<<< HEAD
+=======
+// Mock Supabase client.
+// vi.hoisted: vi.mock factories are hoisted above module-level consts, so a
+// plain `const` here is still in the TDZ when the factory runs.
+const { mockSupabase } = vi.hoisted(() => {
+  const mockSupabase = {
+    from: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn(),
+    inner: vi.fn().mockReturnThis()
+  }
+  return { mockSupabase }
+})
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: mockSupabase
+}))
+
+>>>>>>> origin/task/t6-shell
 describe('API Layer - Null Handling', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -29,9 +57,15 @@ describe('API Layer - Null Handling', () => {
 
   describe('GET /api/overview', () => {
     it('returns null for all metrics when no data exists', async () => {
+<<<<<<< HEAD
       mockSupabaseApi.single.mockResolvedValue({ data: null, error: { code: 'PGRST116' } })
       
       const request = new NextRequest(new URL('/api/overview?range=7d', 'http://localhost'))
+=======
+      mockSupabase.single.mockResolvedValue({ data: null, error: { code: 'PGRST116' } })
+      
+      const request = new Request('http://localhost/api/overview?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await overviewGET(request)
       const data = await response.json()
       
@@ -48,7 +82,11 @@ describe('API Layer - Null Handling', () => {
     })
 
     it('returns null for rates when sent is 0 or null', async () => {
+<<<<<<< HEAD
       mockSupabaseApi.single.mockResolvedValue({
+=======
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: {
           emails_sent: 0,
           replies_human: 5,
@@ -62,7 +100,11 @@ describe('API Layer - Null Handling', () => {
         error: null
       })
       
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/overview?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/overview?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await overviewGET(request)
       const data = await response.json()
       
@@ -72,8 +114,13 @@ describe('API Layer - Null Handling', () => {
       expect(data.bounce_rate).toBeNull()  // 0 sent -> null rate
     })
 
+<<<<<<< HEAD
     it('returns null for open_rate and unsubscribe when API does not provide them (populated path)', async () => {
       mockSupabaseApi.single.mockResolvedValue({
+=======
+    it('returns null for open_rate and unsubscribe when API does not provide them', async () => {
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: {
           emails_sent: 1000,
           replies_human: 50,
@@ -87,6 +134,7 @@ describe('API Layer - Null Handling', () => {
         error: null
       })
       
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/overview?range=7d', 'http://localhost'))
       const response = await overviewGET(request)
       const data = await response.json()
@@ -104,6 +152,19 @@ describe('API Layer - Null Handling', () => {
 
     it('computes reply_rate from raw counts, never averages', async () => {
       mockSupabaseApi.single.mockResolvedValue({
+=======
+      const request = new Request('http://localhost/api/overview?range=7d')
+      const response = await overviewGET(request)
+      const data = await response.json()
+      
+      // These are not even in the accounts table - they should be null
+      expect(data.open_rate).toBeNull()
+      expect(data.unsubscribe).toBeNull()
+    })
+
+    it('computes reply_rate from raw counts, never averages', async () => {
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: {
           emails_sent: 1000,
           replies_human: 50,
@@ -117,7 +178,11 @@ describe('API Layer - Null Handling', () => {
         error: null
       })
       
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/overview?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/overview?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await overviewGET(request)
       const data = await response.json()
       
@@ -126,6 +191,7 @@ describe('API Layer - Null Handling', () => {
       // Should NOT be 0.06 (which would be (50+10)/1000 - wrong, includes autoresponders)
       expect(data.reply_rate).not.toBe(0.06)
     })
+<<<<<<< HEAD
 
     it('returns null for rates when sent is 0', async () => {
       mockSupabaseApi.single.mockResolvedValue({
@@ -151,12 +217,18 @@ describe('API Layer - Null Handling', () => {
       expect(data.reply_rate).toBeNull()  // 0 sent -> null rate
       expect(data.bounce_rate).toBeNull()  // 0 sent -> null rate
     })
+=======
+>>>>>>> origin/task/t6-shell
   })
 
   describe('GET /api/campaigns', () => {
     it('returns null for missing metrics in daily_metrics', async () => {
+<<<<<<< HEAD
       // The route uses .limit(100) not .single() - mock the chain correctly
       mockSupabaseApi.limit.mockResolvedValue({
+=======
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: [
           {
             id: 'camp-1',
@@ -180,7 +252,11 @@ describe('API Layer - Null Handling', () => {
         error: null
       })
       
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/campaigns?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await campaignsGET(request)
       const data = await response.json()
       
@@ -189,7 +265,11 @@ describe('API Layer - Null Handling', () => {
     })
 
     it('never coerces null to 0 for rates', async () => {
+<<<<<<< HEAD
       mockSupabaseApi.limit.mockResolvedValue({
+=======
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: [{
           id: 'camp-1',
           external_id: 'ext-1',
@@ -211,7 +291,11 @@ describe('API Layer - Null Handling', () => {
         error: null
       })
       
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/campaigns?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await campaignsGET(request)
       const data = await response.json()
       
@@ -224,7 +308,11 @@ describe('API Layer - Null Handling', () => {
 
   describe('GET /api/campaigns/[id]/trend', () => {
     it('returns null for open_rate and unsubscribe in trend data', async () => {
+<<<<<<< HEAD
       mockSupabaseApi.single.mockResolvedValue({
+=======
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: {
           id: 'camp-1',
           external_id: 'ext-1',
@@ -260,7 +348,11 @@ describe('API Layer - Null Handling', () => {
       })
       
       const params = Promise.resolve({ id: 'camp-1' })
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/campaigns/camp-1/trend?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/campaigns/camp-1/trend?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await trendGET(request, { params })
       const data = await response.json()
       
@@ -271,7 +363,11 @@ describe('API Layer - Null Handling', () => {
     })
 
     it('computes daily rates from raw counts per day', async () => {
+<<<<<<< HEAD
       mockSupabaseApi.single.mockResolvedValue({
+=======
+      mockSupabase.single.mockResolvedValue({
+>>>>>>> origin/task/t6-shell
         data: {
           id: 'camp-1',
           external_id: 'ext-1',
@@ -296,7 +392,11 @@ describe('API Layer - Null Handling', () => {
       })
       
       const params = Promise.resolve({ id: 'camp-1' })
+<<<<<<< HEAD
       const request = new NextRequest(new URL('/api/campaigns/camp-1/trend?range=7d', 'http://localhost'))
+=======
+      const request = new Request('http://localhost/api/campaigns/camp-1/trend?range=7d')
+>>>>>>> origin/task/t6-shell
       const response = await trendGET(request, { params })
       const data = await response.json()
       
