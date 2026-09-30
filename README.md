@@ -8,22 +8,30 @@ Production: https://marketing-dashboard-xi-five.vercel.app
 
 Vercel project `marketing-dashboard` on team `yaakovyitzchak1231's projects` (hobby). Do not upgrade the plan.
 
-Production is deployment `dpl_3odzWgAYk2htLwSJAAFiP8nvqsWN`, commit `ccced4e`. QA passed on `280974b`, which this commit contains. `main` is behind it. Do not push `main` and expect it to become production, and do not point the production branch at `main` unless you also deploy the commit you mean to ship.
+Production is deployment `dpl_HEByDdoHYB2VJ7XCkiJKrW6u6Hsg`, commit `cd9b916` on `task/t10-deploy`. That commit is `ccced4e` plus the trend order fix (`20c9988`) and the unreliable-rate copy fix (`ea6c446`). QA passed on `280974b`, which this commit contains. Do not push `main` and expect it to become production.
 
-Checked 2026-09-30, unauthenticated:
+Checked 2026-09-30 after that deploy, unauthenticated:
 
 - `GET /` → 307 to `/login`
 - `GET /login` → 200, email and password fields
 - `GET /api/overview` → 401 `{"error":"Unauthorized"}`
 - `GET /api/campaigns` → 401 `{"error":"Unauthorized"}`
+- `GET /api/campaigns/22961f82-4e5c-4be1-a576-aff39eab493f/trend?range=30d` → 401
 
-Those API responses do not include campaign rows.
+Those bodies do not include campaign rows.
 
-Signed in, the same day, the page showed 8 campaigns. That matches `select count(*) from campaigns`. The overview figures matched the `accounts` row: 45,545 sent, 1,910 human replies, 174 bounces, 1,335 opportunities, opportunity value 1335000. Open rate and unsubscribes rendered as not reported. `open_rate` and `unsubscribe` are null in `daily_metrics`.
+Signed in, the same check, the page is not showing the database:
 
-`GET /api/campaigns/22961f82-4e5c-4be1-a576-aff39eab493f/trend?range=30d` returned 500. The page shows the error sentence for the trend. It does not draw a chart from a failed response.
+- `GET /` → 200
+- `GET /api/overview?range=7d` → 200, every count `null`
+- `GET /api/campaigns?range=7d` → 200, `{"campaigns":[]}`
+- the trend URL above → 404 `{"error":"Campaign not found"}`
 
-Git pushes from this private repo can land as `BLOCKED` (Vercel hobby account-collaboration). A blocked git deployment is not a production release. The live deployment above was a redeploy of `ccced4e`, not a push to `main`.
+`select count(*)` still returns 8 campaigns, 8 daily-metric rows, and 1 account, latest metric date `2026-09-30`. RLS is on. SELECT policies exist for `authenticated` only, scoped to `yaakovytroutai@gmail.com`. The live routes still query as the anon role, so PostgREST returns no rows. An empty 200 is not "the account sent nothing."
+
+An earlier signed-in check the same day, before RLS, showed 8 campaigns. Overview matched the accounts row: 45,545 sent, 1,910 human replies, 174 bounces, 1,335 opportunities, opportunity value 1335000. Open rate and unsubscribes were not reported. That check is not the current production response.
+
+Git pushes from this private repo can land as `BLOCKED` (Vercel hobby account-collaboration). A blocked git deployment is not a production release. The live deployment above was created from commit `cd9b916` via the Vercel API, not by pushing `main`.
 
 ## Setup
 
