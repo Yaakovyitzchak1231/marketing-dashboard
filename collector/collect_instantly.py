@@ -762,6 +762,13 @@ def main() -> int:
     if totals["emails_sent"] is not None:
         write_history(totals)
 
+    # Persist to Supabase
+    try:
+        sb = supabase_client()
+        persist(sb, got)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ! persist: {exc}", file=sys.stderr)
+
     print(json.dumps({
         "campaigns": totals["campaigns_total"],
         "active": totals["campaigns_active"],

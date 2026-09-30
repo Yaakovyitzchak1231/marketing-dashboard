@@ -51,3 +51,16 @@ CREATE INDEX idx_daily_metrics_campaign_date ON daily_metrics(campaign_id, metri
 CREATE INDEX idx_daily_metrics_date ON daily_metrics(metric_date DESC);
 CREATE INDEX idx_accounts_date ON accounts(metric_date DESC);
 CREATE INDEX idx_campaigns_external_id ON campaigns(external_id);
+
+-- Collection runs health surface
+CREATE TABLE collection_runs (
+    id bigserial PRIMARY KEY,
+    ran_at timestamptz UNIQUE NOT NULL,
+    ok boolean,
+    api_calls int,
+    campaigns_collected int,
+    campaigns_persisted int,
+    stages jsonb,
+    errors jsonb
+);
+CREATE INDEX idx_collection_runs_ran_at ON collection_runs(ran_at DESC);
