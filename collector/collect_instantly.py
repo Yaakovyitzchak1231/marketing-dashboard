@@ -747,6 +747,17 @@ def main() -> int:
     errors, campaigns = got["errors"], got["campaigns"]
     totals = rollup(got["overview"], campaigns, got["senders"])
 
+    # ——— Supabase persistence (T4) ———————————————————————————————
+    try:
+        sb = supabase_client()
+    except RuntimeError as exc:
+        print(f"! Supabase client failed: {exc}", file=sys.stderr)
+        sb = None
+
+    if sb is not None:
+        persist(sb, got)
+    # ———————————————————————————————————————————————————————————
+
     payload = {
         "generated_at": _now(),
         "account": ACCOUNT,

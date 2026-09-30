@@ -12,3 +12,5 @@ __pycache__/
 .worktrees/
 *.tsbuildinfo
 supabase/.temp/
+collector/data/dashboard.json
+collector/data/history.json
