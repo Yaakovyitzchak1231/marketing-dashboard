@@ -6,7 +6,7 @@ This test FAILS if the collector returns fewer than the true campaign count
 """
 
 import sys
-sys.path.insert(0, "/home/hermes/.hermes/profiles/mkt-data/workspace/marketing-dashboard")
+sys.path.insert(0, "collector")
 from composio_mcp import MCP
 import collect_instantly
 

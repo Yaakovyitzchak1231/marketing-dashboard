@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
         healthy_mailboxes: null,
         reply_rate: null,
         bounce_rate: null,
+        open_rate: null,
+        unsubscribe: null,
         range
       })
     }
@@ -67,6 +69,8 @@ export async function GET(request: NextRequest) {
       healthy_mailboxes: accountData.healthy_mailboxes ?? null,
       reply_rate: replyRate,
       bounce_rate: bounceRate,
+      open_rate: null,
+      unsubscribe: null,
       range
     })
   } catch (error) {

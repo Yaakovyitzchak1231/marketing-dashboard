@@ -1,0 +1,233 @@
+{
+  "generated_at": "2026-09-30T01:26:40.060405+00:00",
+  "account": "instantly_moline-parsec",
+  "source": "instantly overview + per-campaign analytics + sender fleet via composio mcp",
+  "ok": false,
+  "api_calls": 17,
+  "errors": [
+    {
+      "stage": "campaign:8d880aea",
+      "error": "HTTPError: HTTP Error 502: Bad Gateway",
+      "at": "2026-09-30T01:26:27.511809+00:00"
+    },
+    {
+      "stage": "campaign:431e15a1",
+      "error": "HTTPError: HTTP Error 502: Bad Gateway",
+      "at": "2026-09-30T01:26:31.149621+00:00"
+    },
+    {
+      "stage": "campaign:0d29bafe",
+      "error": "HTTPError: HTTP Error 502: Bad Gateway",
+      "at": "2026-09-30T01:26:34.329101+00:00"
+    },
+    {
+      "stage": "senders",
+      "error": "RuntimeError: remote file /mnt/files/mex/came.json is not valid JSON: Expecting property name enclosed in double quotes: line 1048 column 1 (char 40001)",
+      "at": "2026-09-30T01:26:40.049661+00:00"
+    }
+  ],
+  "totals": {
+    "campaigns_total": 5,
+    "campaigns_active": 0,
+    "campaigns_paused": 0,
+    "campaigns_draft": 1,
+    "campaigns_unknown": 0,
+    "campaigns_no_activity": 0,
+    "senders_connected": 0,
+    "senders_available": 0,
+    "sent_today": 0,
+    "daily_cap": 0,
+    "campaigns_sent": 33686,
+    "campaigns_replies": 1733,
+    "emails_sent": 45545,
+    "replies": 1910,
+    "replies_all": 2350,
+    "opens_unique": 0,
+    "clicks_unique": 0,
+    "bounced": 174,
+    "unsubscribed": 0,
+    "contacted": 45173,
+    "leads_contacted": 17376,
+    "opportunities": 1335,
+    "opportunity_value": 1335000,
+    "contacted_count": 45173,
+    "total_closed": 1,
+    "total_interested": 1334,
+    "total_meeting_booked": 0,
+    "total_meeting_completed": 0,
+    "bounce_rate": 0.0038,
+    "unsub_rate": 0.0,
+    "reply_rate": 0.0419,
+    "open_rate": 0.0,
+    "opportunities_per_1k": 29.31,
+    "daily_cap_used": null,
+    "sender_health": null,
+    "fleet_total": 0,
+    "fleet_healthy": 0,
+    "fleet_unhealthy": 0,
+    "fleet_setup_pending": 0,
+    "fleet_domains": 0,
+    "fleet_warmup_avg": null,
+    "fleet_warmup_min": null,
+    "fleet_warmup_cold": 0,
+    "fleet_daily_limit": 0
+  },
+  "campaigns": [
+    {
+      "id": "e427c801-a5c6-4267-9f0c-1d283b004fe5",
+      "name": "IRS Penalty Back - Emails Instantly",
+      "status_code": 3,
+      "status": "pending",
+      "analytics": {
+        "emails_sent_count": 2,
+        "new_leads_contacted_count": 2,
+        "leads_count": 4,
+        "contacted_count": 2,
+        "completed_count": 4,
+        "bounced_count": 0,
+        "unsubscribed_count": 0,
+        "reply_count": 17,
+        "reply_count_unique": 9,
+        "reply_count_automatic_unique": 0,
+        "open_count": 0,
+        "open_count_unique": 0,
+        "link_click_count": 0,
+        "link_click_count_unique": 0,
+        "total_opportunities": 3,
+        "total_opportunity_value": 3000
+      },
+      "sending": {
+        "accounts_summary": {},
+        "campaign_daily_limit": {},
+        "new_lead_limit": {},
+        "schedule_status": {},
+        "issue_tracking": {}
+      }
+    },
+    {
+      "id": "ddac824b-fbcc-4d60-9355-d316545e9208",
+      "name": "PB Signups / Leads (TEST)",
+      "status_code": 2,
+      "status": "draft",
+      "analytics": {
+        "emails_sent_count": 3,
+        "new_leads_contacted_count": 2,
+        "leads_count": 2,
+        "contacted_count": 3,
+        "completed_count": 2,
+        "bounced_count": 0,
+        "unsubscribed_count": 0,
+        "reply_count": 12,
+        "reply_count_unique": 10,
+        "reply_count_automatic_unique": 0,
+        "open_count": 0,
+        "open_count_unique": 0,
+        "link_click_count": 0,
+        "link_click_count_unique": 0,
+        "total_opportunities": 2,
+        "total_opportunity_value": 2000
+      },
+      "sending": {
+        "accounts_summary": {},
+        "campaign_daily_limit": {},
+        "new_lead_limit": {},
+        "schedule_status": {},
+        "issue_tracking": {}
+      }
+    },
+    {
+      "id": "a76f152b-7c57-4c6b-b0e5-e7352b635872",
+      "name": "PB Signups / Leads",
+      "status_code": 3,
+      "status": "pending",
+      "analytics": {
+        "emails_sent_count": 31893,
+        "new_leads_contacted_count": 11746,
+        "leads_count": 11799,
+        "contacted_count": 31893,
+        "completed_count": 5266,
+        "bounced_count": 85,
+        "unsubscribed_count": 0,
+        "reply_count": 1696,
+        "reply_count_unique": 1357,
+        "reply_count_automatic_unique": 8,
+        "open_count": 0,
+        "open_count_unique": 0,
+        "link_click_count": 0,
+        "link_click_count_unique": 0,
+        "total_opportunities": 951,
+        "total_opportunity_value": 951000
+      },
+      "sending": {
+        "accounts_summary": {},
+        "campaign_daily_limit": {},
+        "new_lead_limit": {},
+        "schedule_status": {},
+        "issue_tracking": {}
+      }
+    },
+    {
+      "id": "8ff8cd85-43a9-4df2-af70-31a7b613d2cd",
+      "name": "PB Wet Signature Needed",
+      "status_code": 3,
+      "status": "pending",
+      "analytics": {
+        "emails_sent_count": 464,
+        "new_leads_contacted_count": 143,
+        "leads_count": 143,
+        "contacted_count": 461,
+        "completed_count": 142,
+        "bounced_count": 1,
+        "unsubscribed_count": 0,
+        "reply_count": 137,
+        "reply_count_unique": 116,
+        "reply_count_automatic_unique": 1,
+        "open_count": 0,
+        "open_count_unique": 0,
+        "link_click_count": 0,
+        "link_click_count_unique": 0,
+        "total_opportunities": 84,
+        "total_opportunity_value": 84000
+      },
+      "sending": {
+        "accounts_summary": {},
+        "campaign_daily_limit": {},
+        "new_lead_limit": {},
+        "schedule_status": {},
+        "issue_tracking": {}
+      }
+    },
+    {
+      "id": "8ddf6580-5ced-448d-b3a1-9f9567e3f645",
+      "name": "PB Qualified",
+      "status_code": 3,
+      "status": "pending",
+      "analytics": {
+        "emails_sent_count": 1324,
+        "new_leads_contacted_count": 515,
+        "leads_count": 515,
+        "contacted_count": 1324,
+        "completed_count": 276,
+        "bounced_count": 4,
+        "unsubscribed_count": 0,
+        "reply_count": 289,
+        "reply_count_unique": 241,
+        "reply_count_automatic_unique": 0,
+        "open_count": 0,
+        "open_count_unique": 0,
+        "link_click_count": 0,
+        "link_click_count_unique": 0,
+        "total_opportunities": 166,
+        "total_opportunity_value": 166000
+      },
+      "sending": {
+        "accounts_summary": {},
+        "campaign_daily_limit": {},
+        "new_lead_limit": {},
+        "schedule_status": {},
+        "issue_tracking": {}
+      }
+    }
+  ],
+  "senders": []
+}
