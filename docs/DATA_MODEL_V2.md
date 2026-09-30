@@ -12,11 +12,22 @@ scattered all over the place. I want to see what's working and what's not and
 I have no real way of doing it."*
 
 The dashboard today answers exactly one question — "how is Instantly email
-doing" — and right now it answers even that badly (failed collection run,
-5-of-8 campaigns visible, zero active campaigns shown, empty sender fleet,
-one day of history). This spec makes it answer the real question:
+doing" — and right now it answers even that badly (**see corrections below,
+measured 2026-09-30**). This spec makes it answer the real question:
 **what's working across ideas, leads, campaigns, channels, and angles —
 and what does it cost.**
+
+### §1 claim corrections (verified against live database, 2026-09-30)
+
+| Spec claim | Verified reality |
+|---|---|
+| "5-of-8 campaigns visible" | **Wrong.** 8 campaigns in `campaigns`, all 8 have rows in `daily_metrics`. The `/api/campaigns` route has no status filter and no 5-item limit (`.limit(100)`), so all 8 render. |
+| "zero active campaigns shown" | **Wrong.** Status distribution is 6 `pending`, 1 `draft`, 1 `active` (TapDash Jewelry Retailers - Test 01). |
+| "failed collection run" | **Misleading.** 9 `collection_runs` rows; the last 3 are `ok = true` with 8 collected / 8 persisted and empty `errors`. The 6 failures are all earlier. |
+| "empty sender fleet" | **Directionally right, wrong reason.** The `senders` stage failed on 6 of 9 runs, but the last 3 are clean. There is no `senders` table at all and no `sender_health` column on `accounts` — see Step 3 of the owning kanban card (40 KB Composio truncation). |
+| "one day of history" | **Correct.** `daily_metrics` has exactly one distinct `metric_date`: `2026-09-30`. |
+
+Ground-truth counts (signed-in, T10 verification): 45545 emails_sent, 1910 replies_human, 39 replies_autoresponder, 174 bounces, 1335 opportunities, opportunity_value 1335000, 1 `accounts` row. 8 campaigns, 8 `daily_metrics`, 9 `collection_runs`.
 
 Scope note (Yaakov, 2026-09-30): there is no SMS or voice traffic today.
 Email is the only live channel. The model below is email-first with channels
