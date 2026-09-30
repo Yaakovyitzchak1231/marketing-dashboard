@@ -16,9 +16,9 @@ Why: the API does not populate these values. Showing `0.0%` implies a measuremen
 
 Use when reply rate exceeds `100%` or the backend flags it as unreliable.
 
-- Inline suppression text: **Reply rate is unreliable. Autoresponders are included in this count.**
+- Inline suppression text: **Reply rate is not reliable. Human replies exceed emails sent.**
 
-Why: `333%` and `450%` have appeared because autoresponders were counted as human replies. This copy makes the problem visible instead of hiding it behind a tooltip.
+Why: the flag fires when human replies are greater than emails sent, which is not a possible rate. The displayed rate is `replies_human / emails_sent` — autoresponders are a separate column and are *not* in that count, so they must not be named as the cause. Checked against Supabase on 2026-09-30: the two flagged campaigns have 9 replies / 2 sent and 10 replies / 3 sent, with zero autoresponders on both.
 
 ## 3. Empty history / first run
 

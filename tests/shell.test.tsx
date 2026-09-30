@@ -55,6 +55,22 @@ describe('KpiRow', () => {
     expect(screen.getByText('Emails sent')).toBeInTheDocument()
     expect(screen.getByText('Reply rate')).toBeInTheDocument()
   })
+
+  it('explains an implausible rate as human replies exceeding emails sent, not autoresponders', () => {
+    // T10d: the reply rate is replies_human / emails_sent. Autoresponders are a
+    // separate column and are NOT in this count, so blaming them was a false
+    // reason attached to a correct flag.
+    render(
+      <KpiRow
+        kpis={[{ key: 'reply_rate', label: 'Reply rate', value: 4.5, kind: 'rate' }]}
+      />,
+    )
+    const cell = screen.getByTestId('kpi-reply_rate')
+    expect(within(cell).getByText('Not reliable')).toBeInTheDocument()
+    expect(within(cell).getByText('Reply rate is not reliable. Human replies exceed emails sent.')).toBeInTheDocument()
+    // the old, false explanation must not reappear anywhere in the cell
+    expect(cell.textContent).not.toMatch(/autoresponder/i)
+  })
 })
 
 describe('CampaignTable', () => {
@@ -96,6 +112,20 @@ describe('CampaignTable', () => {
     render(<CampaignTable rows={impossible} />)
     expect(screen.queryByText('450.0%')).not.toBeInTheDocument()
     expect(screen.getByText('Not reliable')).toBeInTheDocument()
+  })
+
+  it('gives the table footer a true reason: human replies exceed emails sent', () => {
+    // T10d: the footer used to say autoresponders were included in the count.
+    // They are not — reply_rate is replies_human / emails_sent, so the two
+    // flagged campaigns (9 replies / 2 sent, 10 / 3) have zero autoresponders.
+    const impossible: CampaignRow[] = [
+      { ...rows[0], id: 'c2', name: 'IRS Penalty Back - Emails Instantly', reply_rate: 4.5 },
+    ]
+    render(<CampaignTable rows={impossible} />)
+    expect(
+      screen.getByText('Reply rate is not reliable. Human replies exceed emails sent.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Autoresponders are included in this count/)).not.toBeInTheDocument()
   })
 
   it('shows the autoresponder split so the reply rate is auditable', () => {
