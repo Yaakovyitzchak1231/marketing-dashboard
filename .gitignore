@@ -11,3 +11,6 @@ __pycache__/
 *.tsbuildinfo
 .worktrees/
 *.tsbuildinfo
+
+# Supabase CLI local scratch (project-ref, pooler-url, etc.) - never commit
+supabase/.temp/
