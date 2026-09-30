@@ -84,22 +84,23 @@ export function KpiCell({ kpi }: { kpi: Kpi }) {
 /**
  * The KPI row.
  *
- * RESPONSIVE IS A REQUIREMENT (task AC1): at 390px a five-across grid wraps to
+ * RESPONSIVE IS A REQUIREMENT (task AC1): at 390px a grid wraps to
  * two columns, not a clipped row or a horizontal scroll. Below `sm` it is a
- * 2-column grid; from `sm` up it is a single row of flexible cells separated by
- * vertical hairlines.
+ * 2-column grid; from `sm` up it uses 3 columns, then 4 at `lg`, never a
+ * single flex row that can overflow. The grid reflows by CSS, keeping every
+ * figure exactly once.
  */
 export function KpiRow({ kpis }: { kpis: Kpi[] }) {
   return (
     <Card className="overflow-hidden">
       <div
         data-testid="kpi-row"
-        className="grid grid-cols-2 divide-line xs:divide-x sm:grid-cols-3 sm:divide-y-0 lg:flex lg:flex-row"
+        className="grid grid-cols-2 divide-line xs:divide-x sm:grid-cols-3 lg:grid-cols-4 gap-0"
       >
         {kpis.map((kpi) => (
           <div
             key={kpi.key}
-            className="border-b border-line-soft last:border-b-0 sm:border-b-0"
+            className="border-b border-line-soft last:border-b-0 sm:border-b-0 lg:border-b lg:border-r lg:last:border-r-0"
           >
             <KpiCell kpi={kpi} />
           </div>
