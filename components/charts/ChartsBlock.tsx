@@ -2,6 +2,7 @@ import { buildReplyTrend, type TrendDayInput } from '@/lib/charts'
 import { ReplyTrendChart } from './ReplyTrendChart'
 import { OpportunityValuePanel } from './OpportunityValuePanel'
 import { SenderHealthPanel } from './SenderHealthPanel'
+import { CHART_GEOMETRY } from '@/lib/chart'
 
 /** One daily row as the API returns it. Counts may be null. */
 export interface ApiTrendRow {
@@ -53,12 +54,13 @@ export function ChartsBlock({
   mailboxHealthy,
 }: Props) {
   const trend = buildReplyTrend(trendFromApiRows(trendRows))
+  const { gridGap } = CHART_GEOMETRY
 
   return (
     <div
       style={{
         display: 'grid',
-        gap: 16,
+        gap: gridGap,
         gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
       }}
     >

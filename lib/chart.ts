@@ -13,7 +13,7 @@
  *      without reading JSX.
  */
 
-/** The SVG viewbox, in user units. The chart scales to its container width. */
+/** Chart geometry constants used by the SVG components. */
 export const CHART_GEOMETRY = {
   width: 640,
   height: 160,
@@ -33,10 +33,18 @@ export const CHART_GEOMETRY = {
    */
   originX: 0,
   originY: 0,
+  /** Gap between chart panels in the ChartsBlock grid. */
+  gridGap: 16,
+  /** SVG stroke width for the reply-rate trend line. */
+  trendStrokeWidth: 1.75,
+  /** SVG radius for the trend point markers. */
+  trendPointRadius: 2.5,
+  /** SVG viewBox width at 100% container width. */
+  viewBoxFullWidth: '100%',
 } as const
 
 /**
- * The `viewBox` attribute value.
+ * The SVG viewbox, in user units.
  *
  * Built here rather than inlined in the component so the render path stays
  * free of numeric literals -- which is what lets the AC3 test have no
@@ -78,3 +86,22 @@ export function scaleY(value: number, min: number, max: number): number {
   if (max === min) return padY + usable / 2
   return padY + usable - ((value - min) / (max - min)) * usable
 }
+
+/** Page layout constants for the charts preview page. */
+export const PAGE_GEOMETRY = {
+  maxWidth: 1100,
+  margin: '0 auto',
+  padding: 24,
+  background: '#faf9f7',
+  minHeight: '100vh',
+  /** Typography for the preview page title. */
+  titleFontSize: 20,
+  titleFontWeight: 600,
+  titleMargin: '0 0 4px',
+  /** Typography for the preview page subtitle. */
+  subtitleFontSize: 13,
+  subtitleColor: '#78716c',
+  subtitleMargin: '0 0 20px',
+} as const
+
+export { PAGE_GEOMETRY as page }
