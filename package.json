@@ -6,20 +6,24 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
     "next": "15.0.0",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "@supabase/supabase-js": "^2.43.0"
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.0.0",
     "@types/node": "20.14.0",
-    "@types/react": "19.0.0",
-    "@types/react-dom": "19.0.0",
-    "typescript": "5.5.0",
+    "@types/react": "18.3.0",
+    "@types/react-dom": "18.3.0",
     "eslint": "8.57.0",
-    "eslint-config-next": "15.0.0"
+    "eslint-config-next": "15.0.0",
+    "typescript": "5.9.2",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^2.0.0"
   }
 }
