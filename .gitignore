@@ -7,3 +7,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .DS_Store
+supabase/.temp/
+.worktrees/
+collector/data/dashboard.json
+collector/data/history.json
