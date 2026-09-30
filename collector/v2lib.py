@@ -5,10 +5,13 @@ Runs on either machine:
   - Hatch VM: credentials come from the Secure Vault via surrogates
     (custom.composio, custom.zerobounce, custom.supabase). Nothing with a
     raw secret ever touches disk here.
-  - OVH box: credentials come from environment variables / private env
-    files (the vault has no surrogate mechanism there).
+  - OVH box: credentials come from environment variables, or from the
+    Hermes secrets file (/home/hermes/jewelry-handoff/incoming/secrets/
+    searxng-stack.env, mode 600) which is read at import. The vault has
+    no surrogate mechanism there.
 
-Precedence for every secret: explicit env var > vault surrogate (Hatch only).
+Precedence for every secret: explicit env var > Hermes secrets file
+(OVH only) > vault surrogate (Hatch only). Values are never printed.
 """
 from __future__ import annotations
 
@@ -35,6 +38,45 @@ def vault_surrogate(credential: str, entry: str = "access_token") -> str | None:
         return dynamic_credential_entry(credential, entry)["surrogate"]
     except Exception:
         return None
+
+
+# Hermes keeps Porkbun/InboxKit (and other) keys in a mode-600 env file.
+# On the OVH box, read it at import so collectors see the keys as env vars.
+# Values are never printed, copied, or written anywhere else.
+_HERMES_SECRETS_FILE = "/home/hermes/jewelry-handoff/incoming/secrets/searxng-stack.env"
+
+
+def load_hermes_secrets() -> list[str]:
+    """Load KEY=VALUE pairs from the Hermes secrets file into os.environ.
+
+    Only fills keys that are not already set — explicit env vars win.
+    Returns the list of key names loaded (never values). No-op when the
+    file is absent or unreadable (e.g. on the Hatch VM).
+    """
+    loaded: list[str] = []
+    try:
+        with open(_HERMES_SECRETS_FILE, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return loaded
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        # Skip `export KEY=...` form and empty assignments (missing key).
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        if not key or not value or key in os.environ:
+            continue
+        os.environ[key] = value
+        loaded.append(key)
+    return loaded
+
+
+load_hermes_secrets()
 
 
 def supabase_client():

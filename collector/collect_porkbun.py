@@ -57,7 +57,8 @@ def _dns_ok(domain: str) -> tuple[bool, str]:
 def main() -> int:
     sb = v2lib.supabase_client()
     api_key = os.environ.get("PORKBUN_API_KEY")
-    secret = os.environ.get("PORKBUN_SECRET_KEY")
+    # Hermes stores the secret as PORKBUN_SECRET_API_KEY; accept either name.
+    secret = os.environ.get("PORKBUN_SECRET_API_KEY") or os.environ.get("PORKBUN_SECRET_KEY")
     if not api_key or not secret:
         v2lib.record_run(
             sb, "porkbun", ok=False,
