@@ -442,6 +442,285 @@ def rollup(overview: dict, campaigns: list[dict], senders: list[dict]) -> dict:
     return t
 
 
+# =====================================================================
+# Supabase persistence layer (T4)
+#
+# What changed from the flat-JSON prototype, and why:
+#
+#   1. Flat JSON was a whole-document overwrite, so two runs in the same
+#      second raced and the dashboard could read a half-written file. Here
+#      every write is a keyed upsert (`on_conflict`) against the natural key
+#      of the row, so a repeat run converges on identical state instead of
+#      appending. This is the idempotency requirement.
+#   2. The prototype had no human/autoresponder split in the account rollup
+#      -- it only had `replies` (which is reply_count_unique) and `replies_all`
+#      (which is reply_count, autoresponders included). Nothing enforced that a
+#      rate be derived from the human figure, so the bug that produced 333%
+#      and 450% had nothing to stop it. `process_campaign_analytics` and
+#      `compute_account_rates` now make the split explicit and compute every
+#      rate from the human numerator.
+#   3. The prototype stored rates it could not trust. `open_rate` and
+#      `unsubscribe` are written as SQL NULL when the API does not populate
+#      them. A zero there would be indistinguishable from a real measurement.
+#   4. A failed API call used to leave a gap in a JSON blob. Here it is
+#      recorded in the `collection_runs` health surface and the affected
+#      metric columns are left untouched -- never set to 0.
+#   5. Rows are daily rollups keyed on (campaign, date) and (date), not
+#      per-collection rows, so the free tier's 500MB is never a concern.
+#
+# Every rate is recomputed here from raw counts. No rate is ever averaged.
+# =====================================================================
+
+
+def compute_rate(numerator, denominator, places: int = 4):
+    """numerator/denominator, or None when either is absent or the base is 0.
+
+    "No sends yet" is not "0% replied". A rate over 1.0 is a bug upstream in
+    the numerator, never a result worth printing.
+    """
+    n, d = _num(numerator), _num(denominator)
+    if n is None or d is None or d == 0:
+        return None
+    return round(n / d, places)
+
+
+# Instantly reports open and unsubscribe tracking as a hard 0 on every
+# campaign and on the account overview. That is the API declining to populate
+# the field, not a measurement of zero opens. We treat a non-positive count
+# as "not reported" so the column lands as NULL rather than 0.0%.
+def _reported(value):
+    """A count the API actually measured, or None when it reported nothing."""
+    n = _num(value)
+    if n is None or n <= 0:
+        return None
+    return n
+
+
+def process_campaign_analytics(analytics: dict) -> dict:
+    """One campaign's analytics block -> the daily_metrics columns.
+
+    The reply split is the whole point. Instantly gives three numbers:
+      reply_count                 -- every reply, autoresponders included
+      reply_count_unique          -- replies from distinct leads; the human
+                                    figure
+      reply_count_automatic_unique -- autoresponders (OOO, "we never reply")
+    Rates here are built from reply_count_unique. Using reply_count is what
+    produced 333% and 450% on a campaign with far more autoreplies than sends.
+    """
+    a = analytics if isinstance(analytics, dict) else {}
+    sent = _num(a.get("emails_sent_count"))
+    human = _num(a.get("reply_count_unique"))
+    auto = _num(a.get("reply_count_automatic_unique"))
+    total = _num(a.get("reply_count"))
+    bounces = _num(a.get("bounced_count"))
+    opps = _num(a.get("total_opportunities"))
+    opens = _reported(a.get("open_count_unique"))
+    unsub = _reported(a.get("unsubscribed_count"))
+
+    return {
+        "emails_sent": sent,
+        "replies_total": total,
+        # reply_count_unique is the human figure. If the API omits it we
+        # leave it NULL rather than falling back to the combined count.
+        "replies_human": human,
+        "replies_autoresponder": auto,
+        "opportunities": opps,
+        "bounces": bounces,
+        # NULL when the API did not report opens. Never 0.
+        "open_rate": compute_rate(opens, sent),
+        # NULL when the API did not report unsubscribes. Never 0.
+        "unsubscribe": unsub,
+        "reply_rate": compute_rate(human, sent),
+        "bounce_rate": compute_rate(bounces, sent),
+    }
+
+
+def build_daily_metrics(campaign: dict, campaign_id: str,
+                        metric_date: str | None = None) -> dict:
+    """The row to upsert into daily_metrics for one campaign on one day."""
+    metrics = process_campaign_analytics(campaign.get("analytics") or {})
+    day = metric_date or datetime.now(timezone.utc).date().isoformat()
+    # Only the persisted columns; the computed rates are deliberately NOT
+    # stored. A stored rate goes stale the moment the underlying count is
+    # re-read, and the API layer recomputes rates from raw counts anyway.
+    return {
+        "campaign_id": campaign_id,
+        "metric_date": day,
+        "emails_sent": metrics["emails_sent"],
+        "replies_total": metrics["replies_total"],
+        "replies_human": metrics["replies_human"],
+        "replies_autoresponder": metrics["replies_autoresponder"],
+        "opportunities": metrics["opportunities"],
+        "bounces": metrics["bounces"],
+        "open_rate": metrics["open_rate"],
+        "unsubscribe": metrics["unsubscribe"],
+        "source_updated_at": _now(),
+    }
+
+
+def compute_account_rates(overview: dict, senders: list[dict] | None = None) -> dict:
+    """Account-wide raw counts -> the accounts row plus derived rates.
+
+    Note what is NOT here: open_rate and unsubscribe. Neither exists in the
+    `accounts` table by design, because the overview endpoint does not
+    populate them. The API layer emits them as null. Adding a column for a
+    number the source does not report is how "0.0%" got onto the page.
+    """
+    o = overview if isinstance(overview, dict) else {}
+    senders = senders or []
+    sent = _num(o.get("emails_sent_count"))
+    human = _num(o.get("reply_count_unique"))
+    auto = _num(o.get("reply_count_automatic_unique"))
+    bounces = _num(o.get("bounced_count"))
+
+    healthy = sum(1 for s in senders if _num(s.get("status")) in (1, 2))
+
+    return {
+        "emails_sent": sent,
+        "replies_human": human,
+        "replies_autoresponder": auto,
+        "bounces": bounces,
+        "opportunities": _num(o.get("total_opportunities")),
+        "opportunity_value": _num(o.get("total_opportunity_value")),
+        "mailbox_count": len(senders) or None,
+        "healthy_mailboxes": healthy or None,
+        # Recomputed from raw counts every time. Never averaged.
+        "reply_rate": compute_rate(human, sent),
+        "bounce_rate": compute_rate(bounces, sent),
+    }
+
+
+# ---------------------------------------------------------------------
+# Upserts. Every one is keyed on the row's natural key so a second run
+# with identical input leaves the table byte-identical.
+# ---------------------------------------------------------------------
+
+
+def _upsert(sb, table: str, rows: list[dict], on_conflict: str) -> list[dict]:
+    """Upsert `rows` into `table`, or raise. Never a blind insert.
+
+    An empty list is a no-op, not an error: an empty read is a valid state
+    and must not become a write of zeros.
+    """
+    if not rows:
+        return []
+    res = sb.table(table).upsert(rows, on_conflict=on_conflict).execute()
+    if getattr(res, "error", None):
+        raise RuntimeError(f"{table} upsert failed: {res.error}")
+    return getattr(res, "data", None) or []
+
+
+def upsert_campaigns(sb, campaigns: list[dict]) -> list[dict]:
+    """Identity rows. Keyed on the Instantly campaign id."""
+    rows = [{
+        "external_id": c["id"],
+        "name": c.get("name") or f"Campaign {str(c['id'])[:8]}",
+        "status": c.get("status") or "unknown",
+        "created_at": c.get("created_at") or _now(),
+    } for c in campaigns if c.get("id")]
+    return _upsert(sb, "campaigns", rows, "external_id")
+
+
+def upsert_daily_metrics(sb, metrics: list[dict]) -> list[dict]:
+    """One row per (campaign, day). Re-running the same day is a no-op."""
+    return _upsert(sb, "daily_metrics", metrics, "campaign_id,metric_date")
+
+
+def upsert_accounts(sb, accounts: list[dict]) -> list[dict]:
+    """One row per day."""
+    return _upsert(sb, "accounts", accounts, "metric_date")
+
+
+def record_run(sb, *, ok: bool, stages: list[dict], api_calls: int,
+               campaigns: int, campaign_id_map: dict[str, str],
+               errors: list[dict]) -> None:
+    """The health surface. A failed call is a row here, never a zero.
+
+    `campaigns_collected` vs `campaigns_persisted` is the truncation canary:
+    if those ever diverge, the inventory is short and the numbers on the page
+    are computed from a partial portfolio.
+    """
+    row = {
+        "ran_at": _now(),
+        "ok": ok,
+        "api_calls": api_calls,
+        "campaigns_collected": campaigns,
+        "campaigns_persisted": len(campaign_id_map),
+        "stages": stages,
+        "errors": errors,
+    }
+    _upsert(sb, "collection_runs", [row], "ran_at")
+
+
+def supabase_client():
+    """Build a Supabase client from the environment.
+
+    Requires a key that may WRITE (service_role) -- the anon key is bound by
+    RLS and cannot upsert. The key is read from SUPABASE_SERVICE_ROLE_KEY and
+    is never logged, never written to the repo, and never leaves this process.
+    """
+    from supabase import create_client  # imported here so unit tests need no SDK
+
+    url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url:
+        raise RuntimeError("SUPABASE_URL is not set")
+    if not key:
+        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not set")
+    return create_client(url, key)
+
+
+def persist(sb, got: dict, metric_date: str | None = None) -> dict:
+    """Write one collection into Supabase. Idempotent by construction."""
+    day = metric_date or datetime.now(timezone.utc).date().isoformat()
+    campaigns, overview, senders = got["campaigns"], got["overview"], got["senders"]
+
+    # 1. Identity first: daily_metrics needs the campaigns.id uuid, which is
+    #    only known after the upsert returns it.
+    campaign_rows = upsert_campaigns(sb, campaigns)
+    id_map = {
+        r["external_id"]: r["id"]
+        for r in campaign_rows
+        if r and r.get("external_id") and r.get("id")
+    }
+
+    # 2. A campaign whose identity upsert failed has no uuid, so it gets no
+    #    metrics row. Writing one with a null campaign_id would let a partial
+    #    failure look like a complete day.
+    missing = [c["id"] for c in campaigns
+               if c.get("id") and c["id"] not in id_map]
+    metrics = [build_daily_metrics(c, id_map[c["id"]], metric_date=day)
+               for c in campaigns if c.get("id") in id_map]
+    upsert_daily_metrics(sb, metrics)
+
+    # 3. Account rollup. Skipped entirely when the overview call failed --
+    #    an accounts row built from an empty overview would be a row of
+    #    NULLs that reads as "zero activity" rather than "we could not ask".
+    account_rows: list[dict] = []
+    if overview:
+        rates = compute_account_rates(overview, senders)
+        account_rows = [{**{k: v for k, v in rates.items()
+                             if k not in ("reply_rate", "bounce_rate")},
+                         "metric_date": day}]
+        upsert_accounts(sb, account_rows)
+
+    record_run(
+        sb,
+        ok=bool(overview) and not got["errors"] and not missing,
+        stages=[{"stage": "overview", "ok": bool(overview)},
+                {"stage": "campaigns", "ok": len(metrics),
+                 "expected": len(campaigns)}],
+        api_calls=got["calls"],
+        campaigns=len(campaigns),
+        campaign_id_map=id_map,
+        errors=got["errors"] + [{"stage": "campaign_identity_missing",
+                                 "error": f"{len(missing)} campaign(s) had no id after upsert"}]
+        if missing else got["errors"],
+    )
+    return {"campaign_rows": len(campaign_rows), "metric_rows": len(metrics),
+            "account_rows": len(account_rows), "identity_missing": missing}
+
+
 def write_history(totals: dict) -> None:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     hist: list[dict] = []
