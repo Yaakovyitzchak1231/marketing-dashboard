@@ -1,6 +1,7 @@
 import { ChartsBlock } from '@/components/charts/ChartsBlock'
 import dashboard from '../../collector/data/dashboard.json'
 import history from '../../collector/data/history.json'
+import { PAGE_GEOMETRY } from '@/lib/chart'
 
 /**
  * A render harness for the charts, driven by the real collector output.
@@ -23,10 +24,24 @@ export default function ChartsPreview() {
     replies_autoresponder: h.replies_all - h.replies,
   }))
 
+  const { 
+    maxWidth, 
+    margin, 
+    padding, 
+    minHeight, 
+    background, 
+    titleFontSize, 
+    titleFontWeight, 
+    titleMargin,
+    subtitleFontSize, 
+    subtitleColor, 
+    subtitleMargin 
+  } = PAGE_GEOMETRY
+
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto', padding: 24, background: '#faf9f7', minHeight: '100vh' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 4px' }}>Charts</h1>
-      <p style={{ fontSize: 13, color: '#78716c', margin: '0 0 20px' }}>
+    <main style={{ maxWidth, margin: '0 auto', padding, background, minHeight }}>
+      <h1 style={{ fontSize: titleFontSize, fontWeight: titleFontWeight, margin: titleMargin }}>Charts</h1>
+      <p style={{ fontSize: subtitleFontSize, color: subtitleColor, margin: subtitleMargin }}>
         Rendered from collector/data/dashboard.json and history.json
       </p>
       <ChartsBlock

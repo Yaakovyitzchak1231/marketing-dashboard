@@ -53,9 +53,16 @@ const SHAPES = {
 async function getJson<T>(
   url: string,
   guard: (v: unknown) => v is T,
+  cookie?: string,
 ): Promise<T | null> {
   try {
-    const res = await fetch(url, { cache: 'no-store' })
+    // The API routes sit behind auth, so the server-side self-fetch has to
+    // carry the caller's session cookie. Without it every route answers 401 and
+    // the page renders as though the database were empty.
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: cookie ? { cookie } : undefined,
+    })
     if (!res.ok) return null
     const body: unknown = await res.json()
     // A 200 can still carry `{ error: ... }`. The guard is what stops that
@@ -70,15 +77,31 @@ export async function loadShellData(
   campaignId: string | null,
   suppliedFreshness?: Freshness,
 ): Promise<ShellData> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? ''
+  // Server-side `fetch` requires an absolute URL. A relative path works in a
+  // browser but throws "Invalid URL" in a Server Component, which surfaced as a
+  // 500 on `/`. VERCEL_URL is set by Vercel; PORT covers local runs.
+  //
+  // The PORT fallback matters more than it looks: without it the self-fetch
+  // targeted http://127.0.0.1:3000 while the server actually listened on
+  // whatever port `next start -p N` was given. Every fetch then failed, was
+  // swallowed by the catch, and the page rendered the honest empty state with
+  // real data sitting in the database.
+  const port = process.env.PORT ?? '3000'
+  const base =
+    process.env.NEXT_PUBLIC_BASE_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
+
+  const { cookies } = await import('next/headers')
+  const cookie = (await cookies()).toString()
 
   const [overview, campaigns, trendResult] = await Promise.all([
-    getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview),
-    getJson<CampaignList>(`${base}/api/campaigns?range=${DEFAULT_RANGE}`, SHAPES.campaigns),
+    getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview, cookie),
+    getJson<CampaignList>(`${base}/api/campaigns?range=${DEFAULT_RANGE}`, SHAPES.campaigns, cookie),
     campaignId
       ? getJson<CampaignTrend>(
           `${base}/api/campaigns/${campaignId}/trend?range=30d`,
           SHAPES.trend,
+          cookie,
         )
       : Promise.resolve(null),
   ])

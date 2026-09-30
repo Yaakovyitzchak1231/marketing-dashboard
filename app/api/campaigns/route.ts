@@ -1,7 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+/**
+ * Request-scoped client carrying the caller's session. See the identical note
+ * in app/api/overview/route.ts: the shared browser client in lib/supabase has
+ * no cookies, so every query went out unauthenticated and returned 401.
+ * Uses the ANON key plus the caller's token so PostgREST applies RLS; the
+ * service-role key would bypass RLS and must never be used for user reads.
+ */
+function getRequestClient(request: NextRequest): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) return null
+  const header = request.headers.get('authorization') || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  return createClient(url, anonKey, {
+    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
 
 export async function GET(request: NextRequest) {
+  const supabase = getRequestClient(request)
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
+  }
+
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '7d'
   const sort = searchParams.get('sort') || 'emails_sent'
@@ -36,7 +61,10 @@ export async function GET(request: NextRequest) {
         )
       `)
       .gte('daily_metrics.metric_date', cutoffStr)
-      .order('daily_metrics.metric_date', { ascending: false })
+      // Ordering by the qualified path "daily_metrics.metric_date" is invalid
+      // PostgREST syntax and returned PGRST100. The embedded column must be
+      // named bare, with referencedTable pointing at the join.
+      .order('metric_date', { ascending: false, referencedTable: 'daily_metrics' })
       .limit(100)
     
     if (error) throw error

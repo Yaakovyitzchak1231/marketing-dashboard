@@ -1,4 +1,5 @@
 import { buildLinePath, buildScale, type TrendPoint } from '@/lib/charts'
+import { CHART_GEOMETRY } from '@/lib/chart'
 import { COPY } from '@/lib/copy'
 import { EM_DASH, formatCell, formatDay, formatPercent, formatPercentRaw } from './format'
 import styles from './charts.module.css'
@@ -9,9 +10,7 @@ interface Props {
   showOpenRate?: boolean
 }
 
-const W = 640
-const H = 160
-const PAD = 6
+const { width: W, height: H, padX: PAD, trendStrokeWidth, trendPointRadius, viewBoxFullWidth } = CHART_GEOMETRY
 
 /**
  * Daily human reply rate.
@@ -61,7 +60,7 @@ export function ReplyTrendChart({ points, showOpenRate = false }: Props) {
       {known.length > 1 && (
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          width="100%"
+          width={viewBoxFullWidth}
           height={H}
           role="img"
           aria-label="Daily human reply rate"
@@ -72,7 +71,7 @@ export function ReplyTrendChart({ points, showOpenRate = false }: Props) {
             d={path}
             fill="none"
             stroke="var(--accent)"
-            strokeWidth={1.75}
+            strokeWidth={trendStrokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -83,7 +82,7 @@ export function ReplyTrendChart({ points, showOpenRate = false }: Props) {
                 key={p.metric_date}
                 cx={PAD + (i / Math.max(1, xs.length - 1)) * (W - PAD * 2)}
                 cy={scale.y(p.reply_rate as number)}
-                r={2.5}
+                r={trendPointRadius}
                 fill="var(--accent)"
               />
             )
