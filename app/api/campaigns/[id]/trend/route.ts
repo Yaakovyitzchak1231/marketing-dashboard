@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getRequestClient } from '@/lib/supabase-request'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+
+  const supabase = await getRequestClient(request)
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured' },
+      { status: 503 }
+    )
+  }
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '30d'
   
@@ -39,6 +47,9 @@ export async function GET(
       `)
       .eq('id', id)
       .gte('daily_metrics.metric_date', cutoffStr)
+      // The embedded column must be named bare with referencedTable pointing at
+      // the join; the qualified form `daily_metrics.metric_date` is invalid
+      // PostgREST syntax and returns PGRST100.
       .order('metric_date', { ascending: true, referencedTable: 'daily_metrics' })
       .single()
     

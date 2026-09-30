@@ -11,3 +11,6 @@ __pycache__/
 *.tsbuildinfo
 .worktrees/
 *.tsbuildinfo
+
+# supabase CLI scratch
+supabase/.temp/

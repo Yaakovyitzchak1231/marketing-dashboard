@@ -14,8 +14,15 @@ const mockSupabaseApi = vi.hoisted(() => ({
   inner: vi.fn().mockReturnThis()
 }))
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: mockSupabaseApi
+// The routes take their client from getRequestClient(), not from a module-level
+// singleton, because RLS is scoped to the caller's session: the client is built
+// per request from the session cookie. Mocking the old '@/lib/supabase'
+// singleton left these tests calling the real client, which returned 503
+// (Supabase unset) and made every assertion read `undefined`. The mock has to
+// sit where the dependency now lives.
+vi.mock('@/lib/supabase-request', () => ({
+  getRequestClient: vi.fn(async () => mockSupabaseApi),
+  unauthorizedClient: vi.fn(() => mockSupabaseApi),
 }))
 
 import { GET as overviewGET } from '@/app/api/overview/route'
