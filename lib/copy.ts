@@ -1,6 +1,6 @@
 export const COPY = {
   metricUnavailable: 'Not reported by Instantly',
-  replyRateUnreliable: 'Reply rate is unreliable. Autoresponders are included in this count.',
+  replyRateUnreliable: 'Reply rate is not reliable. Human replies exceed emails sent.',
   trendEmpty: 'Collecting history',
   staleDataOk: (lastCollectedAt: string) => `Collected ${lastCollectedAt}`,
   staleDataFailed: 'Last collection failed',
