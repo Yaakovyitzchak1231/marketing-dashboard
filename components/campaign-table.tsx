@@ -23,9 +23,9 @@ export type CampaignRow = {
 }
 
 /**
- * A rate above 100% is not a result -- it is the autoresponder bug (333%, 450%)
- * surfacing again. We refuse to print it as a measurement. The raw human and
- * autoresponder counts sit beside it, so the reader can see why.
+ * A rate above 100% is not a result -- it means human replies exceeded emails
+ * sent, which cannot happen. We refuse to print it as a measurement. The raw
+ * human and autoresponder counts sit beside it, so the reader can check.
  */
 function rateIsImplausible(value: number | null): boolean {
   return !isUnavailable(value) && !rateIsPlausible(value)
