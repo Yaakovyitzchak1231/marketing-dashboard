@@ -68,7 +68,7 @@ export function KpiCell({ kpi }: { kpi: Kpi }) {
           nobody taps a tooltip on a phone. */}
       {unreliable ? (
         <div className="mt-0.5 truncate text-[11px] text-ink-faint">
-          Autoresponders included
+          {COPY.replyRateUnreliable}
         </div>
       ) : unreported ? (
         <div className="mt-0.5 truncate text-[11px] text-ink-faint">

@@ -52,6 +52,8 @@ describe('ReplyTrendChart', () => {
     expect(screen.getByText('450.0%')).toBeTruthy()
     // the raw number is never silently corrected or clamped
     expect(screen.queryByText('100%')).toBeNull()
+    // old autoresponder sentence is gone
+    expect(screen.queryByText('Autoresponders are included in this count')).toBeNull()
   })
 
   it('does not show the unreliable copy for a plausible rate', () => {
