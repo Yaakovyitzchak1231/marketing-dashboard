@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import sys
 import urllib.parse
+import json
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -35,6 +36,9 @@ try:
     _VAULT = True
 except ImportError:
     _VAULT = False
+
+    def read_json_response(resp):  # noqa: E306
+        return json.load(resp)
 
 HOSTS = ["api.zerobounce.net"]
 CREDENTIAL = "custom.zerobounce"

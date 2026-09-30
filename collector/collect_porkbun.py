@@ -84,16 +84,18 @@ def main() -> int:
             if not name:
                 continue
             healthy, note = _dns_ok(name)
+            # Schema has spf_ok/dkim_ok/dmarc_ok for detailed DNS checks;
+            # this collector only verifies the domain resolves, so those stay
+            # NULL (omitted -> untouched by the merge upsert) and we record
+            # when the basic check ran.
             rows.append({
                 "domain": name,
                 "registrar": "porkbun",
-                "status": d.get("status"),
                 "expires_at": d.get("expireDate"),
                 "auto_renew": str(d.get("autoRenew")).lower() in ("yes", "true", "1"),
-                "dns_healthy": healthy,
-                "dns_last_checked_at": _now(),
-                "updated_at": _now(),
+                "dns_checked_at": _now(),
                 "notes": note or None,
+                "updated_at": _now(),
             })
     except Exception as exc:  # noqa: BLE001
         errors.append({"stage": "domain_list",

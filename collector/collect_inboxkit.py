@@ -2,7 +2,7 @@
 """InboxKit mailbox collector (v2).
 
 Lists mailboxes via POST /v1/api/mailboxes/list and upserts health state
-into `inboxes` (domain, email_address, health_status, warmup state).
+into `inboxes` (email, domain, warmup_status, warmup_score).
 
 Read-only inventory/health. Never purchases mailboxes or changes settings.
 
@@ -44,6 +44,8 @@ def main() -> int:
     sb = v2lib.supabase_client()
     key = os.environ.get("INBOXKIT_API_KEY")
     workspace = os.environ.get("INBOXKIT_WORKSPACE_ID")
+    if not workspace:
+        workspace = "384abb72-b00e-49d0-80b4-c6a1742917be"  # inboxkit2.0
     if not key:
         v2lib.record_run(
             sb, "inboxkit", ok=False,
@@ -73,20 +75,18 @@ def main() -> int:
             domain = email.split("@")[-1] if "@" in email else None
             health = (m.get("health_status") or m.get("status") or "").lower()
             rows.append({
+                "email": email,
                 "domain": domain,
-                "email_address": email,
                 "provider": "inboxkit",
-                "health_status": health or None,
-                "warmup_enabled": bool(m.get("warmup_enabled", m.get("warmup"))),
+                "warmup_status": health or None,
                 "warmup_score": m.get("warmup_score") or m.get("health_score"),
-                "last_seen_at": _now(),
-                "updated_at": _now(),
+                "checked_at": _now(),
             })
     except Exception as exc:  # noqa: BLE001
         errors.append({"stage": "mailbox_list",
                        "error": f"{type(exc).__name__}: {exc}"[:200]})
 
-    persisted = v2lib.upsert(sb, "inboxes", rows, "email_address")
+    persisted = v2lib.upsert(sb, "inboxes", rows, "email")
     v2lib.record_run(
         sb, "inboxkit", ok=not errors, api_calls=1,
         stages=[{"stage": "mailbox_list", "ok": not errors,
