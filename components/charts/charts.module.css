@@ -1,0 +1,138 @@
+.panel {
+  --ink: #1c1917;
+  --ink-soft: #57534e;
+  --ink-faint: #a8a29e;
+  --rule: #e7e5e4;
+  --accent: #1d4ed8;
+
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 20px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+  color: var(--ink);
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 0 0 16px;
+}
+
+.value {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.valueUnavailable {
+  font-size: 14px;
+  font-weight: 400;
+  font-style: normal;
+  color: var(--ink-faint);
+  letter-spacing: 0;
+}
+
+.unavailable {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+.warn {
+  color: #9a3412;
+  font-size: 12.5px;
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  border-radius: 3px;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 28px 0;
+  text-align: center;
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+}
+
+.rows {
+  margin-top: 16px;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  grid-template-columns: minmax(4.5rem, auto) 1fr auto auto;
+  gap: 0 12px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.rowHead {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cell {
+  padding: 7px 0;
+  border-bottom: 1px solid #f5f5f4;
+  font-size: 13px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.day {
+  text-align: left;
+  color: var(--ink-soft);
+}
+
+.unreliable {
+  color: #9a3412;
+}
+
+.foot {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 420px) {
+  .panel {
+    padding: 16px;
+  }
+  .value {
+    font-size: 24px;
+  }
+  .rows {
+    grid-template-columns: minmax(3.5rem, auto) 1fr auto auto;
+    gap: 0 8px;
+  }
+  .cell {
+    font-size: 12.5px;
+  }
+}
