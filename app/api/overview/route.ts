@@ -63,6 +63,7 @@ export async function GET(request: Request) {
     campaigns_collected_count: null,
     open_reported: false,
     unsub_reported: false,
+    last_attempt: null,
     range,
   }
 
@@ -145,6 +146,10 @@ export async function GET(request: Request) {
       open_reported: Boolean(accountData.open_reported),
       unsub_reported: Boolean(accountData.unsub_reported),
       collected_at: accountData.collected_at,
+      // The banner's "Last attempt [timestamp]". Taken from the rollup row the
+      // collector wrote, so it is the same run these numbers came from rather
+      // than a separately-fetched value that might be from a later run.
+      last_attempt: accountData.collected_at ?? null,
       range,
     })
   } catch (error) {
