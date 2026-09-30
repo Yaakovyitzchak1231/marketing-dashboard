@@ -168,12 +168,17 @@ class Instantly:
 
         This is the deliverability layer: a portfolio reply rate is meaningless
         if the mailboxes behind it are cold or disconnected.
+
+        Uses small pages (limit=25) to stay under Composio's 40 KB
+        truncation threshold. If a remote file is returned, reads it via
+        COMPOSIO_REMOTE_WORKBENCH (same pattern as campaign_ids) to avoid
+        the `cat | head` path that fails on truncated sandbox files.
         """
         out: list[dict] = []
         cursor, guard = None, 0
         while guard < 40:
             guard += 1
-            args = {"limit": 100}
+            args = {"limit": 25}
             if cursor:
                 args["starting_after"] = cursor
             data = self.call("INSTANTLY_LIST_ACCOUNTS", **args)
