@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import sys
 import time
 from datetime import datetime, timezone
@@ -59,6 +58,57 @@ ANALYTIC_FIELDS = [
     "total_opportunities", "total_opportunity_value",
 ]
 
+# Runs inside Composio's sandbox, not here. {path} is a JSON-quoted path and
+# {keep} a JSON list of item fields to retain.
+#
+# Two Composio limits force this shape, and both were silent data loss:
+#   1. remote-bash stdout is truncated at ~40,000 chars, so `cat`-ing a large
+#      payload and parsing it locally is not a partial read, it is a parse
+#      error. That is what emptied the sender fleet on every run.
+#   2. workbench stdout is truncated at the same boundary, so even a
+#      correctly-parsed envelope dies if we print all of it back.
+# The only way through is to reduce INSIDE the sandbox. `keep` is the
+# projection: the sandbox keeps those fields and the collector keeps the rest
+# of its discipline.
+REMOTE_UNWRAP = '''
+import json
+with open({path}) as fh:
+    node = json.load(fh)
+# `results` is a LIST (one entry per tool executed), so it has to be indexed
+# rather than merely descended into -- treating it as a dict-level key walks
+# into the list and then refuses to go further.
+for key in ("results", "response", "data"):
+    if isinstance(node, list) and node and isinstance(node[0], dict):
+        node = node[0]
+    if isinstance(node, dict) and key in node:
+        node = node[key]
+if not isinstance(node, dict):
+    raise SystemExit("unexpected envelope shape: " + type(node).__name__)
+inner = node.get("data")
+payload = inner if isinstance(inner, dict) else node
+
+keep = {keep}
+items = payload.get("items")
+# keep == null means "no projection requested" -- only an explicit field list
+# filters. An empty list is a caller bug, not a request to keep nothing.
+if isinstance(items, list) and keep is not None:
+    trimmed = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        trimmed.append({{k: v for k, v in it.items() if k in keep}})
+    payload = dict(payload)
+    payload["items"] = trimmed
+print(json.dumps(payload))
+'''
+
+# The mailbox fields the collector actually reads. Requesting only these keeps
+# the projected payload well under Composio's stdout ceiling.
+SENDER_FIELDS = [
+    "id", "email", "status", "setup_pending", "daily_limit",
+    "stat_warmup_score", "warmup_status", "timestamp_created", "warmup",
+]
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -82,11 +132,57 @@ class Instantly:
         self.mcp = mcp or MCP()
         self.calls = 0
 
+    # Composio's gateway intermittently answers 502 on a per-campaign call.
+    # That is transient, not a data state, and a campaign silently dropped
+    # from the inventory is exactly the truncation bug this module exists to
+    # prevent -- so retry rather than record a gap.
+    RETRIES = 3
+    RETRY_SLEEP = 2.0
+
+    def _call_with_retry(self, slug: str, **args) -> dict:
+        """One Composio call, retried on transient transport failures.
+
+        Only 5xx / 429 and URLError-class faults are retried. A deterministic
+        4xx (bad campaign id, auth) is raised immediately -- retrying it just
+        burns time and hides the real error.
+        """
+        import urllib.error
+
+        last: Exception | None = None
+        for attempt in range(1, self.RETRIES + 1):
+            try:
+                return self.mcp.call("COMPOSIO_MULTI_EXECUTE_TOOL", {
+                    "tools": [{"tool_slug": slug,
+                               "arguments": {"account": ACCOUNT, **args}}]
+                })
+            except urllib.error.HTTPError as exc:
+                # 502/503/504/429 are gateway-side and recover on their own.
+                if exc.code < 500 and exc.code != 429:
+                    raise
+                last = exc
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                last = exc
+            if attempt < self.RETRIES:
+                time.sleep(self.RETRY_SLEEP * attempt)
+        raise RuntimeError(f"{slug}: {self.RETRIES} attempts failed: "
+                           f"{type(last).__name__}: {last}")
+
+    def _call_keep(self, slug: str, keep: list[str], **args) -> dict:
+        """call(), but the sandbox projects each item down to `keep`.
+
+        Identical to call() except that a remote-file read asks the sandbox to
+        drop fields we never read before printing. The projection happens
+        inside the sandbox because Composio truncates its stdout: a payload we
+        could have thrown away is still lost in transit.
+        """
+        return self._call(slug, keep=keep, **args)
+
     def call(self, slug: str, **args) -> dict:
+        return self._call(slug, **args)
+
+    def _call(self, slug: str, keep: list[str] | None = None, **args) -> dict:
         self.calls += 1
-        raw = self.mcp.call("COMPOSIO_MULTI_EXECUTE_TOOL", {
-            "tools": [{"tool_slug": slug, "arguments": {"account": ACCOUNT, **args}}]
-        })
+        raw = self._call_with_retry(slug, **args)
         if not raw.get("successful"):
             raise RuntimeError(f"{slug}: {raw.get('error')}")
         results = (raw.get("data") or {}).get("results") or []
@@ -106,7 +202,7 @@ class Instantly:
         remote_file = (raw.get("data") or {}).get("remote_file_info") or {}
         remote_path = remote_file.get("file_path")
         if remote_path:
-            return self._read_remote_file(remote_path)
+            return self._read_remote_file(remote_path, keep=keep)
 
         if "data" in resp:
             return resp["data"]
@@ -118,7 +214,7 @@ class Instantly:
                 return {}
         return preview if isinstance(preview, dict) else {}
 
-    def _read_remote_file(self, path: str) -> dict:
+    def _read_remote_file(self, path: str, keep: list[str] | None = None) -> dict:
         """Fetch the full payload Composio offloaded to its sandbox.
 
         The remote file holds the same envelope the inline response would have
@@ -126,34 +222,42 @@ class Instantly:
         fails we raise rather than fall back to a truncated preview: a short
         list that looks complete is worse than a loud failure, because every
         rate computed from it is wrong.
+
+        The parse runs INSIDE the sandbox. Composio truncates remote-bash
+        stdout at ~40,000 characters, so `cat`-ing the file and json.loads-ing
+        it locally fails on every payload over that limit -- which is every
+        payload worth reading. Slicing a 40,001-char prefix of a JSON document
+        is not a partial read, it is a parse error, and it was silently
+        costing us the entire sender fleet on every single run.
+
+        `keep` is the item-field projection the sandbox applies before
+        printing, for the same reason: the workbench's own stdout is truncated
+        at the same 40,000-character boundary, so an unprojected payload dies
+        in transit even after a successful parse.
         """
-        out = self.mcp.call("COMPOSIO_REMOTE_BASH_TOOL", {
-            "command": (
-                "cat " + shlex.quote(path) +
-                " 2>/dev/null | head -c 20000000"
+        out = self.mcp.call("COMPOSIO_REMOTE_WORKBENCH", {
+            "code_to_execute": REMOTE_UNWRAP.format(
+                path=json.dumps(path),
+                keep=json.dumps(list(keep)) if keep is not None else "None",
             )
         })
-        stdout = (out.get("data") or {}).get("stdout")
-        if not stdout:
+        if not out.get("successful"):
             raise RuntimeError(
-                f"remote file {path} returned no stdout "
+                f"remote file {path}: sandbox unwrap failed "
+                f"(error={str(out.get('error'))[:200]})"
+            )
+        stdout = (out.get("data") or {}).get("stdout") or ""
+        if not stdout.strip():
+            raise RuntimeError(
+                f"remote file {path} produced no stdout "
                 f"(error={str(out.get('error'))[:200]})"
             )
         try:
-            envelope = json.loads(stdout)
+            return json.loads(stdout)
         except ValueError as exc:
-            raise RuntimeError(f"remote file {path} is not valid JSON: {exc}") from exc
-
-        # Unwrap the same shapes an inline response can take.
-        node = envelope
-        for key in ("results", "response", "data"):
-            if isinstance(node, dict) and key in node:
-                node = node[key]
-        if not isinstance(node, dict):
-            raise RuntimeError(f"remote file {path}: unexpected envelope shape")
-        if "data" in node and isinstance(node["data"], dict):
-            return node["data"]
-        return node
+            raise RuntimeError(
+                f"remote file {path}: sandbox output is not valid JSON: {exc}"
+            ) from exc
 
     # -- endpoints that return untruncated payloads -------------------------
 
@@ -168,6 +272,10 @@ class Instantly:
 
         This is the deliverability layer: a portfolio reply rate is meaningless
         if the mailboxes behind it are cold or disconnected.
+
+        A page of 100 mailboxes carries enough payload that an unprojected read
+        exceeds Composio's stdout ceiling, so SENDER_FIELDS is passed through to
+        the sandbox to strip the fields we never read.
         """
         out: list[dict] = []
         cursor, guard = None, 0
@@ -176,7 +284,7 @@ class Instantly:
             args = {"limit": 100}
             if cursor:
                 args["starting_after"] = cursor
-            data = self.call("INSTANTLY_LIST_ACCOUNTS", **args)
+            data = self._call_keep("INSTANTLY_LIST_ACCOUNTS", SENDER_FIELDS, **args)
             for it in data.get("items") or []:
                 if not isinstance(it, dict) or not it.get("email"):
                     continue
@@ -209,64 +317,24 @@ class Instantly:
         return deduped
 
     def campaign_ids(self) -> list[str]:
-        """Every campaign id. Reads from the remote file to bypass preview truncation."""
-        # First call to get the remote file path
-        result = self.mcp.call("COMPOSIO_MULTI_EXECUTE_TOOL", {
-            "tools": [{"tool_slug": "INSTANTLY_LIST_CAMPAIGNS", "arguments": {"account": ACCOUNT, "limit": 100}}]
-        })
-        self.calls += 1
-        if not result.get("successful"):
-            raise RuntimeError(f"INSTANTLY_LIST_CAMPAIGNS: {result.get('error')}")
-        data = (result.get("data") or {})
-        results = data.get("results") or []
-        if not results:
-            raise RuntimeError("INSTANTLY_LIST_CAMPAIGNS: empty results")
-        resp = results[0].get("response") or {}
-        if not resp.get("successful", True):
-            raise RuntimeError(f"INSTANTLY_LIST_CAMPAIGNS: {str(resp)[:200]}")
-        
-        # Get the remote file path
-        remote_file = data.get("remote_file_info", {}).get("file_path")
-        if not remote_file:
-            # Fallback: try data_preview if no remote file (small payload)
-            if "data" in resp:
-                items = resp["data"].get("items") or []
-            else:
-                preview = resp.get("data_preview")
-                if isinstance(preview, str):
-                    try:
-                        items = json.loads(preview).get("items") or []
-                    except ValueError:
-                        items = []
-                elif isinstance(preview, dict):
-                    items = preview.get("items") or []
-                else:
-                    items = []
-        else:
-            # Read full data from remote file using COMPOSIO_REMOTE_BASH_TOOL
-            # We need to run a Python script in the sandbox to parse the JSON
-            script = f'''
-import json
-with open("{remote_file}") as f:
-    d = json.load(f)
-items = d["results"][0]["response"]["data"]["items"]
-for x in items:
-    if x.get("id"):
-        print(x["id"])
-'''
-            bash_result = self.mcp.call("COMPOSIO_REMOTE_WORKBENCH", {
-                "code_to_execute": script
-            })
-            if not bash_result.get("successful"):
-                raise RuntimeError(f"Failed to read remote file: {bash_result}")
-            stdout = bash_result.get("data", {}).get("stdout", "").strip()
-            if not stdout:
-                raise RuntimeError("Empty stdout from remote file read")
-            items = [{"id": line} for line in stdout.split("\n") if line]
-        
-        # Extract IDs
+        """Every campaign id, read untruncated.
+
+        Only the `id` field is requested from the sandbox. A full campaign
+        object carries its whole lead list, and eight of those exceed
+        Composio's stdout ceiling -- which is why this returned 0 campaigns
+        even after the remote-file read was fixed: the payload was being read
+        in full and then lost in transit.
+
+        Pagination is not attempted: `starting_after` returns an empty second
+        page on this account (see collector/README.md), and 8 < limit 100.
+        """
+        data = self._call("INSTANTLY_LIST_CAMPAIGNS", keep=["id"], limit=100)
+        items = data.get("items") or []
+        # A preview cannot be trusted for ids either: its items array ends
+        # with the literal string "...N more items", which parses as a
+        # non-dict and would be silently skipped.
         ids = [it["id"] for it in items if isinstance(it, dict) and it.get("id")]
-        
+
         # The preview can repeat a page; dedupe while preserving order.
         seen, out = set(), []
         for i in ids:

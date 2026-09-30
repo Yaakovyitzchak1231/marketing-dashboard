@@ -15,11 +15,19 @@ from __future__ import annotations
 
 import json
 import sys
+import time
+import urllib.error
 import urllib.request
 
 URL = "https://connect.composio.dev/mcp"
 CFG = "/home/hermes/.hermes/profiles/mkt-data/config.yaml"
 PROTO = "2024-11-05"
+
+# Composio's edge returns intermittent 502s on a single request. Those are
+# transport faults, not answers. Four attempts with linear backoff clears them
+# without turning a real outage into a silent partial collection.
+RETRIES = 4
+BACKOFF = 2.0
 
 
 def consumer_key() -> str:
@@ -60,11 +68,31 @@ class MCP:
         if self.session:
             headers["mcp-session-id"] = self.session
         req = urllib.request.Request(URL, data=json.dumps(payload).encode(), headers=headers)
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            sid = resp.headers.get("mcp-session-id")
-            if sid:
-                self.session = sid
-            body = resp.read().decode("utf-8", "replace")
+        # Composio's edge intermittently answers 502 with no useful body. That
+        # is a transport fault, not an answer, so retry with backoff. Without
+        # this the collector died at session init often enough to make a manual
+        # re-run the recovery mechanism -- and a manual re-run is exactly how a
+        # half-written collection reaches the database.
+        last: Exception | None = None
+        for attempt in range(1, RETRIES + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=180) as resp:
+                    sid = resp.headers.get("mcp-session-id")
+                    if sid:
+                        self.session = sid
+                    body = resp.read().decode("utf-8", "replace")
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code < 500 and exc.code != 429:
+                    raise
+                last = exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last = exc
+            if attempt < RETRIES:
+                time.sleep(BACKOFF * attempt)
+        else:
+            raise RuntimeError(f"{URL}: {RETRIES} attempts failed: "
+                               f"{type(last).__name__}: {last}")
         # Streamable HTTP returns either bare JSON or SSE frames.
         if not body.strip():
             return {}  # e.g. the 202-no-content reply to notifications/initialized
