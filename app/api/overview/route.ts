@@ -1,7 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+/**
+ * Request-scoped Supabase client that carries the caller's session.
+ *
+ * The previous import was `@/lib/supabase`, a lazily-created BROWSER client.
+ * It has no access to the request cookies and no service-role key, so every
+ * query went out unauthenticated and the middleware rejected it with 401. The
+ * dashboard rendered empty because the data layer could never authenticate.
+ *
+ * This uses the anon key (never the service-role key, which bypasses RLS) plus
+ * the caller's own access token, so PostgREST enforces row-level security
+ * against the real signed-in user. That is what a private dashboard must do.
+ */
+function getRequestClient(request: NextRequest): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anonKey) return null
+
+  const header = request.headers.get('authorization') || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+
+  return createClient(url, anonKey, {
+    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
 
 export async function GET(request: NextRequest) {
+  const supabase = getRequestClient(request)
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured' },
+      { status: 503 }
+    )
+  }
+
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '7d'
   

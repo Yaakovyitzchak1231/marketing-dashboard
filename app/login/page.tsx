@@ -22,7 +22,14 @@ export default function LoginPage() {
     if (signInError) {
       setError('Incorrect email or password')
       setLoading(false)
+      return
     }
+
+    // On success the page used to hang on "Signing in..." forever: nothing
+    // cleared loading and nothing navigated. A full navigation is deliberate
+    // rather than router.push so the server component re-renders with the
+    // session cookie already in place.
+    window.location.href = '/'
   }
 
   return (
