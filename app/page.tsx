@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { KpiRow } from '@/components/kpi-row'
 import { CampaignTable } from '@/components/campaign-table'
 import { TrendChartArea } from '@/components/trend-chart'
@@ -103,6 +104,35 @@ export default async function DashboardPage() {
         )}
 
         <CampaignTable rows={model.campaigns} total={model.campaignTotal} />
+
+        <nav
+          aria-label="Analysis"
+          className="rounded-card border border-line bg-surface px-5 py-4"
+        >
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+            What is working
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+            <Link href="/ideas" className="text-ink underline-offset-4 hover:underline">
+              Ideas — cost per outcome
+            </Link>
+            <Link href="/funnel" className="text-ink underline-offset-4 hover:underline">
+              Funnel
+            </Link>
+            <Link href="/angles" className="text-ink underline-offset-4 hover:underline">
+              Angles
+            </Link>
+            <Link href="/verification" className="text-ink underline-offset-4 hover:underline">
+              Lead verification
+            </Link>
+            <Link href="/infrastructure" className="text-ink underline-offset-4 hover:underline">
+              Infrastructure
+            </Link>
+            <Link href="/costs" className="text-ink underline-offset-4 hover:underline">
+              Costs
+            </Link>
+          </div>
+        </nav>
       </div>
     </main>
   )

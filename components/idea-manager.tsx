@@ -1,0 +1,200 @@
+'use client'
+
+import { useState } from 'react'
+import { useApi } from '@/components/use-api'
+
+type Idea = {
+  id: string
+  name: string
+  description: string | null
+  status: string
+  channels?: { name: string } | null
+}
+
+type PerfRow = {
+  idea_id: string
+  idea_name: string
+  status: string
+  spend_usd: number | null
+  replies: number | null
+  meetings: number | null
+  customers: number | null
+  meetings_per_100_usd: number | null
+  cost_per_reply_usd: number | null
+  cost_per_meeting_usd: number | null
+  cost_per_customer_usd: number | null
+}
+
+const fmt = (v: number | null, digits = 2) =>
+  v === null || v === undefined ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: digits })
+
+export function IdeaManager({
+  initialIdeas,
+  initialPerformance,
+}: {
+  initialIdeas: Idea[]
+  initialPerformance: PerfRow[]
+}) {
+  const api = useApi()
+  const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
+  const [perf] = useState<PerfRow[]>(initialPerformance)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = async () => {
+    const data = await api('/api/ideas')
+    setIdeas(data)
+  }
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api('/api/ideas', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), description: description.trim() || null }),
+      })
+      setName('')
+      setDescription('')
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create idea')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    if (!confirm('Delete this idea? Costs linked to it will keep their records but lose the link.')) return
+    try {
+      await api(`/api/ideas/${id}`, { method: 'DELETE' })
+      await refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete idea')
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      {error && (
+        <div className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+      )}
+
+      <section className="rounded-card border border-line bg-surface px-5 py-4">
+        <h2 className="text-[12px] font-medium text-ink">New idea</h2>
+        <form onSubmit={create} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1">
+            <span className="mb-1 block text-[11px] text-ink-muted">Name</span>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Jewelry retailers outreach"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+            />
+          </label>
+          <label className="flex-[2]">
+            <span className="mb-1 block text-[11px] text-ink-muted">Description</span>
+            <input
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="What is the offer, who is it for?"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={saving || !name.trim()}
+            className="rounded bg-ink px-4 py-2 text-[13px] text-white disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Add idea'}
+          </button>
+        </form>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          Performance — last 30 days
+        </h2>
+        {perf.length === 0 ? (
+          <p className="text-[13px] text-ink-faint">
+            No spend or outcomes recorded yet. Add costs on the Costs page and link campaigns to ideas.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-card border border-line bg-surface">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
+                  <th className="px-4 py-2 font-medium">Idea</th>
+                  <th className="px-4 py-2 text-right font-medium">Spend</th>
+                  <th className="px-4 py-2 text-right font-medium">Meetings / $100</th>
+                  <th className="px-4 py-2 text-right font-medium">Cost / reply</th>
+                  <th className="px-4 py-2 text-right font-medium">Cost / meeting</th>
+                  <th className="px-4 py-2 text-right font-medium">Cost / customer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perf.map(p => (
+                  <tr key={p.idea_id} className="border-b border-line last:border-0">
+                    <td className="px-4 py-2 text-ink">{p.idea_name}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
+                      {p.spend_usd !== null ? `$${fmt(p.spend_usd)}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink">
+                      {fmt(p.meetings_per_100_usd)}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
+                      {p.cost_per_reply_usd !== null ? `$${fmt(p.cost_per_reply_usd)}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
+                      {p.cost_per_meeting_usd !== null ? `$${fmt(p.cost_per_meeting_usd)}` : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
+                      {p.cost_per_customer_usd !== null ? `$${fmt(p.cost_per_customer_usd)}` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          All ideas
+        </h2>
+        <div className="space-y-2">
+          {ideas.map(idea => (
+            <div
+              key={idea.id}
+              className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-ink">{idea.name}</p>
+                {idea.description && (
+                  <p className="mt-0.5 text-[12px] text-ink-faint">{idea.description}</p>
+                )}
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  {idea.channels?.name ?? 'No channel'} · {idea.status}
+                </p>
+              </div>
+              <button
+                onClick={() => remove(idea.id)}
+                className="shrink-0 text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+          {ideas.length === 0 && (
+            <p className="text-[13px] text-ink-faint">No ideas yet. Add the first one above.</p>
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
