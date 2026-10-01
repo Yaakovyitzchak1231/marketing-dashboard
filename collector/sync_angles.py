@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""Angle metrics sync (v2).
-
-Populates `angle_daily_metrics` from `daily_metrics` via the campaign->angle
-mapping in the `angles` table.
-
-Attribution rule (honest, no guessing):
-  - A campaign with exactly ONE angle: that angle gets the campaign's full
-    daily metrics.
-  - A campaign with MULTIPLE angles: metrics cannot be split without
-    step-level data (which the Instantly API does not provide -- verified
-    2026-09-30). Nothing is written; the campaign is listed as
-    "needs manual split" in the run record.
-  - A campaign with NO angles: nothing to attribute.
-
-Angles are created by Yaakov in the dashboard UI (name + which campaign).
-This script only moves numbers that already exist.
-"""
+"""Angle metrics sync (v2)."""
 from __future__ import annotations
 
 import os
@@ -30,20 +14,14 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# Columns that exist in the live daily_metrics table.
-# Missing from live schema: unique_replies, positive_replies,
-# meetings_booked, customers_won -- these are not available.
-# We read: emails_sent, replies_human, replies_autoresponder, bounces, cost_usd
-METRIC_COLS = ("emails_sent", "replies_human", "replies_autoresponder",
-               "bounces", "cost_usd")
-
-
 def main() -> int:
     sb = v2lib.supabase_client()
     errors: list[dict] = []
 
-    angles = (sb.table("angles").select("id,campaign_id,name")
+    angles = (sb.table("angles")
+              .select("id,campaign_id,name")
               .execute().data or [])
+
     by_campaign: dict[str, list[dict]] = {}
     for a in angles:
         if a.get("campaign_id"):
@@ -57,6 +35,7 @@ def main() -> int:
     metrics = (sb.table("daily_metrics")
                .select("campaign_id,metric_date,emails_sent,replies_human,replies_autoresponder,bounces,cost_usd")
                .order("metric_date", desc=True).limit(2000).execute().data or [])
+
     latest: dict[str, dict] = {}
     for m in metrics:
         cid = m.get("campaign_id")
