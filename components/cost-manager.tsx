@@ -191,6 +191,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
                     <td className="px-4 py-2 text-right">
                       <button
                         onClick={() => remove(c.id)}
+                        aria-label={`Delete cost of $${Number(c.amount_usd).toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })} for ${c.category}`}
                         className="text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
                       >
                         Delete
