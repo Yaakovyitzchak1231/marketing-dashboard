@@ -11,14 +11,25 @@ export async function GET(request: NextRequest) {
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
+  // The schema's idea label column is `title` (with `hypothesis` as the
+  // free-text body) and ideas has no channel_id, so the `channels` join does
+  // not exist. Columns are mapped onto the shape the UI consumes rather than
+  // renamed in the schema.
   const { data, error } = await supabase
     .from('ideas')
-    .select('*, channels(name)')
+    .select('id, title, hypothesis, status, created_at, updated_at')
     .order('created_at', { ascending: false })
   if (error) {
     return NextResponse.json({ error: 'Failed to fetch ideas' }, { status: 500 })
   }
-  return NextResponse.json(data ?? [])
+  const rows = ((data ?? []) as Record<string, unknown>[]).map(idea => ({
+    ...idea,
+    name: idea.title ?? null,
+    description: idea.hypothesis ?? null,
+    // ideas carries no channel_id, so the channel is unknown, not "email".
+    channels: null,
+  }))
+  return NextResponse.json(rows)
 }
 
 export async function POST(request: NextRequest) {
@@ -36,11 +47,14 @@ export async function POST(request: NextRequest) {
   if (!name) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }
+  // Writes map onto the real schema columns: title/hypothesis, with the
+  // status CHECK constraint from 002_unified_model.sql. There is no
+  // channel_id on ideas, so a requested channel is dropped rather than
+  // silently attached to the wrong table.
   const row = {
-    name,
-    description: typeof body.description === 'string' ? body.description : null,
-    channel_id: typeof body.channel_id === 'string' ? body.channel_id : null,
-    status: typeof body.status === 'string' ? body.status : 'draft',
+    title: name,
+    hypothesis: typeof body.description === 'string' ? body.description : null,
+    status: typeof body.status === 'string' ? body.status : 'backlog',
   }
   const { data, error } = await supabase
     .from('ideas')
