@@ -137,7 +137,7 @@ export function CampaignTable({
           ) : null}
         </div>
         {!isEmpty ? (
-          <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <div className="flex flex-wrap items-center gap-2 rounded border border-line-soft bg-line-soft/20 p-2 text-[12px]">
             <label className="sr-only" htmlFor="campaign-search">Search campaigns</label>
             <input
               id="campaign-search"

@@ -27,8 +27,8 @@ function FunnelTable({ rows, label }: { rows: FunnelRow[]; label: string }) {
     return <p className="text-[13px] text-ink-faint">{COPY.funnel.noRows(label)}</p>
   }
   return (
-    <div className="overflow-x-auto rounded-card border border-line bg-surface">
-      <table className="w-full text-[13px]">
+    <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
+      <table className="w-full min-w-[760px] text-[13px]">
         <thead>
           <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
             <th className="px-4 py-2 font-medium">{label}</th>
