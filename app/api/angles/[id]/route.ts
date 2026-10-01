@@ -7,7 +7,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestClient(request)
+  const supabase = await getRequestClient(request)
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
@@ -41,7 +41,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestClient(request)
+  const supabase = await getRequestClient(request)
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }

@@ -7,7 +7,7 @@ import { getRequestClient } from '@/lib/request-client'
  */
 
 export async function GET(request: NextRequest) {
-  const supabase = getRequestClient(request)
+  const supabase = await getRequestClient(request)
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestClient(request)
+  const supabase = await getRequestClient(request)
   if (!supabase) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
