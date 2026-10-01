@@ -130,12 +130,8 @@ export async function GET(request: NextRequest) {
   for (const c of (campaigns ?? []) as Record<string, unknown>[]) {
     if (c.idea_id) campaignIdea.set(c.id as string, c.idea_id as string)
   }
-  const ideaNames = new Map<string, string>()
-  for (const c of (campaigns ?? []) as Record<string, unknown>[]) {
-    if (c.idea_id && (c.ideas as { name?: string } | null)?.name) {
-      ideaNames.set(c.idea_id as string, (c.ideas as { name: string }).name)
-    }
-  }
+  const ideaNames = ideaTitles
+
   for (const [cid, rows] of byCampaign) {
     const iid = campaignIdea.get(cid)
     if (!iid) continue
