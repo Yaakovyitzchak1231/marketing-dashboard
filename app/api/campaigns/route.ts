@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestClient } from '@/lib/request-client'
 
-
+// A cap on how many rows one response carries -- NOT a reporting window. The
+// visible rows are the newest `CAMPAIGN_ROW_LIMIT` campaigns in range; nothing
+// about the portfolio is scoped away by it. The only thing that discloses when
+// this cap actually truncated the list is the `total` we ask for alongside the
+// rows, which PostgREST computes before `limit` is applied. Without that count
+// a short list is indistinguishable from a complete one, which is exactly the
+// silent-truncation bug this dashboard exists to fix.
+const CAMPAIGN_ROW_LIMIT = 100
 
 export async function GET(request: NextRequest) {
   const supabase = await getRequestClient(request)
@@ -23,7 +30,12 @@ export async function GET(request: NextRequest) {
   
   try {
     // Get campaigns with their latest metrics
-    const { data: campaigns, error } = await supabase
+    // `count: 'exact'` is asked for on THIS query, not a second one. PostgREST
+    // returns the count of rows matching the filter before `limit` is applied,
+    // so it describes the same population the rows were drawn from. A separate
+    // count query could disagree with this filter and the response would then
+    // contradict itself.
+    const { data: campaigns, error, count } = await supabase
       .from('campaigns')
       .select(`
         id,
@@ -42,13 +54,13 @@ export async function GET(request: NextRequest) {
           open_rate,
           unsubscribe
         )
-      `)
+      `, { count: 'exact' })
       .gte('daily_metrics.metric_date', cutoffStr)
       // Ordering by the qualified path "daily_metrics.metric_date" is invalid
       // PostgREST syntax and returned PGRST100. The embedded column must be
       // named bare, with referencedTable pointing at the join.
       .order('metric_date', { ascending: false, referencedTable: 'daily_metrics' })
-      .limit(100)
+      .limit(CAMPAIGN_ROW_LIMIT)
     
     if (error) throw error
     
@@ -103,8 +115,26 @@ export async function GET(request: NextRequest) {
       return order === 'asc' ? cmp : -cmp
     })
     
+    // The count the driver reported, or null when it reported no real number.
+    // null means "the source did not say" -- it is deliberately NOT
+    // `processed.length`. Falling back to the row count would set
+    // total === rows.length, so the "Showing N of M campaigns" disclosure would
+    // never fire on exactly the truncated lists it exists to announce. Better to
+    // disclose nothing than to claim nothing was cut.
+    //
+    // `?? null` alone is not enough: supabase-js derives `count` with
+    // `parseInt(contentRange[1])`, so a `Content-Range: */*` header yields NaN,
+    // which is not nullish. Today `NextResponse.json` happens to serialize NaN as
+    // null -- and a truthfulness guarantee that rests on the serializer is
+    // backwards. `Number.isFinite` is the same guard lib/format.ts applies to
+    // every value it prints, for the same reason. It is not a falsy check either:
+    // a count of 0 is a measurement (no campaigns match the window) and must
+    // survive.
+    const total = count !== null && Number.isFinite(count) ? count : null
+
     return NextResponse.json({
       campaigns: processed,
+      total,
       range,
       sort,
       order

@@ -1,3 +1,5 @@
+import { formatCount } from '@/lib/format'
+
 /**
  * Every user-facing string in the dashboard.
  *
@@ -6,11 +8,13 @@
  * rule about honesty extends to claims as well as numbers -- "Collecting
  * history" and "No data" are both claims about what the database holds.
  *
- * Keys are deliberately FLAT. The `satisfies` clause below types every entry as
- * a string or a function, which rejects nested objects outright; grouping
- * related strings under a prefix keeps them findable without weakening that
- * check. A nested `infrastructure: { ... }` block would have to be cast away to
- * compile, and a cast is exactly where an unreviewed string sneaks in.
+ * Keys are FLAT, or grouped exactly one level deep by surface --
+ * `COPY.infrastructure.title` names its owner, which a flat `infrastructureTitle`
+ * does not. The `satisfies` clause below is what keeps that safe: it types an
+ * entry as a string, a function, or a group of those, so a nested block still
+ * cannot become a place to stash a component or a piece of data. Deeper
+ * nesting would need a cast, and a cast is exactly where an unreviewed string
+ * sneaks in.
  */
 
 /**
@@ -46,8 +50,17 @@ export const COPY = {
   freshnessUnknown: 'Collection time unknown',
   loading: 'Loading',
   error: 'Something went wrong. Try again.',
+  /**
+   * The truncation disclosure, naming two figures.
+   *
+   * Both go through `formatCount` because every other figure on the page does:
+   * interpolated raw, a total of 1482 printed "Showing 2 of 1482 campaigns" two
+   * inches from a table whose cells read "1,482" -- two renderings of one
+   * number on one screen, which is the AGENTS.md rule (a figure must be
+   * traceable to its source) failing at the last step before the reader.
+   */
   partialList: (visible: number, total: number) =>
-    `Showing ${visible} of ${total} campaigns`,
+    `Showing ${formatCount(visible)} of ${formatCount(total)} campaigns`,
 
   /**
    * The infrastructure page's expiry warning, in words.
@@ -81,6 +94,56 @@ export const COPY = {
     byCampaign: 'By campaign',
     noRows: (label: string) => `No ${label} funnel data yet.`,
     unavailable: 'Funnel data is unavailable right now.',
+  },
+
+  /**
+   * The campaign table's filter and sort controls, and the words its header
+   * builds its shown-count from.
+   *
+   * They live here so they are reviewed like any other copy. A control that
+   * narrows the list is a claim about what is on screen, and the wording that
+   * carries that claim -- what the search field says, what the status list
+   * offers, what the sort control is called -- is exactly the sort of thing
+   * that gets retyped inline until nobody owns it.
+   */
+  campaigns: {
+    /**
+     * The search field's label for a screen reader, which describes what the
+     * field matches. Deliberately not a restatement of the placeholder: the
+     * placeholder is a prompt that disappears on the first keystroke, and a
+     * label is the field's name.
+     */
+    searchLabel: 'Search campaigns by name',
+    searchPlaceholder: 'Search campaigns',
+    statusFilterLabel: 'Filter campaigns by status',
+    allStatuses: 'All statuses',
+    sortLabel: 'Sort campaigns',
+    sortName: 'Name',
+    sortSent: 'Sent',
+    sortReplyRate: 'Reply rate',
+    sortOpenRate: 'Open rate',
+    sortAscending: 'Ascending',
+    sortDescending: 'Descending',
+    /**
+     * The direction toggle's tooltip: what clicking it WILL do. The visible
+     * text stays the accessible name (WCAG 2.5.3, Label in Name) -- a button
+     * that reads "Ascending" while announcing "Sort descending" tells a
+     * screen-reader user the opposite of what the screen says.
+     */
+    sortDirectionAction: (current: 'asc' | 'desc') =>
+      current === 'asc' ? 'Sort descending' : 'Sort ascending',
+    noMatch: 'No campaigns match these filters.',
+    /**
+     * The connective words of the header's shown-count -- "2 of 14 shown".
+     *
+     * The sentence is NOT assembled here on purpose. Its digits have to render
+     * inside `<Figure>` so the numbers hold their columns like every other
+     * figure on the page, and a string returned from this file cannot carry an
+     * element. So copy owns the words, the component owns the JSX, and the
+     * reader can see both halves in the two files instead of trusting one.
+     */
+    countOf: 'of',
+    countShown: 'shown',
   },
 
   costManager: {
