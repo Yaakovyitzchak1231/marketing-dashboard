@@ -277,8 +277,59 @@ class TestFailedApiCallDoesNotWriteZero:
         # The failed campaign is not in campaigns list (no zeros written)
 
 
+    def test_collect_catches_api_exceptions(self):
+        """collect() should catch exceptions from API calls and append to errors list."""
+        from collect_instantly import collect
+
+        with patch("collect_instantly.Instantly") as MockInstantly:
+            mock_api = MockInstantly.return_value
+            mock_api.overview.side_effect = RuntimeError("overview failed")
+            mock_api.campaign_ids.side_effect = ValueError("campaign_ids failed")
+            mock_api.senders.side_effect = Exception("senders failed")
+            mock_api.calls = 3
+
+            result = collect()
+
+            assert result["overview"] == {}
+            assert result["campaigns"] == []
+            assert result["senders"] == []
+            assert result["calls"] == 3
+
+            errors = result["errors"]
+            assert len(errors) == 3
+            assert errors[0]["stage"] == "overview"
+            assert "RuntimeError: overview failed" in errors[0]["error"]
+            assert errors[1]["stage"] == "list_campaigns"
+            assert "ValueError: campaign_ids failed" in errors[1]["error"]
+            assert errors[2]["stage"] == "senders"
+            assert "Exception: senders failed" in errors[2]["error"]
+
+    def test_collect_catches_campaign_exceptions(self):
+        """collect() should catch exceptions from individual campaign calls and continue."""
+        from collect_instantly import collect
+
+        with patch("collect_instantly.Instantly") as MockInstantly:
+            mock_api = MockInstantly.return_value
+            mock_api.overview.return_value = {"success": True}
+            mock_api.campaign_ids.return_value = ["camp-123456789"]
+            mock_api.senders.return_value = [{"email": "test@test.com"}]
+            mock_api.campaign.side_effect = Exception("campaign failed")
+
+            result = collect()
+
+            assert result["overview"] == {"success": True}
+            assert len(result["campaigns"]) == 0
+            assert len(result["senders"]) == 1
+
+            errors = result["errors"]
+            assert len(errors) == 1
+            assert errors[0]["stage"] == "campaign:camp-123"
+            assert "Exception: campaign failed" in errors[0]["error"]
+
+
 class TestDailyRollups:
     """Tests that collector produces daily rollups, not per-collection rows."""
+
     
     def test_metric_date_is_today_not_collection_timestamp(self):
         """daily_metrics.metric_date should be the campaign date, not collection time."""
@@ -310,3 +361,59 @@ class TestDailyRollups:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+    def test_collect_catches_api_exceptions(self):
+        """collect() should catch exceptions from API calls and append to errors list."""
+        from collect_instantly import collect
+
+        with patch('collect_instantly.Instantly') as MockInstantly:
+            mock_api = MockInstantly.return_value
+
+            # Make all API calls raise an exception
+            mock_api.overview.side_effect = RuntimeError("overview failed")
+            mock_api.campaign_ids.side_effect = ValueError("campaign_ids failed")
+            mock_api.senders.side_effect = Exception("senders failed")
+            mock_api.calls = 3
+
+            result = collect()
+
+            # Verify collect didn't crash and returned the expected structure
+            assert result["overview"] == {}
+            assert result["campaigns"] == []
+            assert result["senders"] == []
+            assert result["calls"] == 3
+
+            # Verify the errors were caught and recorded correctly
+            errors = result["errors"]
+            assert len(errors) == 3
+            assert errors[0]["stage"] == "overview"
+            assert "RuntimeError: overview failed" in errors[0]["error"]
+            assert errors[1]["stage"] == "list_campaigns"
+            assert "ValueError: campaign_ids failed" in errors[1]["error"]
+            assert errors[2]["stage"] == "senders"
+            assert "Exception: senders failed" in errors[2]["error"]
+
+    def test_collect_catches_campaign_exceptions(self):
+        """collect() should catch exceptions from individual campaign calls and continue."""
+        from collect_instantly import collect
+
+        with patch('collect_instantly.Instantly') as MockInstantly:
+            mock_api = MockInstantly.return_value
+
+            # Success for outer calls
+            mock_api.overview.return_value = {"success": True}
+            mock_api.campaign_ids.return_value = ["camp-123456789"]
+            mock_api.senders.return_value = [{"email": "test@test.com"}]
+
+            # Exception for inner campaign call
+            mock_api.campaign.side_effect = Exception("campaign failed")
+
+            result = collect()
+
+            assert result["overview"] == {"success": True}
+            assert len(result["campaigns"]) == 0  # Failed campaign skipped
+            assert len(result["senders"]) == 1
+
+            errors = result["errors"]
+            assert len(errors) == 1
+            assert errors[0]["stage"] == "campaign:camp-123"
+            assert "Exception: campaign failed" in errors[0]["error"]
