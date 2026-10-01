@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Jacob only. Set ALLOWED_USER_EMAIL in the environment; the placeholder below
-// is a fail-closed default so an unset env var can never widen access.
-const ALLOWED_EMAIL = process.env.ALLOWED_USER_EMAIL || 'unset@invalid.local'
+// Jacob only. Read ALLOWED_USER_EMAIL per request rather than capturing it at
+// module scope: a module-scope read freezes whatever the env held at import,
+// which makes the gate impossible to test and hides a misconfigured deploy
+// behind a value nobody can inspect. The placeholder is a fail-closed default
+// so an unset env var can never widen access.
+function allowedEmail(): string {
+  return process.env.ALLOWED_USER_EMAIL || 'unset@invalid.local'
+}
 
 /**
  * Read the signed-in session from the request cookies.
@@ -77,9 +82,9 @@ export async function middleware(request: NextRequest) {
 
   // Check allow-list
   const userEmail = session.user.email?.toLowerCase()
-  const allowedEmail = ALLOWED_EMAIL.toLowerCase()
+  const allowed = allowedEmail().toLowerCase()
 
-  if (userEmail !== allowedEmail) {
+  if (userEmail !== allowed) {
     // Clear the session cookie by redirecting to logout. Calling auth.signOut()
     // here would need a server client, and the cookie can be dropped on the
     // next response without one.

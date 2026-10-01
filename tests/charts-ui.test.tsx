@@ -1,3 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * These suites render React components, so they need a DOM. Declared here
+ * rather than globally so the pure-logic .test.ts suites keep running in
+ * `node`.
+ */
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import { ReplyTrendChart } from '@/components/charts/ReplyTrendChart'

@@ -3,6 +3,24 @@ import { Figure, Unavailable } from '@/components/primitives'
 import { COPY } from '@/lib/copy'
 
 /**
+ * What we can honestly claim about the snapshot.
+ *
+ * Three states, not two. `stale` alone could not express "the source reported
+ * no collection time and no failure either", so the component fell back to
+ * claiming `Collected` followed by a dash and `data-stale="false"`. That is the
+ * worst combination available: it asserts the data is current while admitting
+ * it does not know when it was gathered. Absence of a timestamp is not evidence
+ * of freshness, so it gets its own state rather than being rounded down to
+ * "not stale".
+ */
+type FreshnessState = 'fresh' | 'failed' | 'unknown'
+
+function freshnessState(generatedAt: string | null, collectionFailed: boolean): FreshnessState {
+  if (collectionFailed) return 'failed'
+  return isUnavailable(generatedAt) ? 'unknown' : 'fresh'
+}
+
+/**
  * Data freshness.
  *
  * The single most load-bearing line on the dashboard: it tells Jacob whether
@@ -21,27 +39,26 @@ export function FreshnessIndicator({
   generatedAt: string | null
   stale: boolean
 }) {
+  const state = freshnessState(generatedAt, stale)
+  const hasTime = !isUnavailable(generatedAt)
+
   return (
     <div
       data-testid="freshness"
       data-stale={stale ? 'true' : 'false'}
+      data-freshness={state}
       className="flex items-baseline gap-2 text-[11px] text-ink-faint"
     >
       <span className="text-ink-muted">
-        {stale ? COPY.staleDataFailed : COPY.staleDataOk('').trim()}
+        {state === 'failed'
+          ? COPY.staleDataFailed
+          : state === 'unknown'
+            ? COPY.freshnessUnknown
+            : COPY.staleDataOk('').trim()}
       </span>
-      {!stale && !isUnavailable(generatedAt) ? (
-        <span data-testid="freshness-time" className="font-numeric tabular-nums">
-          {formatDate(generatedAt)}
-        </span>
-      ) : null}
-      {/* A missing timestamp has no date to show, but it must still occupy the
-          slot so the line does not silently shrink into "fresh-looking". */}
-      {isUnavailable(generatedAt) ? (
-        <span data-testid="freshness-time">
-          <Unavailable />
-        </span>
-      ) : null}
+      <span data-testid="freshness-time" className="font-numeric tabular-nums">
+        {hasTime ? formatDate(generatedAt) : <Unavailable />}
+      </span>
     </div>
   )
 }

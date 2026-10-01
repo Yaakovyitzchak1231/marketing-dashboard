@@ -5,6 +5,7 @@ import type {
   Freshness,
 } from '@/lib/api-types'
 import { DEFAULT_RANGE } from '@/lib/range'
+import { getBaseUrl } from '@/lib/base-url'
 
 /**
  * The fetch layer for the app shell.
@@ -53,7 +54,7 @@ const SHAPES = {
 async function getJson<T>(
   url: string,
   guard: (v: unknown) => v is T,
-  cookie?: string,
+  cookie?: string | null,
 ): Promise<T | null> {
   try {
     // The API routes sit behind auth, so the server-side self-fetch has to
@@ -73,26 +74,38 @@ async function getJson<T>(
   }
 }
 
+/**
+ * The caller's session cookie, as a header string.
+ *
+ * The API routes sit behind auth, so the server-side self-fetch has to carry
+ * the session or every route answers 401 and the page renders as though the
+ * database were empty.
+ *
+ * Reading the cookie jar requires a request scope, which a Server Component
+ * has and a plain unit test does not. Rather than making the caller thread a
+ * cookie through every call site, this returns null outside a request scope:
+ * the fetch then goes out unauthenticated, the route answers 401, and
+ * `getJson` returns null -- which is exactly the documented failure contract
+ * ("a route that errors yields null, never a zeroed object"). The failure is
+ * honest rather than fatal, and the test does not have to fake a request to
+ * exercise the loader.
+ */
+async function requestCookieHeader(): Promise<string | null> {
+  try {
+    const { cookies } = await import('next/headers')
+    return (await cookies()).toString()
+  } catch {
+    // No request scope: not an error, just no session to forward.
+    return null
+  }
+}
+
 export async function loadShellData(
   campaignId: string | null,
   suppliedFreshness?: Freshness,
 ): Promise<ShellData> {
-  // Server-side `fetch` requires an absolute URL. A relative path works in a
-  // browser but throws "Invalid URL" in a Server Component, which surfaced as a
-  // 500 on `/`. VERCEL_URL is set by Vercel; PORT covers local runs.
-  //
-  // The PORT fallback matters more than it looks: without it the self-fetch
-  // targeted http://127.0.0.1:3000 while the server actually listened on
-  // whatever port `next start -p N` was given. Every fetch then failed, was
-  // swallowed by the catch, and the page rendered the honest empty state with
-  // real data sitting in the database.
-  const port = process.env.PORT ?? '3000'
-  const base =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
-
-  const { cookies } = await import('next/headers')
-  const cookie = (await cookies()).toString()
+  const base = getBaseUrl()
+  const cookie = await requestCookieHeader()
 
   const [overview, campaigns, trendResult] = await Promise.all([
     getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview, cookie),
@@ -111,10 +124,14 @@ export async function loadShellData(
   const trendFailed = campaignId !== null && trendResult === null
 
   const freshness: Freshness = suppliedFreshness ?? {
-    // No timestamp can be derived client-side, so with no supplied snapshot
-    // metadata the honest value is null -- the freshness line then renders a
-    // dash and says the collection failed, rather than guessing "now".
-    generatedAt: null,
+    // The overview route reports the `generated_at` of the snapshot it just
+    // read, so this is the real collection time when one exists. Previously
+    // this was hardcoded to null, which meant the freshness line could never
+    // show a date no matter how the collector behaved -- the whole line was
+    // decorative. A null here means the row carries no timestamp.
+    generatedAt: overview?.generated_at ?? null,
+    // A missing overview is a failed fetch. An overview of all-nulls is a
+    // source that reported nothing, which is a different fact.
     collectionFailed: overview === null,
   }
 

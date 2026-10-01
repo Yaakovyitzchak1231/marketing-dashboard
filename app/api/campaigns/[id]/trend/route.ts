@@ -1,10 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getRequestClient } from '@/lib/request-client'
 
+/**
+ * A per-campaign daily series.
+ *
+ * This route used to import the module-level browser client from
+ * `@/lib/supabase`. That is a server route, so it had no access to the
+ * caller's session cookie: the client was constructed with the anon key and
+ * no user JWT, so PostgREST applied RLS against "nobody" and this route --
+ * unlike `/api/overview` and `/api/campaigns`, which were migrated to
+ * `getRequestClient` -- kept returning whatever the anon role could see. The
+ * shell treats a null trend as "this chart failed", so the failure mode was a
+ * silently missing chart rather than a visible error.
+ *
+ * `getRequestClient` carries the caller's session and the anon key, so RLS is
+ * enforced against the real signed-in user, consistent with every other route.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const supabase = await getRequestClient(request)
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase is not configured' },
+      { status: 503 }
+    )
+  }
+
   const { id } = await params
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '30d'

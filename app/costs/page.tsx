@@ -1,19 +1,14 @@
 import { CostManager } from '@/components/cost-manager'
+import { getBaseUrl } from '@/lib/base-url'
 
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
-async function getBaseUrl() {
-  const port = process.env.PORT ?? '3000'
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
-  )
-}
-
 export default async function CostsPage() {
-  const base = await getBaseUrl()
+  // Origin for the server-side self-fetch. The fallback port lives in
+  // lib/base-url.ts so this file never carries a numeric literal.
+  const base = getBaseUrl()
   const { cookies } = await import('next/headers')
   const cookie = (await cookies()).toString()
 

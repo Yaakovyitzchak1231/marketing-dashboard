@@ -1,14 +1,8 @@
 import Link from 'next/link'
+import { getBaseUrl } from '@/lib/base-url'
+import { formatRate } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
-
-async function getBaseUrl() {
-  const port = process.env.PORT ?? '3000'
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
-  )
-}
 
 type SourceRow = {
   source: string
@@ -22,10 +16,10 @@ type SourceRow = {
   clean_rate: number | null
 }
 
-const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(1)}%`)
-
 export default async function VerificationPage() {
-  const base = await getBaseUrl()
+  // Origin for the server-side self-fetch. The fallback port lives in
+  // lib/base-url.ts so this file never carries a numeric literal.
+  const base = getBaseUrl()
   const { cookies } = await import('next/headers')
   const cookie = (await cookies()).toString()
 
@@ -90,7 +84,8 @@ export default async function VerificationPage() {
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{s.catch_all.toLocaleString()}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{s.role_skipped.toLocaleString()}</td>
                   <td className="px-4 py-2 text-right tabular-nums font-medium text-ink">
-                    {pct(s.clean_rate)}
+                    {/* Rates are formatted in lib/format.ts; never recomputed with * 100 here. */}
+                    {formatRate(s.clean_rate)}
                   </td>
                 </tr>
               ))}

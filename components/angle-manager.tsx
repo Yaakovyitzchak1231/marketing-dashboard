@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useApi } from '@/components/use-api'
+import { formatRate } from '@/lib/format'
+import { PERFORMANCE_RANGE_LABEL } from '@/lib/range'
 
 type Angle = {
   id: string
@@ -21,8 +23,6 @@ type PerfRow = {
   human_reply_rate: number | null
   attributed: boolean
 }
-
-const pct = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`)
 
 export function AngleManager({
   initialAngles,
@@ -135,7 +135,7 @@ export function AngleManager({
 
       <section>
         <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
-          Human-reply rate — last 30 days
+          Human-reply rate — {PERFORMANCE_RANGE_LABEL}
         </h2>
         {perf.length === 0 ? (
           <p className="text-[13px] text-ink-faint">No angle metrics yet.</p>
@@ -163,7 +163,7 @@ export function AngleManager({
                       {p.unique_replies ?? '—'}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums text-ink">
-                      {p.attributed ? pct(p.human_reply_rate) : 'unattributed'}
+                      {p.attributed ? formatRate(p.human_reply_rate, 2) : 'unattributed'}
                     </td>
                   </tr>
                 ))}

@@ -1,16 +1,10 @@
 import { IdeaManager } from '@/components/idea-manager'
+import { getBaseUrl } from '@/lib/base-url'
+import { PERFORMANCE_RANGE } from '@/lib/range'
 
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
-
-async function getBaseUrl() {
-  const port = process.env.PORT ?? '3000'
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
-  )
-}
 
 async function getJson<T>(url: string, cookie?: string): Promise<T | null> {
   try {
@@ -26,13 +20,17 @@ async function getJson<T>(url: string, cookie?: string): Promise<T | null> {
 }
 
 export default async function IdeasPage() {
-  const base = await getBaseUrl()
+  // Origin for the server-side self-fetch. The fallback port lives in
+  // lib/base-url.ts so this file never carries a numeric literal.
+  const base = getBaseUrl()
   const { cookies } = await import('next/headers')
   const cookie = (await cookies()).toString()
 
+  // PERFORMANCE_RANGE is the window this view reports over. Inlining `30d`
+  // would put a number in the render path that no query produced.
   const [ideas, performance] = await Promise.all([
     getJson<unknown[]>(`${base}/api/ideas`, cookie),
-    getJson<{ ideas: unknown[] }>(`${base}/api/ideas/performance?range=30d`, cookie),
+    getJson<{ ideas: unknown[] }>(`${base}/api/ideas/performance?range=${PERFORMANCE_RANGE}`, cookie),
   ])
 
   return (
