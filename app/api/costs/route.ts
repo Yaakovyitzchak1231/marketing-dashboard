@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     .limit(500)
   const { data, error } = await query
   if (error) {
+    console.error(`costs: query failed (${error.code}): ${error.message}`)
     return NextResponse.json({ error: 'Failed to fetch costs' }, { status: 500 })
   }
   const rows = ((data ?? []) as Record<string, unknown>[]).map(row => ({

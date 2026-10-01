@@ -22,7 +22,7 @@ type InboxRow = {
   domain: string | null
   provider: string | null
   health_status: string | null
-  warmup_enabled: boolean | null
+  warmup_status: string | null
   warmup_score: number | null
   unhealthy: boolean
 }
@@ -169,7 +169,11 @@ export default async function InfrastructurePage() {
                         </td>
                         <td className="px-4 py-2 text-ink-muted">{i.health_status ?? '—'}</td>
                         <td className="px-4 py-2 text-ink-muted">
-                          {i.warmup_enabled === null ? '—' : i.warmup_enabled ? 'on' : 'off'}
+                          {/* The API sends warmup_status, not a boolean. Reading
+                              a field that never arrives made `undefined`
+                              render as "off", which asserts warmup is off when
+                              no collector has measured it. */}
+                          {i.warmup_status ?? '—'}
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
                           {i.warmup_score ?? '—'}

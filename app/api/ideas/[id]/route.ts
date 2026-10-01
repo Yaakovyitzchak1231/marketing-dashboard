@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
 
-const UPDATABLE = ['name', 'description', 'channel_id', 'status'] as const
+// The writable columns are the ones ideas actually has: title, hypothesis,
+// status. There is no name / description / channel_id column, so accepting
+// them would make PATCH answer 200 while silently discarding the edit.
+const UPDATABLE = ['title', 'hypothesis', 'status'] as const
 
 export async function PATCH(
   request: NextRequest,

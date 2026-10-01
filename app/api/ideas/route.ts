@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     .select('id, title, hypothesis, status, created_at, updated_at')
     .order('created_at', { ascending: false })
   if (error) {
+    console.error(`ideas: query failed (${error.code}): ${error.message}`)
     return NextResponse.json({ error: 'Failed to fetch ideas' }, { status: 500 })
   }
   const rows = ((data ?? []) as Record<string, unknown>[]).map(idea => ({

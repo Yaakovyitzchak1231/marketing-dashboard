@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
 
-const UPDATABLE = ['amount_usd', 'category', 'idea_id', 'campaign_id', 'spent_at', 'notes'] as const
+// costs stores cost_date (not spent_at) and links to what the spend served via
+// the free-text entity_ref; there is no idea_id or campaign_id column. Listing
+// them here would let PATCH answer 200 while writing nothing.
+const UPDATABLE = ['amount_usd', 'category', 'entity_ref', 'cost_date', 'notes'] as const
 
 export async function PATCH(
   request: NextRequest,
