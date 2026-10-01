@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { getRequestClient } from '@/lib/request-client'
 
-
+// Collectors stamp every run in collection_runs. `ran_at` is the only place
+// the real collection time exists: the accounts rollup has no generated_at
+// column and its metric_date is the day the numbers describe, not the moment
+// they were fetched. Returns null when no run has ever been recorded, which
+// the UI renders as "Collection time unknown" rather than a guess.
+async function lastCollectionRanAt(supabase: SupabaseClient): Promise<string | null> {
+  const { data } = await supabase
+    .from('collection_runs')
+    .select('ran_at')
+    .order('ran_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  return data?.ran_at ?? null
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await getRequestClient(request)
@@ -87,9 +101,12 @@ export async function GET(request: NextRequest) {
       open_rate: null,
       unsubscribe: null,
       range,
-      // Straight from the row. `accountData.metric_date` is NOT a substitute:
-      // it is the day the metrics describe, not when they were gathered.
-      generated_at: accountData.generated_at ?? null
+      // When this snapshot was actually collected. The accounts table has no
+      // generated_at column — verified against the live schema — so the
+      // timestamp comes from the collector run that wrote the row, not from
+      // the row's metric_date (the day the metrics describe) and never from
+      // new Date() (which would claim freshness nobody measured).
+      generated_at: await lastCollectionRanAt(supabase)
     })
   } catch (error) {
     console.error('Overview API error:', error)

@@ -8,8 +8,12 @@ const mockSupabaseApi = {
   }
 }
 
-vi.mock('@/lib/supabase-server', () => ({
-  createServerSupabaseClient: vi.fn(() => mockSupabaseApi)
+// The route builds its client through `getRequestClient`, not from a
+// module-level `lib/supabase-server` singleton. Mocking the old seam let the
+// real helper run, which calls `cookies()` with no request scope in a unit
+// test and threw `missing request store` before signOut was ever reached.
+vi.mock('@/lib/request-client', () => ({
+  getRequestClient: vi.fn(async () => mockSupabaseApi)
 }))
 
 import { POST as logoutPOST } from '@/app/api/auth/logout/route'
