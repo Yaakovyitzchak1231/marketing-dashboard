@@ -66,8 +66,19 @@ export type CampaignList = {
    * The full count the source knows about, when it reports one. Present only so
    * a truncated list can be labelled as truncated rather than passed off as
    * the whole portfolio.
+   *
+   * Null means the source did not report a count it is willing to stand behind
+   * -- NOT zero, and not `campaigns.length`. See lib/campaign-total.ts for how
+   * the unit of this number is established, because a count that silently
+   * described joined metric rows instead of campaigns would be a wrong number
+   * on screen rather than an absent one.
    */
   total?: number | null
+  /**
+   * The row cap the source applied. Travels with the rows so a truncated list
+   * can still be disclosed when no trustworthy count exists.
+   */
+  row_limit?: number | null
   range: string
   sort: string
   order: string

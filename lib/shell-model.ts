@@ -33,6 +33,12 @@ export type ShellModel = {
    * Null means "either the list is complete or the source did not say".
    */
   campaignTotal: number | null
+  /**
+   * The row cap the source applied to the campaign list, or null when it did
+   * not report one. Null here means the table has no completeness signal at
+   * all, which is why it is carried rather than defaulted to a constant.
+   */
+  campaignRowLimit: number | null
   senderHealth: SenderHealth
   trend: TrendPoint[]
   /** The chart could not be loaded. Distinct from "no history yet". */
@@ -156,6 +162,14 @@ export function buildShellModel(input: {
       ? (campaigns as CampaignList).total!
       : null
 
+  // The cap travels through even when the count does not, because it is the
+  // only completeness signal left when no trustworthy count came back. Never a
+  // default: an absent row_limit means the source did not say, and the table
+  // then has nothing to compare the loaded row count against.
+  const campaignRowLimit = isUnavailable(campaigns?.row_limit)
+    ? null
+    : (campaigns as CampaignList).row_limit!
+
   return {
     kpis: o
       ? buildKpis(o)
@@ -171,6 +185,7 @@ export function buildShellModel(input: {
         ],
     campaigns: rows,
     campaignTotal,
+    campaignRowLimit,
     senderHealth,
     trend: toTrendPoints(trend),
     trendError: trendFailed,

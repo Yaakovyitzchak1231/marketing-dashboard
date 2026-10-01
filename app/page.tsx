@@ -108,7 +108,11 @@ export default async function DashboardPage() {
           <TrendChartArea series={model.trend} label="Emails sent" />
         )}
 
-        <CampaignTable rows={model.campaigns} total={model.campaignTotal} />
+        <CampaignTable
+          rows={model.campaigns}
+          total={model.campaignTotal}
+          rowLimit={model.campaignRowLimit}
+        />
 
         <nav
           aria-label="Analysis"

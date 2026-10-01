@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestClient } from '@/lib/request-client'
-
-// A cap on how many rows one response carries -- NOT a reporting window. The
-// visible rows are the newest `CAMPAIGN_ROW_LIMIT` campaigns in range; nothing
-// about the portfolio is scoped away by it. The only thing that discloses when
-// this cap actually truncated the list is the `total` we ask for alongside the
-// rows, which PostgREST computes before `limit` is applied. Without that count
-// a short list is indistinguishable from a complete one, which is exactly the
-// silent-truncation bug this dashboard exists to fix.
-const CAMPAIGN_ROW_LIMIT = 100
+import { CAMPAIGN_ROW_LIMIT, verifyCampaignTotal } from '@/lib/campaign-total'
 
 export async function GET(request: NextRequest) {
   const supabase = await getRequestClient(request)
@@ -29,13 +21,16 @@ export async function GET(request: NextRequest) {
   const cutoffStr = cutoffDate.toISOString().split('T')[0]
   
   try {
-    // Get campaigns with their latest metrics
-    // `count: 'exact'` is asked for on THIS query, not a second one. PostgREST
-    // returns the count of rows matching the filter before `limit` is applied,
-    // so it describes the same population the rows were drawn from. A separate
-    // count query could disagree with this filter and the response would then
-    // contradict itself.
-    const { data: campaigns, error, count } = await supabase
+    // Three queries, and they are not interchangeable.
+    //
+    // The rows are the payload: if this fails, the request fails. The two
+    // counts are disclosure only: if either fails we report `total: null` and
+    // the cap discloses truncation instead. Failing the whole response because
+    // a disclosure count was unavailable would be the wrong trade -- it would
+    // trade a renderable page for a sentence about a number.
+    //
+    // They run together because none of them depends on another's result.
+    const rowsQuery = supabase
       .from('campaigns')
       .select(`
         id,
@@ -54,15 +49,44 @@ export async function GET(request: NextRequest) {
           open_rate,
           unsubscribe
         )
-      `, { count: 'exact' })
+      `)
       .gte('daily_metrics.metric_date', cutoffStr)
       // Ordering by the qualified path "daily_metrics.metric_date" is invalid
       // PostgREST syntax and returned PGRST100. The embedded column must be
       // named bare, with referencedTable pointing at the join.
       .order('metric_date', { ascending: false, referencedTable: 'daily_metrics' })
       .limit(CAMPAIGN_ROW_LIMIT)
-    
-    if (error) throw error
+
+    // `head: true` asks for the count and no body. That is deliberate: with a
+    // body, the only number available could be confused for a row count, and
+    // the whole question here is which thing was counted. With no body there is
+    // nothing to confuse it with.
+    //
+    // `!inner` is what makes the windowed count a count of campaigns. It
+    // promotes the embedded filter to a filter on the top-level resource, so
+    // `Content-Range` describes campaigns. Without `!inner` PostgREST would
+    // filter the embedded array rather than the parents, and the count would
+    // describe the whole portfolio regardless of the window.
+    const windowedCountQuery = supabase
+      .from('campaigns')
+      .select('id, daily_metrics!inner (metric_date)', { count: 'exact', head: true })
+      .gte('daily_metrics.metric_date', cutoffStr)
+
+    // No embed and no filter, so its unit is campaigns by construction. Used
+    // only to falsify `windowedCount`; see lib/campaign-total.ts.
+    const portfolioCountQuery = supabase
+      .from('campaigns')
+      .select('id', { count: 'exact', head: true })
+
+    const [rowsResult, windowedResult, portfolioResult] = await Promise.all([
+      rowsQuery,
+      windowedCountQuery,
+      portfolioCountQuery,
+    ])
+
+    if (rowsResult.error) throw rowsResult.error
+
+    const campaigns = rowsResult.data || []
     
     // Process each campaign to get latest metrics and compute rates
     const processed = (campaigns || []).map(campaign => {
@@ -115,29 +139,31 @@ export async function GET(request: NextRequest) {
       return order === 'asc' ? cmp : -cmp
     })
     
-    // The count the driver reported, or null when it reported no real number.
-    // null means "the source did not say" -- it is deliberately NOT
-    // `processed.length`. Falling back to the row count would set
-    // total === rows.length, so the "Showing N of M campaigns" disclosure would
-    // never fire on exactly the truncated lists it exists to announce. Better to
-    // disclose nothing than to claim nothing was cut.
+    // The campaign count, or null when its unit is not established. See
+    // lib/campaign-total.ts for why the two counts are cross-checked and what
+    // each rejection means.
     //
-    // `?? null` alone is not enough: supabase-js derives `count` with
-    // `parseInt(contentRange[1])`, so a `Content-Range: */*` header yields NaN,
-    // which is not nullish. Today `NextResponse.json` happens to serialize NaN as
-    // null -- and a truthfulness guarantee that rests on the serializer is
-    // backwards. `Number.isFinite` is the same guard lib/format.ts applies to
-    // every value it prints, for the same reason. It is not a falsy check either:
-    // a count of 0 is a measurement (no campaigns match the window) and must
-    // survive.
-    const total = count !== null && Number.isFinite(count) ? count : null
+    // It is never `processed.length`. That fallback would set total ===
+    // rows.length, so the "Showing N of M campaigns" disclosure would never
+    // fire on exactly the truncated lists it exists to announce. When this is
+    // null the row limit below discloses truncation instead, so the list can
+    // no longer go quietly short.
+    const total = verifyCampaignTotal(
+      windowedResult.count ?? null,
+      portfolioResult.count ?? null,
+      processed.length,
+    )
 
     return NextResponse.json({
       campaigns: processed,
       total,
+      // Published so the client can tell when the cap bound without needing a
+      // count at all. That is the one completeness signal available when every
+      // count query fails, so it has to travel with the rows.
+      row_limit: CAMPAIGN_ROW_LIMIT,
       range,
       sort,
-      order
+      order,
     })
   } catch (error) {
     console.error('Campaigns API error:', error)

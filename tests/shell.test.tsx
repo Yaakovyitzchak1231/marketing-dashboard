@@ -405,6 +405,69 @@ describe('CampaignTable controls', () => {
     expect(screen.queryByTestId('campaign-table-controls')).toBeNull()
     expect(screen.getByTestId('campaign-table')).not.toHaveTextContent('Showing 0 of')
   })
+
+  it('discloses truncation from the row cap alone when no count came back', () => {
+    // The backstop. `total` is null whenever the source could not produce a
+    // count we are willing to stand behind -- see verifyCampaignTotal -- and
+    // before this existed the table treated that as "nothing was truncated".
+    // That is how a capped list went quietly short in the first place.
+    //
+    // The limit is 2 rather than 100 purely so the fixture stays small. The
+    // rule under test is `loaded >= rowLimit`, which is the same rule at any
+    // value: hitting the cap is the evidence.
+    const capped: CampaignRow[] = [
+      { ...base, id: 'a', name: 'Alpha' },
+      { ...base, id: 'b', name: 'Bravo' },
+    ]
+
+    render(<CampaignTable rows={capped} total={null} rowLimit={2} />)
+    const table = screen.getByTestId('campaign-table')
+    expect(table).toHaveTextContent('Showing the first 2 campaigns. There may be more.')
+    // No count was published, so the notice must not name one.
+    expect(table).not.toHaveTextContent(/Showing \d+ of \d+ campaigns/)
+  })
+
+  it('claims nothing about completeness when the cap did not bind', () => {
+    // Fewer rows than the cap: the query returned everything it was asked for,
+    // so there is no truncation to disclose -- and inventing one would be as
+    // wrong as hiding one.
+    const rows: CampaignRow[] = [
+      { ...base, id: 'a', name: 'Alpha' },
+      { ...base, id: 'b', name: 'Bravo' },
+    ]
+
+    render(<CampaignTable rows={rows} total={null} rowLimit={100} />)
+    const table = screen.getByTestId('campaign-table')
+    expect(table).not.toHaveTextContent(/Showing \d+ of \d+ campaigns/)
+    expect(table).not.toHaveTextContent('There may be more')
+    expect(table).toHaveTextContent('2 shown')
+  })
+
+  it('prefers the exact count over the cap when both are available', () => {
+    // A real count names both numbers, which is strictly more useful than
+    // "there may be more". The cap must not paper over a number we can state.
+    const rows: CampaignRow[] = [
+      { ...base, id: 'a', name: 'Alpha' },
+      { ...base, id: 'b', name: 'Bravo' },
+    ]
+
+    render(<CampaignTable rows={rows} total={148} rowLimit={2} />)
+    const table = screen.getByTestId('campaign-table')
+    expect(table).toHaveTextContent('Showing 2 of 148 campaigns')
+    expect(table).not.toHaveTextContent('There may be more')
+  })
+
+  it('makes no completeness claim when neither a count nor a cap was reported', () => {
+    // Both signals absent. There is genuinely nothing to say, and the honest
+    // rendering is silence rather than a guess in either direction.
+    const rows: CampaignRow[] = [{ ...base, id: 'a', name: 'Alpha' }]
+
+    render(<CampaignTable rows={rows} />)
+    const table = screen.getByTestId('campaign-table')
+    expect(table).not.toHaveTextContent(/Showing \d+ of \d+ campaigns/)
+    expect(table).not.toHaveTextContent('There may be more')
+    expect(table).toHaveTextContent('1 shown')
+  })
 })
 
 describe('SenderHealthPanel', () => {
