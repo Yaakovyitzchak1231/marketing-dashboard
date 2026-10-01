@@ -1,19 +1,15 @@
 import { AngleManager } from '@/components/angle-manager'
+import { getBaseUrl } from '@/lib/base-url'
+import { PERFORMANCE_RANGE } from '@/lib/range'
 
 import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
-async function getBaseUrl() {
-  const port = process.env.PORT ?? '3000'
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${port}`)
-  )
-}
-
 export default async function AnglesPage() {
-  const base = await getBaseUrl()
+  // Origin for the server-side self-fetch. The fallback port lives in
+  // lib/base-url.ts so this file never carries a numeric literal.
+  const base = getBaseUrl()
   const { cookies } = await import('next/headers')
   const cookie = (await cookies()).toString()
 
@@ -27,10 +23,13 @@ export default async function AnglesPage() {
     }
   }
 
+  // PERFORMANCE_RANGE is the window these views report over. Inlining `30d`
+  // would put a number in the render path that no query produced, and the
+  // title could drift from the fetch.
   const [angles, performance, campaigns] = await Promise.all([
     fetchJson(`${base}/api/angles`),
-    fetchJson(`${base}/api/angles/performance?range=30d`),
-    fetchJson(`${base}/api/campaigns?range=30d`),
+    fetchJson(`${base}/api/angles/performance?range=${PERFORMANCE_RANGE}`),
+    fetchJson(`${base}/api/campaigns?range=${PERFORMANCE_RANGE}`),
   ])
 
   return (

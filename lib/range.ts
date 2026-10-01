@@ -24,6 +24,25 @@ export const DEFAULT_RANGE: Range = '7d'
 export const DEFAULT_RANGE_DAYS = RANGE_DAYS
 
 /**
+ * The window the per-idea and per-angle performance views report over.
+ *
+ * Defined here, next to the range the shell uses, because these are two
+ * different questions and they must not be conflated: DEFAULT_RANGE answers
+ * "how is the account doing", PERFORMANCE_RANGE answers "which idea is
+ * working", and the second needs enough history to rank things at all. A
+ * one-week window cannot separate two ideas.
+ *
+ * The pages that show these views must import this rather than writing
+ * `range=30d` inline: a literal in the render path is a number the database
+ * never produced, which is precisely what tests/no-fabrication.test.ts fails
+ * on. It is also how the query and the words under the title drift apart.
+ */
+export const PERFORMANCE_RANGE: Range = '30d'
+
+/** Human label for the performance window, e.g. "last 30 days". */
+export const PERFORMANCE_RANGE_LABEL = `last ${PERFORMANCE_RANGE.slice(0, -1)} days`
+
+/**
  * A short human label for the window, e.g. "last 7 days".
  *
  * @build-copy owns the phrasing; the number comes from here so it cannot drift

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useApi } from '@/components/use-api'
+import { PERFORMANCE_RANGE_LABEL } from '@/lib/range'
+import { CURRENCY_PRECISION } from '@/lib/format'
 
 type Idea = {
   id: string
@@ -25,7 +27,12 @@ type PerfRow = {
   cost_per_customer_usd: number | null
 }
 
-const fmt = (v: number | null, digits = 2) =>
+/**
+ * Display precision for the locale format below. Not a metric -- it only
+ * decides how many digits of a stored number are shown. Lives in lib/format.ts
+ * so the render path carries no bare literal.
+ */
+const fmt = (v: number | null, digits = CURRENCY_PRECISION) =>
   v === null || v === undefined ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: digits })
 
 export function IdeaManager({
@@ -117,7 +124,7 @@ export function IdeaManager({
 
       <section>
         <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
-          Performance — last 30 days
+          Performance — {PERFORMANCE_RANGE_LABEL}
         </h2>
         {perf.length === 0 ? (
           <p className="text-[13px] text-ink-faint">

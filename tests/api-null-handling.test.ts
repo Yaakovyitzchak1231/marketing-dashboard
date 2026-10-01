@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-// Mock the API supabase client using vi.hoisted to avoid TDZ
+/**
+ * The API routes build their Supabase client through `getRequestClient`, not
+ * from a module-level singleton. These tests therefore mock THAT function --
+ * mocking `@/lib/supabase` no longer intercepts anything the routes touch,
+ * which is why this file previously read `undefined` off every response
+ * instead of the payload the route actually built.
+ */
 const mockSupabaseApi = vi.hoisted(() => ({
   from: vi.fn().mockReturnThis(),
   select: vi.fn().mockReturnThis(),
@@ -14,8 +20,8 @@ const mockSupabaseApi = vi.hoisted(() => ({
   inner: vi.fn().mockReturnThis()
 }))
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: mockSupabaseApi
+vi.mock('@/lib/request-client', () => ({
+  getRequestClient: vi.fn(async () => mockSupabaseApi)
 }))
 
 import { GET as overviewGET } from '@/app/api/overview/route'

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useApi } from '@/components/use-api'
+import { SUM_START, MIN_AMOUNT_USD, CURRENCY_PRECISION } from '@/lib/format'
+import { COPY } from '@/lib/copy'
 
 type Cost = {
   id: string
@@ -32,7 +34,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
   const create = async (e: React.FormEvent) => {
     e.preventDefault()
     const value = Number(amount)
-    if (!Number.isFinite(value) || value < 0) {
+    if (!Number.isFinite(value) || value < MIN_AMOUNT_USD) {
       setError('Enter a non-negative amount.')
       return
     }
@@ -69,7 +71,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
     }
   }
 
-  const total = costs.reduce((t, c) => t + Number(c.amount_usd), 0)
+  const total = costs.reduce((t, c) => t + Number(c.amount_usd), SUM_START)
 
   return (
     <div className="space-y-8">
@@ -86,7 +88,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
               value={amount}
               onChange={e => setAmount(e.target.value)}
               inputMode="decimal"
-              placeholder="25.00"
+              placeholder={COPY.costManager.amountPlaceholder}
               className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] tabular-nums text-ink outline-none focus:border-ink-muted"
             />
           </label>
@@ -140,7 +142,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
             History
           </h2>
           <p className="text-[13px] tabular-nums text-ink">
-            Total <span className="font-medium">${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            Total <span className="font-medium">${total.toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })}</span>
           </p>
         </div>
         {costs.length === 0 ? (
@@ -166,7 +168,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
                     <td className="px-4 py-2 text-ink">{c.ideas?.name ?? '—'}</td>
                     <td className="px-4 py-2 text-ink-faint">{c.notes ?? '—'}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-ink">
-                      ${Number(c.amount_usd).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      ${Number(c.amount_usd).toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <button

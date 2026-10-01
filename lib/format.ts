@@ -60,15 +60,46 @@ export function formatCurrency(value: number | null | undefined): string {
 }
 
 /**
+ * Money formatting for the cost log.
+ *
+ * These three numbers live here, in a lib module, rather than inline in
+ * `components/cost-manager.tsx`. An earlier fix for the fabrication test left
+ * them in the component as `Math.min(0)` and `Math.max(2)` -- obfuscated
+ * literals chosen to slip past the test's `Math.max/min` strip. That is worse
+ * than the literal it replaced: it is now a number nobody can read, in a file
+ * whose entire purpose is that every number be traceable. Same reason the
+ * fabrication test itself refuses an allowlist of "chart numbers": the first
+ * exemption is the loophole.
+ */
+
+/**
+ * The additive identity for summing stored amounts. Zero is a seed, not a
+ * measurement -- no spend yet is not a measured total of nothing.
+ */
+export const SUM_START = 0
+
+/**
+ * Amounts are rejected below this. A negative cost is a data-entry error, and
+ * the floor is a validation bound rather than a figure the database reported.
+ */
+export const MIN_AMOUNT_USD = 0
+
+/**
+ * Display precision for a USD amount. It rounds how a stored number is shown;
+ * it is not itself a figure.
+ */
+export const CURRENCY_PRECISION = 2
+
+/**
  * The highest value a rate can take and still be a rate. Anything above this
  * is a denominator error -- in this project, the autoresponder bug that
  * produced 333% and 450%.
-  *
-  * Named and exported rather than inlined at each call site so a reviewer can
-  * find it and argue with it, and so the "no numbers in the render path" test
-  * has nothing to flag.
-  */
- export const MAX_PLAUSIBLE_RATE = 1
+ *
+ * Named and exported rather than inlined at each call site so a reviewer can
+ * find it and argue with it, and so the "no numbers in the render path" test
+ * has nothing to flag.
+ */
+export const MAX_PLAUSIBLE_RATE = 1
 
  /**
   * True when a rate is a rate the source could actually have measured.
