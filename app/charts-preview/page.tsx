@@ -1,6 +1,6 @@
 import { ChartsBlock } from '@/components/charts/ChartsBlock'
-import dashboard from '../../collector/data/dashboard.json'
-import history from '../../collector/data/history.json'
+import dashboard from '../../collector/fixtures/dashboard.json'
+import history from '../../collector/fixtures/history.json'
 import { PAGE_GEOMETRY } from '@/lib/chart'
 
 /**
@@ -42,7 +42,7 @@ export default function ChartsPreview() {
     <main style={{ maxWidth, margin: '0 auto', padding, background, minHeight }}>
       <h1 style={{ fontSize: titleFontSize, fontWeight: titleFontWeight, margin: titleMargin }}>Charts</h1>
       <p style={{ fontSize: subtitleFontSize, color: subtitleColor, margin: subtitleMargin }}>
-        Rendered from collector/data/dashboard.json and history.json
+        Rendered from collector/fixtures/dashboard.json and history.json
       </p>
       <ChartsBlock
         trendRows={rows}
