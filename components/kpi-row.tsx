@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { formatCount, formatRate, formatCurrency, rateIsPlausible, isUnavailable } from '@/lib/format'
 import { Card, Unavailable, Figure } from '@/components/primitives'
 import { COPY } from '@/lib/copy'
@@ -90,17 +93,53 @@ export function KpiCell({ kpi }: { kpi: Kpi }) {
  * vertical hairlines.
  */
 export function KpiRow({ kpis }: { kpis: Kpi[] }) {
+  const [visibleKeys, setVisibleKeys] = useState(() => new Set(kpis.map((kpi) => kpi.key)))
+  const visibleKpis = kpis.filter((kpi) => visibleKeys.has(kpi.key))
+  const toggleMetric = (key: string) => {
+    setVisibleKeys((current) => {
+      const next = new Set(current)
+      if (next.has(key)) {
+        if (!next.size) return current
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
   return (
     <Card className="overflow-hidden">
+      <div className="flex flex-col gap-2 border-b border-line-soft bg-line-soft/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-ink-muted">Metrics</span>
+          <p className="mt-0.5 text-[11px] text-ink-faint">Choose the signals shown below.</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter metrics">
+          {kpis.map((kpi) => {
+            const active = visibleKeys.has(kpi.key)
+            return (
+              <button
+                key={kpi.key}
+                type="button"
+                aria-label={`Toggle ${kpi.label}`}
+                aria-pressed={active}
+                title={kpi.label}
+                onClick={() => toggleMetric(kpi.key)}
+                className={`rounded border px-2 py-1 text-[11px] ${active ? 'border-ink-muted text-ink' : 'border-line text-ink-faint'}`}
+              >
+                <span aria-hidden="true">{active ? 'On' : 'Off'}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
       <div
         data-testid="kpi-row"
         className="grid grid-cols-2 divide-line xs:divide-x sm:grid-cols-3 sm:divide-y-0 lg:flex lg:flex-row"
       >
-        {kpis.map((kpi) => (
-          <div
-            key={kpi.key}
-            className="border-b border-line-soft last:border-b-0 sm:border-b-0"
-          >
+        {visibleKpis.map((kpi) => (
+          <div key={kpi.key} className="border-b border-line-soft last:border-b-0 sm:border-b-0">
             <KpiCell kpi={kpi} />
           </div>
         ))}

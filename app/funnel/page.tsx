@@ -27,18 +27,18 @@ function FunnelTable({ rows, label }: { rows: FunnelRow[]; label: string }) {
     return <p className="text-[13px] text-ink-faint">{COPY.funnel.noRows(label)}</p>
   }
   return (
-    <div className="overflow-x-auto rounded-card border border-line bg-surface">
-      <table className="w-full text-[13px]">
+    <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
+      <table className="w-full min-w-[760px] text-[13px]">
         <thead>
           <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
             <th className="px-4 py-2 font-medium">{label}</th>
             <th className="px-4 py-2 text-right font-medium">Contacted</th>
             <th className="px-4 py-2 text-right font-medium">Replied</th>
-            <th className="px-4 py-2 text-right font-medium">Positive</th>
+            <th className="px-4 py-2 text-right font-medium">Opportunities</th>
             <th className="px-4 py-2 text-right font-medium">Meetings</th>
             <th className="px-4 py-2 text-right font-medium">Customers</th>
             <th className="px-4 py-2 text-right font-medium">Reply %</th>
-            <th className="px-4 py-2 text-right font-medium">Positive %</th>
+            <th className="px-4 py-2 text-right font-medium">Opportunity %</th>
           </tr>
         </thead>
         <tbody>
@@ -86,9 +86,9 @@ export default async function FunnelPage() {
       <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h1 className="text-[15px] font-medium tracking-[-0.01em] text-ink">{COPY.funnel.title}</h1>
-          <p className="mt-0.5 text-[11px] text-ink-faint">
-            Contacted → replied → positive → meeting → customer. {PERFORMANCE_RANGE_LABEL}.
-          </p>
+            <p className="mt-0.5 text-[11px] text-ink-faint">
+              Contacted → human replies → opportunities. Meetings and customers are not reported by the source. {PERFORMANCE_RANGE_LABEL}.
+            </p>
         </div>
         <Link href="/" className="text-[12px] text-ink-muted underline-offset-4 hover:underline">
           Back to dashboard
