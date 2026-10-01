@@ -99,7 +99,7 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
     setVisibleKeys((current) => {
       const next = new Set(current)
       if (next.has(key)) {
-        if (next.size === 1) return next
+        if (!next.size) return current
         next.delete(key)
       } else {
         next.add(key)
@@ -122,11 +122,13 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
               <button
                 key={kpi.key}
                 type="button"
+                aria-label={`Toggle ${kpi.label}`}
                 aria-pressed={active}
+                title={kpi.label}
                 onClick={() => toggleMetric(kpi.key)}
                 className={`rounded border px-2 py-1 text-[11px] ${active ? 'border-ink-muted text-ink' : 'border-line text-ink-faint'}`}
               >
-                {kpi.label}
+                <span aria-hidden="true">{active ? 'On' : 'Off'}</span>
               </button>
             )
           })}

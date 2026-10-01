@@ -49,13 +49,13 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
   }))
 
   const path = coords
-    .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
+    .map((c, i) => `${i === CHART_GEOMETRY.zero ? 'M' : 'L'}${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
     .join(' ')
-  const firstValue = values[0]
+  const firstValue = values[CHART_GEOMETRY.zero]
   const lastValue = values[values.length - 1]
   const change = lastValue - firstValue
   const range = max - min
-  const gridValues = [max, min + range / 2, min]
+  const gridValues = [max, min + range / (CHART_GEOMETRY.gridLineCount - 1), min]
   const gridY = gridValues.map((value) => scaleY(value, min, max))
 
   return (
@@ -69,7 +69,7 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
       preserveAspectRatio="none"
       className="h-32 w-full sm:h-40"
       role="img"
-      aria-label={`${points.length} days of data, from ${formatCount(firstValue)} to ${formatCount(lastValue)}, changing by ${change >= 0 ? '+' : ''}${formatCount(change)}`}
+      aria-label={`${points.length} days of data, from ${formatCount(firstValue)} to ${formatCount(lastValue)}, changing by ${change >= CHART_GEOMETRY.zero ? '+' : ''}${formatCount(change)}`}
     >
       {gridY.map((y, index) => (
         <line
@@ -79,9 +79,9 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
           x2={width - padX}
           y2={y}
           stroke="currentColor"
-          strokeWidth={index === gridY.length - 1 ? axisStrokeWidth : 0.75}
+          strokeWidth={index === gridY.length - CHART_GEOMETRY.zero - 1 ? axisStrokeWidth : CHART_GEOMETRY.gridStrokeWidth}
           className={index === gridY.length - 1 ? 'text-line' : 'text-line-soft'}
-          strokeDasharray={index === gridY.length - 1 ? undefined : '2 4'}
+          strokeDasharray={index === gridY.length - CHART_GEOMETRY.zero - 1 ? undefined : CHART_GEOMETRY.gridDash}
           vectorEffect="non-scaling-stroke"
         />
       ))}
@@ -116,9 +116,9 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
   const first = points[0]
   const last = points[points.length - 1]
   const values = points.flatMap((point) => point.value === null ? [] : [point.value])
-  const min = values.length > 0 ? Math.min(...values) : 0
-  const max = values.length > 0 ? Math.max(...values) : 0
-  const change = last?.value !== null && first?.value !== null && last && first ? last.value - first.value : 0
+  const min = values.length > 0 ? Math.min(...values) : CHART_GEOMETRY.zero
+  const max = values.length > 0 ? Math.max(...values) : CHART_GEOMETRY.zero
+  const change = last?.value !== null && first?.value !== null && last && first ? last.value - first.value : CHART_GEOMETRY.zero
 
   return (
     <Card testId="trend-chart" className="px-5 py-4">
@@ -127,7 +127,7 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
         {points.length > 1 ? (
           <span className="text-[11px] text-ink-faint">
             <Figure>{formatCount(last.value)}</Figure>{' '}
-            {change >= 0 ? '+' : ''}{formatCount(change)} vs first day
+            {change >= CHART_GEOMETRY.zero ? '+' : ''}{formatCount(change)} vs first day
           </span>
         ) : null}
         {/* A count of days is data about the data, not a metric. It is the one

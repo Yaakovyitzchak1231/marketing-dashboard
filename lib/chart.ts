@@ -41,6 +41,11 @@ export const CHART_GEOMETRY = {
   trendPointRadius: 2.5,
   /** SVG viewBox width at 100% container width. */
   viewBoxFullWidth: '100%',
+  /** Secondary gridline stroke and dash geometry. */
+  gridStrokeWidth: 0.75,
+  gridDash: '2 4',
+  gridLineCount: 3,
+  zero: 0,
 } as const
 
 /**
