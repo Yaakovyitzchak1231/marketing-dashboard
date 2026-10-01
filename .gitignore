@@ -13,3 +13,4 @@ __pycache__/
 *.tsbuildinfo
 supabase/.temp/
 .vercel
+collector/data/
