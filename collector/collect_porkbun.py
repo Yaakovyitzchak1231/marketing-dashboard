@@ -87,7 +87,6 @@ def main() -> int:
             rows.append({
                 "domain": name,
                 "registrar": "porkbun",
-                "status": d.get("status"),
                 "expires_at": d.get("expireDate"),
                 "auto_renew": str(d.get("autoRenew")).lower() in ("yes", "true", "1"),
                 "dns_checked_at": _now(),

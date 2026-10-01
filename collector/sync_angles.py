@@ -41,6 +41,7 @@ def main() -> int:
             latest[cid] = m
 
     rows: list[dict] = []
+    errors: list[dict] = []
     multi: list[str] = []
     for cid, angs in by_campaign.items():
         m = latest.get(cid)
