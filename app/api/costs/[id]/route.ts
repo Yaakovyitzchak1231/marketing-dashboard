@@ -56,9 +56,19 @@ export async function DELETE(
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
   const { id } = await params
-  const { error } = await supabase.from('costs').delete().eq('id', id)
+  // See the matching comment in ideas/[id]: no DELETE policy exists on costs,
+  // so RLS hides the row, the delete matches nothing, and `error` stays null.
+  // The row count is the only honest signal that the delete happened.
+  const { data, error } = await supabase.from('costs').delete().eq('id', id).select('id')
   if (error) {
+    console.error(`costs DELETE: query failed (${error.code}): ${error.message}`)
     return NextResponse.json({ error: 'Failed to delete cost' }, { status: 500 })
+  }
+  if (!data || data.length === 0) {
+    return NextResponse.json(
+      { error: 'Cost not found, or not deletable by this user' },
+      { status: 404 },
+    )
   }
   return NextResponse.json({ ok: true })
 }

@@ -63,6 +63,23 @@ DROP POLICY IF EXISTS ideas_write ON public.ideas;
 DROP POLICY IF EXISTS costs_write ON public.costs;
 DROP POLICY IF EXISTS angles_write ON public.angles;
 
+-- ---------------------------------------------------------------------------
+-- 3. Restore DELETE, which 004 itself removed.
+--    Narrowing the FOR ALL policies in step 2 to INSERT/UPDATE dropped DELETE
+--    along with the SELECT side effect. The dashboard has a DELETE route per
+--    entity (app/api/{ideas,costs,angles}/[id]/route.ts), so after step 2 a
+--    delete matched zero rows -- RLS hid the row, so Postgres raised no error --
+--    and the route answered {"ok":true} while removing nothing.
+--    Verified on the live database before this fix: SELECT_VISIBLE=1,
+--    UPDATE_ROWS=1, DELETE_ROWS=0 as the allowlisted authenticated user.
+-- ---------------------------------------------------------------------------
+CREATE POLICY ideas_delete ON ideas
+    FOR DELETE TO authenticated USING (auth.jwt() ->> 'email' = 'yaakovytroutai@gmail.com');
+CREATE POLICY costs_delete ON costs
+    FOR DELETE TO authenticated USING (auth.jwt() ->> 'email' = 'yaakovytroutai@gmail.com');
+CREATE POLICY angles_delete ON angles
+    FOR DELETE TO authenticated USING (auth.jwt() ->> 'email' = 'yaakovytroutai@gmail.com');
+
 -- Manual entry from the dashboard UI: the signed-in user may add and edit
 -- their own ideas, costs and angles. Reads stay governed by the
 -- email-scoped authenticated_read policy above.
