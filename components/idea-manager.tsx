@@ -191,6 +191,7 @@ export function IdeaManager({
               </div>
               <button
                 onClick={() => remove(idea.id)}
+                aria-label={`Delete idea: ${idea.name}`}
                 className="shrink-0 text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
               >
                 Delete

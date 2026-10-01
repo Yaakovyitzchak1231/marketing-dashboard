@@ -12,5 +12,6 @@ __pycache__/
 .worktrees/
 *.tsbuildinfo
 supabase/.temp/
+.hermes-rescue/
 .vercel
 collector/data/

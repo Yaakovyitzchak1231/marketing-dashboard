@@ -22,18 +22,18 @@ case "${1:-}" in
   push)
     shift
     REF="${1:-HEAD}"
+    BRANCH="${2:-}"
     # rewrite origin to the authenticated URL for this one command only
     git -c credential.helper= push "$AUTH" "$REF" 2>&1 | sed "s|${TOKEN}|***|g"
-    # Keep the local remote-tracking ref current. Pushing to a URL rather than
-    # to the named remote does NOT update refs/remotes/origin/*, so the branch
-    # looked absent from the remote on every later read. verify_commits.py
-    # flagged task/t11-collector-live as NOT PUSHED repeatedly even though it
-    # was on GitHub (monitor false positive, 2026-09-30).
-    BRANCH="$(git rev-parse --abbrev-ref "$REF" 2>/dev/null || true)"
-    SHA="$(git rev-parse "$REF" 2>/dev/null || true)"
-    if [ -n "$BRANCH" ] && [ "$BRANCH" != "HEAD" ] && [ -n "$SHA" ]; then
-        git update-ref "refs/remotes/origin/$BRANCH" "$SHA"
-        echo "tracking ref updated: origin/$BRANCH -> ${SHA:0:7}"
+    # Pushing to a URL does NOT update refs/remotes/origin/*. Without this the
+    # local tracking ref stays at the pre-push commit and the supervisor monitor
+    # reports a phantom "N commit(s) ahead of origin/<branch>" for work that is
+    # already on the remote. verify_commits.py documents git-push.sh as updating
+    # the tracking ref; that was true of nothing until now.
+    if [ -n "$BRANCH" ]; then
+      git -c credential.helper= fetch "$AUTH" \
+        "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>&1 \
+        | sed "s|${TOKEN}|***|g" || true
     fi
     ;;
   pull)

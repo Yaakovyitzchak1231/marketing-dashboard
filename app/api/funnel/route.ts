@@ -54,6 +54,9 @@ export async function GET(request: NextRequest) {
     .from('campaigns')
     .select('id, name, idea_id')
   if (campError) {
+    console.error(
+      `funnel: campaigns query failed (${campError.code}): ${campError.message}`,
+    )
     return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 })
   }
 
@@ -62,6 +65,9 @@ export async function GET(request: NextRequest) {
     .select('campaign_id, metric_date, emails_sent, replies_human, opportunities')
     .gte('metric_date', cutoffStr)
   if (metError) {
+    console.error(
+      `funnel: daily_metrics query failed (${metError.code}): ${metError.message}`,
+    )
     return NextResponse.json({ error: 'Failed to fetch metrics' }, { status: 500 })
   }
 
@@ -131,7 +137,6 @@ export async function GET(request: NextRequest) {
     if (c.idea_id) campaignIdea.set(c.id as string, c.idea_id as string)
   }
   const ideaNames = ideaTitles
-
   for (const [cid, rows] of byCampaign) {
     const iid = campaignIdea.get(cid)
     if (!iid) continue

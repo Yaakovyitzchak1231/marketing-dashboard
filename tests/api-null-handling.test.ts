@@ -17,6 +17,7 @@ const mockSupabaseApi = vi.hoisted(() => ({
   order: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   single: vi.fn(),
+  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
   inner: vi.fn().mockReturnThis()
 }))
 
