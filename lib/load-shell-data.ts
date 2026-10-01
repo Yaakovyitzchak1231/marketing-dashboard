@@ -124,10 +124,14 @@ export async function loadShellData(
   const trendFailed = campaignId !== null && trendResult === null
 
   const freshness: Freshness = suppliedFreshness ?? {
-    // No timestamp can be derived client-side, so with no supplied snapshot
-    // metadata the honest value is null -- the freshness line then renders a
-    // dash and says the collection failed, rather than guessing "now".
-    generatedAt: null,
+    // The overview route reports the `generated_at` of the snapshot it just
+    // read, so this is the real collection time when one exists. Previously
+    // this was hardcoded to null, which meant the freshness line could never
+    // show a date no matter how the collector behaved -- the whole line was
+    // decorative. A null here means the row carries no timestamp.
+    generatedAt: overview?.generated_at ?? null,
+    // A missing overview is a failed fetch. An overview of all-nulls is a
+    // source that reported nothing, which is a different fact.
     collectionFailed: overview === null,
   }
 

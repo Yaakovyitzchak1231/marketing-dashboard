@@ -1,3 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * These suites render React components, so they need a DOM. Declared here
+ * rather than globally so the pure-logic `.test.ts` suites keep running in
+ * `node`.
+ */
 import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { KpiRow, type Kpi } from '@/components/kpi-row'
@@ -209,5 +216,39 @@ describe('FreshnessIndicator', () => {
   it('renders a dash rather than a fabricated time when the timestamp is missing', () => {
     render(<FreshnessIndicator generatedAt={null} stale />)
     expect(screen.getByTestId('freshness-time')).toHaveTextContent('—')
+  })
+
+  /**
+   * Regression: the live dashboard showed "Collected —" with data-stale=false.
+   *
+   * With no timestamp and no reported failure, the old two-state prop fell back
+   * to the `Collected` label and asserted the snapshot was NOT stale, while the
+   * value beside it was an explicit "not reported by the source". The line told
+   * Jacob the data was current at the same moment it admitted it did not know
+   * when the data arrived. A missing timestamp is not evidence of freshness.
+   */
+  it('does not claim a collection time when the source reports none', () => {
+    render(<FreshnessIndicator generatedAt={null} stale={false} />)
+    const el = screen.getByTestId('freshness')
+    expect(el).toHaveAttribute('data-freshness', 'unknown')
+    expect(el).not.toHaveTextContent('Collected')
+    expect(el).toHaveTextContent('Collection time unknown')
+    expect(screen.getByTestId('freshness-time')).toHaveTextContent('—')
+  })
+
+  it('reports a real collection time as fresh', () => {
+    render(
+      <FreshnessIndicator generatedAt="2026-09-30T14:05:00Z" stale={false} />,
+    )
+    const el = screen.getByTestId('freshness')
+    expect(el).toHaveAttribute('data-freshness', 'fresh')
+    expect(screen.getByTestId('freshness-time')).not.toHaveTextContent('—')
+  })
+
+  it('keeps a reported failure distinct from an unknown time', () => {
+    render(<FreshnessIndicator generatedAt={null} stale />)
+    const el = screen.getByTestId('freshness')
+    expect(el).toHaveAttribute('data-freshness', 'failed')
+    expect(el).toHaveTextContent('Last collection failed')
   })
 })

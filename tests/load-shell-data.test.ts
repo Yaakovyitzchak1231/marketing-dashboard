@@ -25,6 +25,7 @@ const overview: Overview = {
   open_rate: null,
   unsubscribe: null,
   range: '7d',
+  generated_at: '2026-09-30T14:05:00Z',
 }
 
 const campaigns: CampaignList = {

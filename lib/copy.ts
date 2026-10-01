@@ -34,6 +34,16 @@ export const COPY = {
   trendEmpty: 'Collecting history',
   staleDataOk: (lastCollectedAt: string) => `Collected ${lastCollectedAt}`,
   staleDataFailed: 'Last collection failed',
+  /**
+   * The source reported no collection time and no failure either.
+   *
+   * A distinct state rather than a variant of "Collected": the old fallback
+   * printed "Collected —" and marked the row not-stale, which claims the data
+   * is current while admitting we do not know when it arrived. Saying so
+   * outright is both more honest and more useful -- it tells Jacob the fix is
+   * to look at the collector, not that the numbers are fine.
+   */
+  freshnessUnknown: 'Collection time unknown',
   loading: 'Loading',
   error: 'Something went wrong. Try again.',
   partialList: (visible: number, total: number) =>

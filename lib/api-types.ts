@@ -29,6 +29,16 @@ export type Overview = {
   /** NOT populated by the Instantly API. Permanently null. */
   unsubscribe: number | null
   range: string
+  /**
+   * When this snapshot was collected, from the `accounts` row itself.
+   *
+   * `metric_date` is the day the metrics describe; `generated_at` is when the
+   * collector wrote them. The freshness line needs the second one. It is null
+   * when the row predates the column or the source reported none -- never
+   * substituted with `metric_date` or `new Date()`, because either would make
+   * a collection look more recent than it is.
+   */
+  generated_at: string | null
 }
 
 /** `GET /api/campaigns` */

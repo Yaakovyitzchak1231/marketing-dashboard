@@ -51,7 +51,11 @@ export async function GET(request: NextRequest) {
         bounce_rate: null,
         open_rate: null,
         unsubscribe: null,
-        range
+        range,
+        // No row means no snapshot and no collection time. Reporting the
+        // lookup failure here would be a different claim -- "the last run
+        // failed" -- and this route cannot know that.
+        generated_at: null
       })
     }
     
@@ -82,7 +86,10 @@ export async function GET(request: NextRequest) {
       bounce_rate: bounceRate,
       open_rate: null,
       unsubscribe: null,
-      range
+      range,
+      // Straight from the row. `accountData.metric_date` is NOT a substitute:
+      // it is the day the metrics describe, not when they were gathered.
+      generated_at: accountData.generated_at ?? null
     })
   } catch (error) {
     console.error('Overview API error:', error)
