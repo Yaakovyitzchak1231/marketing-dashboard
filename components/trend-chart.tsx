@@ -51,26 +51,40 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
   const path = coords
     .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(2)} ${c.y.toFixed(2)}`)
     .join(' ')
+  const firstValue = values[0]
+  const lastValue = values[values.length - 1]
+  const change = lastValue - firstValue
+  const range = max - min
+  const gridValues = [max, min + range / 2, min]
+  const gridY = gridValues.map((value) => scaleY(value, min, max))
 
   return (
-    <svg
+    <div className="relative">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between text-[10px] text-ink-faint" aria-hidden="true">
+        <span>{formatCount(max)}</span>
+        <span>{formatCount(min)}</span>
+      </div>
+      <svg
       viewBox={chartViewBox()}
       preserveAspectRatio="none"
       className="h-32 w-full sm:h-40"
       role="img"
-      aria-label={`${points.length} days of data`}
+      aria-label={`${points.length} days of data, from ${formatCount(firstValue)} to ${formatCount(lastValue)}, changing by ${change >= 0 ? '+' : ''}${formatCount(change)}`}
     >
-      {/* The only gridline. An axis is enough; a full grid is dashboard chrome. */}
-      <line
-        x1={padX}
-        y1={height - padY}
-        x2={width - padX}
-        y2={height - padY}
-        stroke="currentColor"
-        strokeWidth={axisStrokeWidth}
-        className="text-line"
-        vectorEffect="non-scaling-stroke"
-      />
+      {gridY.map((y, index) => (
+        <line
+          key={index}
+          x1={padX}
+          y1={y}
+          x2={width - padX}
+          y2={y}
+          stroke="currentColor"
+          strokeWidth={index === gridY.length - 1 ? axisStrokeWidth : 0.75}
+          className={index === gridY.length - 1 ? 'text-line' : 'text-line-soft'}
+          strokeDasharray={index === gridY.length - 1 ? undefined : '2 4'}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
       {points.length > 1 ? (
         <path
           d={path}
@@ -103,8 +117,14 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
 
   return (
     <Card testId="trend-chart" className="px-5 py-4">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <SectionLabel>{label}</SectionLabel>
+        {points.length > 1 ? (
+          <span className="text-[11px] text-ink-faint">
+            <Figure>{formatCount(last.value)}</Figure>{' '}
+            {change >= 0 ? '+' : ''}{formatCount(change)} vs first day
+          </span>
+        ) : null}
         {/* A count of days is data about the data, not a metric. It is the one
             number here that explains the shape of the chart -- without it a
             nearly-flat line looks like a rendering bug. */}
@@ -147,12 +167,12 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
           <TrendSvg points={points} />
           <div className="mt-1 flex justify-between text-[11px] text-ink-faint">
             <span>{first.day}</span>
+            <span>{last.day}</span>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-ink-faint">
+            <span>Observed range: {formatCount(min)}–{formatCount(max)}</span>
             <span>
-              {isUnavailable(last.value) ? (
-                <Unavailable />
-              ) : (
-                <Figure>{formatCount(last.value)}</Figure>
-              )}
+              Latest: {isUnavailable(last.value) ? <Unavailable /> : <Figure>{formatCount(last.value)}</Figure>}
             </span>
           </div>
         </div>
