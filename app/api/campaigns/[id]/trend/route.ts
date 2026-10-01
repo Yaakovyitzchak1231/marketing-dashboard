@@ -62,7 +62,7 @@ export async function GET(
       `)
       .eq('id', id)
       .gte('daily_metrics.metric_date', cutoffStr)
-      .order('daily_metrics.metric_date', { ascending: true })
+      .order('metric_date', { ascending: true, referencedTable: 'daily_metrics' })
       .single()
     
     if (error) {
