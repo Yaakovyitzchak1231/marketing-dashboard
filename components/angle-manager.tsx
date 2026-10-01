@@ -192,6 +192,7 @@ export function AngleManager({
               </div>
               <button
                 onClick={() => remove(a.id)}
+                aria-label={`Delete angle: ${a.name}`}
                 className="shrink-0 text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
               >
                 Delete
