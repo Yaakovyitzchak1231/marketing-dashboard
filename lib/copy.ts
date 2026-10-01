@@ -132,6 +132,15 @@ export const COPY = {
      */
     sortDirectionAction: (current: 'asc' | 'desc') =>
       current === 'asc' ? 'Sort descending' : 'Sort ascending',
+    /**
+     * The list hit its row cap and NO trustworthy count came back, so there is
+     * no total to name. This is the weakest honest statement available: the cap
+     * proves rows may be missing, but not how many. It is deliberately not
+     * phrased as a count, because a count the source never reported is the
+     * thing this project refuses to invent -- see AGENTS.md.
+     */
+    cappedList: (limit: number) =>
+      `Showing the first ${formatCount(limit)} campaigns. There may be more.`,
     noMatch: 'No campaigns match these filters.',
     /**
      * The connective words of the header's shown-count -- "2 of 14 shown".

@@ -112,11 +112,32 @@ function compareNames(a: CampaignRow, b: CampaignRow, direction: SortDirection):
  * It describes the LOAD -- what the source holds against what we fetched -- and
  * it stays true while a filter narrows the view, which is why it is rendered
  * beside the shown-count rather than in place of it.
+ *
+ * Two distinct reasons to disclose, and they are not interchangeable:
+ *
+ *   - We have a count and it exceeds what we loaded. Then we can name both
+ *     numbers, and `COPY.partialList` is exact.
+ *   - We have no usable count, but the response carried as many rows as the cap
+ *     allows. Then the cap itself is the evidence that rows may be missing, and
+ *     the strongest honest statement is "there may be more" rather than a
+ *     number the source never reported.
+ *
+ * The second case is why this cannot simply test `total > loaded`: trusting the
+ * count alone is what left the list silently short before, because `total` was
+ * always null and nothing else was looking.
  */
-function truncationNotice(total: number | null | undefined, loaded: number): string | null {
-  if (isUnavailable(total)) return null
-  if (total <= loaded) return null
-  return COPY.partialList(loaded, total)
+function truncationNotice(
+  total: number | null | undefined,
+  loaded: number,
+  rowLimit: number | null | undefined,
+): string | null {
+  if (isUnavailable(total)) {
+    return isUnavailable(rowLimit) || loaded < rowLimit
+      ? null
+      : COPY.campaigns.cappedList(rowLimit as number)
+  }
+  if ((total as number) <= loaded) return null
+  return COPY.partialList(loaded, total as number)
 }
 
 /**
@@ -193,6 +214,7 @@ function hasUnreliableRate(rows: CampaignRow[]): boolean {
 export function CampaignTable({
   rows,
   total,
+  rowLimit,
 }: {
   rows: CampaignRow[]
   /**
@@ -201,6 +223,12 @@ export function CampaignTable({
    * the source did not report a total.
    */
   total?: number | null
+  /**
+   * How many rows the source was willing to send. Travels with the rows so the
+   * table can tell when the cap bound even when no count came back -- the one
+   * completeness signal that needs no number to be trusted.
+   */
+  rowLimit?: number | null
 }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
@@ -258,7 +286,7 @@ export function CampaignTable({
   // things, and the current route cannot produce it -- but a contradiction one
   // refactor away is still a contradiction, so the notice is suppressed exactly
   // as the shown-count is.
-  const notice = isEmpty ? null : truncationNotice(total, rows.length)
+  const notice = isEmpty ? null : truncationNotice(total, rows.length, rowLimit)
   const isFiltered = filteredRows.length !== rows.length
   /**
    * The two header claims are independent, so they are rendered as two
