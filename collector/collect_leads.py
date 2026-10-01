@@ -19,6 +19,8 @@ Design rules, in priority order:
 from __future__ import annotations
 
 import os
+import json
+import shlex
 import sys
 from datetime import datetime, timezone
 
@@ -39,6 +41,35 @@ def _err(stage: str, exc: Exception) -> dict:
     return {"stage": stage, "error": f"{type(exc).__name__}: {exc}", "at": _now()}
 
 
+def _read_remote_file(mcp, path: str) -> dict:
+    """Read a remote file offloaded by Composio, unwrapping to the inline data."""
+    out = mcp.call("COMPOSIO_REMOTE_BASH_TOOL", {
+        "command": (
+            "cat " + shlex.quote(path) + " 2>/dev/null | head -c 20000000"
+        )
+    })
+    stdout = (out.get("data") or {}).get("stdout")
+    if not stdout:
+        raise RuntimeError(
+            f"remote file {path} returned no stdout "
+            f"(error={str(out.get('error'))[:200]})"
+        )
+    try:
+        envelope = json.loads(stdout)
+    except ValueError as exc:
+        raise RuntimeError(f"remote file {path} is not valid JSON: {exc}") from exc
+    # Unwrap the same shapes an inline response can take.
+    node = envelope
+    for key in ("results", "response", "data"):
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+    if not isinstance(node, dict):
+        raise RuntimeError(f"remote file {path}: unexpected envelope shape")
+    if "data" in node and isinstance(node["data"], dict):
+        return node["data"]
+    return node
+
+
 def _mcp_call(mcp, slug: str, **args) -> dict:
     raw = mcp.call("COMPOSIO_MULTI_EXECUTE_TOOL",
                    {"tools": [{"tool_slug": slug,
@@ -52,14 +83,14 @@ def _mcp_call(mcp, slug: str, **args) -> dict:
     if not resp.get("successful", True):
         raise RuntimeError(f"{slug}: {str(resp)[:200]}")
     remote = (raw.get("data") or {}).get("remote_file_info") or {}
-    if remote.get("file_path"):
-        raise RuntimeError(f"{slug}: remote_file_info not supported here")
+    remote_path = remote.get("file_path")
+    if remote_path:
+        return _read_remote_file(mcp, remote_path)
     data = resp.get("data")
     if isinstance(data, dict):
         return data
     preview = resp.get("data_preview")
     if isinstance(preview, str):
-        import json
         try:
             return json.loads(preview)
         except ValueError:
