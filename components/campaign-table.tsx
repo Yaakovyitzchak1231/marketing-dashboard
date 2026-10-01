@@ -111,8 +111,9 @@ export function CampaignTable({
         return matchesQuery && matchesStatus
       })
       .sort((a, b) => {
-        const aValue = sort === 'name' ? a.name : a[sort] ?? -Infinity
-        const bValue = sort === 'name' ? b.name : b[sort] ?? -Infinity
+        const metricKey = sort === 'sent' ? 'emails_sent' : sort
+        const aValue = sort === 'name' ? a.name : a[metricKey] ?? -Infinity
+        const bValue = sort === 'name' ? b.name : b[metricKey] ?? -Infinity
         const comparison = typeof aValue === 'string'
           ? aValue.localeCompare(bValue as string)
           : (aValue as number) - (bValue as number)

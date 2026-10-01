@@ -106,7 +106,8 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
-    </svg>
+      </svg>
+      </div>
   )
 }
 
@@ -114,6 +115,10 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
   const points = plottable(series)
   const first = points[0]
   const last = points[points.length - 1]
+  const values = points.flatMap((point) => point.value === null ? [] : [point.value])
+  const min = values.length > 0 ? Math.min(...values) : 0
+  const max = values.length > 0 ? Math.max(...values) : 0
+  const change = last?.value !== null && first?.value !== null && last && first ? last.value - first.value : 0
 
   return (
     <Card testId="trend-chart" className="px-5 py-4">
