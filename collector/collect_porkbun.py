@@ -90,8 +90,7 @@ def main() -> int:
                 "status": d.get("status"),
                 "expires_at": d.get("expireDate"),
                 "auto_renew": str(d.get("autoRenew")).lower() in ("yes", "true", "1"),
-                "dns_healthy": healthy,
-                "dns_last_checked_at": _now(),
+                "dns_checked_at": _now(),
                 "updated_at": _now(),
                 **({"notes": note} if note else {}),
             })

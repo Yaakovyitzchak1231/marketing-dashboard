@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
-"""Angle metrics sync (v2).
+"""Angle metrics sync (v2)."""
 
-Populates `angle_daily_metrics` from `daily_metrics` via the campaign->angle
-mapping in the `angles` table.
-
-Attribution rule (honest, no guessing):
-  - A campaign with exactly ONE angle: that angle gets the campaign's full
-    daily metrics.
-  - A campaign with MULTIPLE angles: metrics cannot be split without
-    step-level data (which the Instantly API does not provide -- verified
-    2026-09-30). Nothing is written; the campaign is listed as
-    "needs manual split" in the run record.
-  - A campaign with NO angles: nothing to attribute.
-
-Angles are created by Yaakov in the dashboard UI (name + which campaign).
-This script only moves numbers that already exist.
-"""
 from __future__ import annotations
 
 import os
@@ -25,30 +10,30 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import v2lib  # noqa: E402
 
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-
-METRIC_COLS = ("emails_sent", "unique_replies", "positive_replies",
-               "meetings_booked", "customers_won", "bounces", "cost_usd")
-
-
 def main() -> int:
     sb = v2lib.supabase_client()
-    errors: list[dict] = []
 
-    angles = (sb.table("angles").select("id,campaign_id,name")
+    angles = (sb.table("angles")
+              .select("id,campaign_id,name")
               .execute().data or [])
+
     by_campaign: dict[str, list[dict]] = {}
     for a in angles:
         if a.get("campaign_id"):
             by_campaign.setdefault(a["campaign_id"], []).append(a)
 
     # Latest metric date per campaign (sync the most recent day available).
+    # Only read columns that actually exist in the live daily_metrics table.
+    # Missing from live schema: unique_replies, positive_replies,
+    # meetings_booked, customers_won -- these are not available.
+    # We read: emails_sent, replies_human, replies_autoresponder, bounces, cost_usd
     metrics = (sb.table("daily_metrics")
-               .select("campaign_id,metric_date," + ",".join(METRIC_COLS))
+               .select("campaign_id,metric_date,emails_sent,replies_human,replies_autoresponder,bounces,cost_usd")
                .order("metric_date", desc=True).limit(2000).execute().data or [])
+
     latest: dict[str, dict] = {}
     for m in metrics:
         cid = m.get("campaign_id")
@@ -62,16 +47,27 @@ def main() -> int:
         if not m:
             continue
         if len(angs) == 1:
+            # Map available daily_metrics columns to angle_daily_metrics.
+            # - emails_sent (daily_metrics) -> sent (angle_daily_metrics), same metric
+            # - replies_human -> replies_human, same name
+            # - replies_autoresponder -> replies_autoresponder, same name
+            # - bounces and cost_usd have no target column in angle_daily_metrics;
+            #   they are omitted from this upsert.
+            # - positive_replies: daily_metrics has no such column; we write NULL
+            #   and note it as a known gap in the summary.
             rows.append({
                 "angle_id": angs[0]["id"],
                 "metric_date": m["metric_date"],
-                **{c: m.get(c) for c in METRIC_COLS},
+                "sent": m.get("emails_sent"),
+                "replies_human": m.get("replies_human"),
+                "replies_autoresponder": m.get("replies_autoresponder"),
+                "positive_replies": None,  # not collected by daily_metrics
             })
         else:
             multi.append(cid)
 
     persisted = v2lib.upsert(sb, "angle_daily_metrics", rows,
-                             "angle_id,metric_date")
+                         "angle_id,metric_date")
     v2lib.record_run(
         sb, "angles",
         ok=not errors,
@@ -83,7 +79,6 @@ def main() -> int:
     print(f"angle rows upserted: {len(persisted)}, "
           f"multi-angle campaigns skipped: {len(multi)}")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -6,8 +6,8 @@ into `inboxes` (domain, email_address, health_status, warmup state).
 
 Read-only inventory/health. Never purchases mailboxes or changes settings.
 
-Requires: INBOXKIT_API_KEY (+ INBOXKIT_WORKSPACE_ID for some operations).
-Without them the collector records a blocked run and exits 0.
+Requires: INBOXKIT_API_KEY (+ INBOXKIT_WORKSPACE_ID). Without them the
+collector records a blocked run and exits 0.
 """
 from __future__ import annotations
 
@@ -49,13 +49,24 @@ def main() -> int:
             sb, "inboxkit", ok=False,
             stages=[{"stage": "auth", "ok": False,
                      "note": "blocked: INBOXKIT_API_KEY not configured "
-                             "(Dashboard -> Settings -> API & Integrations)"}],
+                              "(Dashboard -> Settings -> API & Integrations)"}],
             errors=[{"stage": "auth",
                      "error": "missing InboxKit API key"}],
         )
         print("blocked: InboxKit API key not configured")
         return 0
-
+    if not workspace:
+        v2lib.record_run(
+            sb, "inboxkit", ok=False,
+            stages=[{"stage": "auth", "ok": False,
+                     "note": "blocked: INBOXKIT_WORKSPACE_ID not set; "
+                              "collector cannot list mailboxes without it"}],
+            errors=[{"stage": "auth",
+                     "error": "missing INBOXKIT_WORKSPACE_ID"}],
+        )
+        print("blocked: INBOXKIT_WORKSPACE_ID not set; "
+              "collector cannot list mailboxes without it")
+        return 0
     errors: list[dict] = []
     rows: list[dict] = []
     try:
@@ -85,7 +96,6 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         errors.append({"stage": "mailbox_list",
                        "error": f"{type(exc).__name__}: {exc}"[:200]})
-
     persisted = v2lib.upsert(sb, "inboxes", rows, "email_address")
     v2lib.record_run(
         sb, "inboxkit", ok=not errors, api_calls=1,
