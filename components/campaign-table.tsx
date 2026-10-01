@@ -1,3 +1,6 @@
+'use client'
+
+import { useMemo, useState } from 'react'
 import { formatCount, formatRate, formatDate, rateIsPlausible, isUnavailable } from '@/lib/format'
 import { Card, SectionLabel, Figure, Unavailable } from '@/components/primitives'
 import { COPY } from '@/lib/copy'
@@ -90,22 +93,74 @@ export function CampaignTable({
    */
   total?: number | null
 }) {
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
+  const [sort, setSort] = useState<'name' | 'sent' | 'reply_rate' | 'open_rate'>('name')
+  const [direction, setDirection] = useState<'asc' | 'desc'>('asc')
+
+  const statuses = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.status).filter(Boolean))).sort(),
+    [rows],
+  )
+  const filteredRows = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return rows
+      .filter((row) => {
+        const matchesQuery = !normalizedQuery || row.name.toLowerCase().includes(normalizedQuery)
+        const matchesStatus = status === 'all' || row.status === status
+        return matchesQuery && matchesStatus
+      })
+      .sort((a, b) => {
+        const aValue = sort === 'name' ? a.name : a[sort] ?? -Infinity
+        const bValue = sort === 'name' ? b.name : b[sort] ?? -Infinity
+        const comparison = typeof aValue === 'string'
+          ? aValue.localeCompare(bValue as string)
+          : (aValue as number) - (bValue as number)
+        return direction === 'asc' ? comparison : -comparison
+      })
+  }, [direction, query, rows, sort, status])
   const isEmpty = rows.length === 0
   const isPartial = !isUnavailable(total) && (total as number) > rows.length
 
   return (
     <Card testId="campaign-table" className="overflow-hidden">
-      <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-3">
-        <SectionLabel>Campaigns</SectionLabel>
-        {isPartial ? (
-          // A silently short list is the bug this project was built to fix.
-          <span className="text-[11px] text-warn">
-            {COPY.partialList(rows.length, total as number)}
-          </span>
-        ) : rows.length > 0 ? (
-          <span className="text-[11px] text-ink-faint">
-            <Figure>{formatCount(rows.length)}</Figure> shown
-          </span>
+      <div className="flex flex-col gap-3 border-b border-line px-5 py-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <SectionLabel>Campaigns</SectionLabel>
+          {isPartial ? (
+            <span className="text-[11px] text-warn">{COPY.partialList(rows.length, total as number)}</span>
+          ) : rows.length > 0 ? (
+            <span className="text-[11px] text-ink-faint">
+              <Figure>{formatCount(filteredRows.length)}</Figure> of <Figure>{formatCount(rows.length)}</Figure> shown
+            </span>
+          ) : null}
+        </div>
+        {!isEmpty ? (
+          <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <label className="sr-only" htmlFor="campaign-search">Search campaigns</label>
+            <input
+              id="campaign-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search campaigns"
+              className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-ink-muted"
+            />
+            <label className="sr-only" htmlFor="campaign-status">Filter by status</label>
+            <select id="campaign-status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-8 rounded border border-line bg-surface px-2 text-ink">
+              <option value="all">All statuses</option>
+              {statuses.map((value) => <option key={value} value={value as string}>{value}</option>)}
+            </select>
+            <label className="sr-only" htmlFor="campaign-sort">Sort campaigns</label>
+            <select id="campaign-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-8 rounded border border-line bg-surface px-2 text-ink">
+              <option value="name">Name</option>
+              <option value="sent">Sent</option>
+              <option value="reply_rate">Reply rate</option>
+              <option value="open_rate">Open rate</option>
+            </select>
+            <button type="button" onClick={() => setDirection((value) => value === 'asc' ? 'desc' : 'asc')} className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft" aria-label={`Sort ${direction === 'asc' ? 'descending' : 'ascending'}`}>
+              {direction === 'asc' ? 'Ascending' : 'Descending'}
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -143,8 +198,13 @@ export function CampaignTable({
             ))}
           </div>
 
+          {filteredRows.length === 0 ? (
+            <div className="px-5 py-8 text-center text-[13px] text-ink-faint">
+              No campaigns match these filters.
+            </div>
+          ) : null}
           <ul className="divide-y divide-line-soft">
-            {rows.map((row) => (
+            {filteredRows.map((row) => (
               <li key={row.id} className={`${GRID} items-baseline px-5 py-3`}>
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-medium text-ink">{row.name}</div>
