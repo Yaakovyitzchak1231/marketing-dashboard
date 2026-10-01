@@ -128,7 +128,10 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
                 onClick={() => toggleMetric(kpi.key)}
                 className={`rounded border px-2 py-1 text-[11px] ${active ? 'border-ink-muted text-ink' : 'border-line text-ink-faint'}`}
               >
-                <span aria-hidden="true">{active ? 'On' : 'Off'}</span>
+                <span>{kpi.label}</span>
+                <span aria-hidden="true" className="ml-1.5 text-ink-faint">
+                  {active ? 'On' : 'Off'}
+                </span>
               </button>
             )
           })}
