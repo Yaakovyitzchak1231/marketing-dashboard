@@ -54,19 +54,7 @@ export const COPY = {
   domainsExpiring: (count: number, days: number) =>
     `${count} ${count === 1 ? 'domain' : 'domains'} expiring within ${days} days`,
 
-  infrastructureTitle: 'Infrastructure',
-  infrastructureSubtitle: 'Domains and inboxes: what is unhealthy, what expires soon.',
-  infrastructureDomains: 'Domains',
-  infrastructureInboxes: 'Inboxes',
-  infrastructureNoDomains: 'No domains recorded.',
-  infrastructureNoInboxes: 'No inboxes recorded.',
-  infrastructureUnavailable: 'Infrastructure data is unavailable right now.',
-
-  /**
-   * Grouped forms. The flat `infrastructureTitle` keys above are kept because
-   * `CopyKey` consumers and the copy deck are written against them; these
-   * nested aliases exist so a component can read a related group by name.
-   */
+  /** Grouped by surface: `COPY.infrastructure.title` names its owner. */
   infrastructure: {
     title: 'Infrastructure',
     subtitle: 'Domains and inboxes: what is unhealthy, what expires soon.',

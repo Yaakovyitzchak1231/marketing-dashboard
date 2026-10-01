@@ -85,8 +85,12 @@ export default async function InfrastructurePage() {
               {/* countIsZero is the sanctioned zero-check; a literal 0 here is a metric-shaped number the test forbids. */}
               {!countIsZero(data.expiring_soon_count) && (
                 <span className="ml-2 normal-case tracking-normal text-ink">
-                  {/* Window comes from lib/expiry.ts so the sentence matches the query. */}
-                  {data.expiring_soon_count} expiring within {EXPIRY_WINDOW_DAYS} days
+                  {/* Copy owns the sentence; the window comes from lib/expiry.ts
+                      so the wording can never claim a horizon the query didn't use. */}
+                  {COPY.domainsExpiring(
+                    data.expiring_soon_count,
+                    EXPIRY_WINDOW_DAYS,
+                  )}
                 </span>
               )}
             </h2>
