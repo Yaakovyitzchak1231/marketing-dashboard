@@ -227,6 +227,126 @@ describe('API Layer - Null Handling', () => {
       expect(data.campaigns[0].replies_human).toBeNull()
       expect(data.campaigns[0].bounces).toBeNull()
     })
+
+    it('asks for an exact count on the same select() that reads the rows', async () => {
+      // The load-bearing half of the truncation fix is the `{ count: 'exact' }`
+      // OPTION, and the mock chain used to throw it away: `select` is a
+      // `mockReturnThis()`, so its arguments never reach `limit` and every
+      // `total` above came from a hand-written `count: 148`. Deleting the option
+      // left all of those tests green while the disclosure went inert in
+      // production -- PostgREST stops returning a count, the route's `count` is
+      // null, and the UI quietly claims nothing was truncated. So the call
+      // itself is asserted, not just its consequence.
+      mockSupabaseApi.limit.mockResolvedValue({ data: [], error: null, count: 0 })
+
+      const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+      await campaignsGET(request)
+
+      expect(mockSupabaseApi.select).toHaveBeenCalledWith(expect.any(String), { count: 'exact' })
+    })
+
+    it('reports total as null when the driver count is not a real number', async () => {
+      // supabase-js derives `count` with `parseInt(contentRange[1])`, so a
+      // `Content-Range: */*` header -- which PostgREST sends when it will not
+      // count the set -- arrives as NaN rather than null. NaN is not nullish, so
+      // `count ?? null` passes it straight through, and only the JSON serializer
+      // turns it into null on screen. The code has to refuse it instead.
+      mockSupabaseApi.limit.mockResolvedValue({ data: [], error: null, count: NaN })
+
+      const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+      const response = await campaignsGET(request)
+      const data = await response.json()
+
+      expect(data.total).toBeNull()
+    })
+
+    it('keeps a zero total, which is a measurement and not an absence', async () => {
+      // The counterweight to the guard above: `Number.isFinite` is not a falsy
+      // check, and must not become one. Zero campaigns in the window is a
+      // result the source reported.
+      mockSupabaseApi.limit.mockResolvedValue({ data: [], error: null, count: 0 })
+
+      const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+      const response = await campaignsGET(request)
+      const data = await response.json()
+
+      expect(data.total).toBe(0)
+    })
+
+    it('reports the driver count as total so a capped list can be disclosed', async () => {
+      // One row back, 148 matching campaigns according to the same query. The
+      // gap between the two is the only signal the UI has that the row cap
+      // truncated the portfolio -- so total must come from the driver's count,
+      // never from the array length.
+      mockSupabaseApi.limit.mockResolvedValue({
+        data: [{
+          id: 'camp-1',
+          external_id: 'ext-1',
+          name: 'Campaign 1',
+          status: 'active',
+          created_at: '2024-01-01T00:00:00Z',
+          daily_metrics: [{
+            metric_date: '2024-01-15',
+            emails_sent: 100,
+            replies_total: 10,
+            replies_human: 8,
+            replies_autoresponder: 2,
+            opportunities: 5,
+            bounces: 2,
+            open_rate: null,
+            unsubscribe: null
+          }]
+        }],
+        error: null,
+        count: 148
+      })
+
+      const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+      const response = await campaignsGET(request)
+      const data = await response.json()
+
+      expect(data.total).toBe(148)
+      expect(data.campaigns.length).toBe(1)
+      // The disclosure only fires when total exceeds the rows returned.
+      expect(data.total).toBeGreaterThan(data.campaigns.length)
+    })
+
+    it('reports total as null, not the row count, when the driver gives no count', async () => {
+      // No `count` key at all: the source did not say how many campaigns match.
+      // A length fallback here would emit total === 1, which equals
+      // campaigns.length, so isPartial would be false and the truncation notice
+      // would stay silent on precisely the truncated lists it exists to expose.
+      // null renders nothing instead of making a claim we cannot support.
+      mockSupabaseApi.limit.mockResolvedValue({
+        data: [{
+          id: 'camp-1',
+          external_id: 'ext-1',
+          name: 'Campaign 1',
+          status: 'active',
+          created_at: '2024-01-01T00:00:00Z',
+          daily_metrics: [{
+            metric_date: '2024-01-15',
+            emails_sent: 100,
+            replies_total: 10,
+            replies_human: 8,
+            replies_autoresponder: 2,
+            opportunities: 5,
+            bounces: 2,
+            open_rate: null,
+            unsubscribe: null
+          }]
+        }],
+        error: null
+      })
+
+      const request = new NextRequest(new URL('/api/campaigns?range=7d', 'http://localhost'))
+      const response = await campaignsGET(request)
+      const data = await response.json()
+
+      expect(data.total).toBeNull()
+      expect(data.campaigns.length).toBe(1)
+      expect(data.total).not.toBe(data.campaigns.length)
+    })
   })
 
   describe('GET /api/campaigns/[id]/trend', () => {

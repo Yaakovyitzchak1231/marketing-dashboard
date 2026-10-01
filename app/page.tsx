@@ -11,14 +11,19 @@ import { RANGE_LABEL } from '@/lib/range'
 
 /**
  * The dashboard shell. A Server Component: every figure below arrives already
- * fetched, so the page ships as HTML with no client bundle and no window in
- * which a metric could be fabricated.
+ * fetched, so the data path from the database to the screen is a server render
+ * rather than a fetch the browser has to make and could get wrong.
  *
- * The one place interactivity would eventually earn its keep is a range
- * switcher, and that is deliberately NOT here yet -- it would make this a
- * Client Component and drag the whole data path across the wire. The honest
- * first version is a server-rendered page that cannot lie between the database
- * and the screen.
+ * It is not, however, a page without a client bundle. The campaign table is a
+ * client island -- search, filtering and sorting happen on screen, and they
+ * cannot happen in a server render -- and that costs two things worth naming
+ * instead of glossing: every campaign row is serialized into the RSC payload
+ * the browser downloads, and the table's controls ship as client JavaScript.
+ * The other panels stay server-only. An earlier version of this comment claimed
+ * the shell shipped no client bundle and that interactivity was deliberately
+ * absent because it would have cost that claim; the table made the claim false,
+ * and a comment asserting an invariant the code no longer holds is the same
+ * defect as a figure that no longer matches the row behind it.
  *
  * The first campaign in the list drives the trend chart. That is a real
  * constraint, not a shortcut: the trend endpoint is per-campaign, and a

@@ -34,6 +34,115 @@ function rateIsImplausible(value: number | null): boolean {
   return !isUnavailable(value) && !rateIsPlausible(value)
 }
 
+/**
+ * The sort controls. The keys are real `CampaignRow` field names rather than
+ * display labels, so the comparator reads a field it can type, and an option
+ * value the row does not have cannot be smuggled in untyped.
+ *
+ * `kind` is how the value has to be READ, not how the option is labelled. A
+ * `rate` key is subject to the same plausibility guard `RateCell` applies, and
+ * the set below is derived from this field rather than from a list of key names.
+ */
+const SORT_OPTIONS = [
+  { value: 'name', label: COPY.campaigns.sortName, kind: 'name' },
+  { value: 'emails_sent', label: COPY.campaigns.sortSent, kind: 'count' },
+  { value: 'reply_rate', label: COPY.campaigns.sortReplyRate, kind: 'rate' },
+  { value: 'open_rate', label: COPY.campaigns.sortOpenRate, kind: 'rate' },
+] as const
+
+type SortOption = (typeof SORT_OPTIONS)[number]
+type SortKey = SortOption['value']
+/** The sort keys that name a metric rather than the name column. */
+type MetricSortKey = Exclude<SortKey, 'name'>
+type SortDirection = 'asc' | 'desc'
+
+/**
+ * The rate sort keys, derived from SORT_OPTIONS' own `kind`.
+ *
+ * WHY derived rather than named: `RateCell` applies `rateIsImplausible` to every
+ * rate it prints, so a sort that skipped the guard would order the list by a
+ * figure the table beside it refuses to print. `open_rate` is passed straight
+ * through from the `daily_metrics` row, and a percentage-point value stored
+ * where a fraction is expected (86.4) is above 1 -- its cell reads "Not
+ * reliable" while "Open rate -> Descending" ranks it first. An earlier draft
+ * hardcoded `key === 'reply_rate'` and missed exactly that. Keying the guard off
+ * `kind` covers the next rate column added here without a second edit for
+ * whoever adds it to forget.
+ */
+const RATE_SORT_KEYS: ReadonlySet<SortKey> = new Set(
+  SORT_OPTIONS.filter((option) => option.kind === 'rate').map((option) => option.value),
+)
+
+/** Narrows a raw option value, so an unknown one is dropped, not cast. */
+function isSortKey(value: string): value is SortKey {
+  return SORT_OPTIONS.some((option) => option.value === value)
+}
+
+/**
+ * The value a row is ranked by, or null when it cannot be ranked.
+ *
+ * Two kinds of null arrive here and both are absences, never figures: the
+ * source did not report the metric, or it reported a rate the cell beside it
+ * refuses to print as a measurement. Ranking a list by a figure we decline to
+ * show is the autoresponder bug wearing a different hat, so the cell's guard is
+ * applied here too -- once, for every rate key, rather than at each call site.
+ */
+function sortableMetric(row: CampaignRow, key: MetricSortKey): number | null {
+  const value = row[key]
+  if (isUnavailable(value)) return null
+  if (RATE_SORT_KEYS.has(key) && rateIsImplausible(value)) return null
+  return value
+}
+
+/**
+ * Name order, reversed with the direction toggle so the whole list flips
+ * together. It doubles as the tie-break: two rows with nothing to rank between
+ * them order by name, which is reproducible, rather than by whatever order the
+ * source happened to return them in.
+ */
+function compareNames(a: CampaignRow, b: CampaignRow, direction: SortDirection): number {
+  return direction === 'asc'
+    ? a.name.localeCompare(b.name)
+    : b.name.localeCompare(a.name)
+}
+
+/**
+ * The truncation notice, or null when the list is complete.
+ *
+ * It describes the LOAD -- what the source holds against what we fetched -- and
+ * it stays true while a filter narrows the view, which is why it is rendered
+ * beside the shown-count rather than in place of it.
+ */
+function truncationNotice(total: number | null | undefined, loaded: number): string | null {
+  if (isUnavailable(total)) return null
+  if (total <= loaded) return null
+  return COPY.partialList(loaded, total)
+}
+
+/**
+ * The header's shown-count: how many rows are on screen, and out of how many
+ * were loaded.
+ *
+ * The digits are JSX, not a copy string, so they can carry `<Figure>` and hold
+ * their columns the way every other figure on this page does. `ofAll` is null
+ * when no filter is applied, which is the case where there is nothing to be a
+ * subset of.
+ */
+function ShownCount({ shown, ofAll }: { shown: number; ofAll: number | null }) {
+  return (
+    <span className="text-[11px] text-ink-faint">
+      <Figure>{formatCount(shown)}</Figure>
+      {isUnavailable(ofAll) ? null : (
+        <>
+          {' '}
+          {COPY.campaigns.countOf} <Figure>{formatCount(ofAll)}</Figure>
+        </>
+      )}{' '}
+      {COPY.campaigns.countShown}
+    </span>
+  )
+}
+
 function CountCell({ value, testId }: { value: number | null; testId?: string }) {
   if (isUnavailable(value)) return <Unavailable testId={testId} />
   return (
@@ -95,11 +204,18 @@ export function CampaignTable({
 }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
-  const [sort, setSort] = useState<'name' | 'sent' | 'reply_rate' | 'open_rate'>('name')
-  const [direction, setDirection] = useState<'asc' | 'desc'>('asc')
+  const [sort, setSort] = useState<SortKey>('name')
+  const [direction, setDirection] = useState<SortDirection>('asc')
 
   const statuses = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.status).filter(Boolean))).sort(),
+    () =>
+      Array.from(
+        // `isUnavailable` rather than `!== null`, because the field is typed
+        // `string | null` but shell-model copies it straight off the API
+        // response: a payload that omits the key puts `undefined` in this set,
+        // and an option labelled "undefined" is a filter nobody can read.
+        new Set(rows.map((row) => row.status).filter((s): s is string => !isUnavailable(s))),
+      ).sort(),
     [rows],
   )
   const filteredRows = useMemo(() => {
@@ -111,55 +227,112 @@ export function CampaignTable({
         return matchesQuery && matchesStatus
       })
       .sort((a, b) => {
-        const metricKey = sort === 'sent' ? 'emails_sent' : sort
-        const aValue = sort === 'name' ? a.name : a[metricKey] ?? -Infinity
-        const bValue = sort === 'name' ? b.name : b[metricKey] ?? -Infinity
-        const comparison = typeof aValue === 'string'
-          ? aValue.localeCompare(bValue as string)
-          : (aValue as number) - (bValue as number)
-        return direction === 'asc' ? comparison : -comparison
+        if (sort === 'name') return compareNames(a, b, direction)
+        const aValue = sortableMetric(a, sort)
+        const bValue = sortableMetric(b, sort)
+        // An absent figure is ABSENT, not small. It sinks below every reported
+        // value in BOTH directions, so toggling the direction cannot promote
+        // "not reported" to the top of the list -- which is the open-rate bug
+        // ranked rather than rendered: `?? -Infinity` put every null first on an
+        // ascending open-rate sort and then reshuffled them on the next click.
+        if (aValue === null) {
+          return bValue === null
+            ? compareNames(a, b, direction)
+            : Number.POSITIVE_INFINITY
+        }
+        if (bValue === null) return Number.NEGATIVE_INFINITY
+        // The two infinities above are the COMPARATOR's return values: the
+        // ordering signal `Array#sort` consumes and immediately forgets. They
+        // are never read back out, never ranked, and never printed. An earlier
+        // draft returned a bare 1 and -1 here, which reads as a figure on
+        // screen -- and rightly so: in this file a number that nobody can trace
+        // back to a stored row does not belong.
+        const delta = aValue - bValue
+        return direction === 'asc' ? delta : -delta
       })
   }, [direction, query, rows, sort, status])
   const isEmpty = rows.length === 0
-  const isPartial = !isUnavailable(total) && (total as number) > rows.length
+  // No rows means the empty-state body below is the single claim about the
+  // list. A notice reading "Showing 0 of 148 campaigns" directly above "No
+  // campaigns have reported metrics in this range yet." states two incompatible
+  // things, and the current route cannot produce it -- but a contradiction one
+  // refactor away is still a contradiction, so the notice is suppressed exactly
+  // as the shown-count is.
+  const notice = isEmpty ? null : truncationNotice(total, rows.length)
+  const isFiltered = filteredRows.length !== rows.length
+  /**
+   * The two header claims are independent, so they are rendered as two
+   * elements rather than as two branches: the notice describes the load and
+   * stays true while a filter narrows the view, the count describes the view.
+   * The count is dropped only when it would repeat the notice verbatim -- a
+   * truncated list with no filter applied.
+   */
+  const showCount = !isEmpty && !(notice !== null && !isFiltered)
 
   return (
     <Card testId="campaign-table" className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-line px-5 py-3">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <SectionLabel>Campaigns</SectionLabel>
-          {isPartial ? (
-            <span className="text-[11px] text-warn">{COPY.partialList(rows.length, total as number)}</span>
-          ) : rows.length > 0 ? (
-            <span className="text-[11px] text-ink-faint">
-              <Figure>{formatCount(filteredRows.length)}</Figure> of <Figure>{formatCount(rows.length)}</Figure> shown
-            </span>
+          {notice !== null || showCount ? (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {notice !== null ? (
+                <span className="text-[11px] text-warn">{notice}</span>
+              ) : null}
+              {showCount ? (
+                <ShownCount
+                  shown={filteredRows.length}
+                  ofAll={isFiltered ? rows.length : null}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
         {!isEmpty ? (
-          <div className="flex flex-wrap items-center gap-2 rounded border border-line-soft bg-line-soft/20 p-2 text-[12px]">
-            <label className="sr-only" htmlFor="campaign-search">Search campaigns</label>
+          <div
+            data-testid="campaign-table-controls"
+            className="flex flex-wrap items-center gap-2 rounded border border-line-soft bg-line-soft/20 p-2 text-[12px]"
+          >
+            <label className="sr-only" htmlFor="campaign-search">{COPY.campaigns.searchLabel}</label>
             <input
               id="campaign-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search campaigns"
+              placeholder={COPY.campaigns.searchPlaceholder}
               className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
-            <label className="sr-only" htmlFor="campaign-status">Filter by status</label>
+            <label className="sr-only" htmlFor="campaign-status">{COPY.campaigns.statusFilterLabel}</label>
             <select id="campaign-status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted">
-              <option value="all">All statuses</option>
-              {statuses.map((value) => <option key={value} value={value as string}>{value}</option>)}
+              <option value="all">{COPY.campaigns.allStatuses}</option>
+              {statuses.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-            <label className="sr-only" htmlFor="campaign-sort">Sort campaigns</label>
-            <select id="campaign-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted">
-              <option value="name">Name</option>
-              <option value="sent">Sent</option>
-              <option value="reply_rate">Reply rate</option>
-              <option value="open_rate">Open rate</option>
+            <label className="sr-only" htmlFor="campaign-sort">{COPY.campaigns.sortLabel}</label>
+            <select
+              id="campaign-sort"
+              value={sort}
+              onChange={(event) => {
+                const next = event.target.value
+                if (isSortKey(next)) setSort(next)
+              }}
+              className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </select>
-            <button type="button" onClick={() => setDirection((value) => value === 'asc' ? 'desc' : 'asc')} className="h-8 rounded border border-line px-2.5 text-ink transition-colors hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" aria-label={`Sort ${direction === 'asc' ? 'descending' : 'ascending'}`}>
-              {direction === 'asc' ? 'Ascending' : 'Descending'}
+            {/* The visible text IS the accessible name. An earlier draft also
+                set aria-label to the action ("Sort descending") while the button
+                read "Ascending", which is WCAG 2.5.3 and actively contradicts the
+                screen for anyone not reading it visually. The action moved to
+                title, where it is still available and cannot misname the
+                control. */}
+            <button
+              type="button"
+              onClick={() => setDirection((value) => value === 'asc' ? 'desc' : 'asc')}
+              className="h-8 rounded border border-line px-2.5 text-ink transition-colors hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+              title={COPY.campaigns.sortDirectionAction(direction)}
+            >
+              {direction === 'asc' ? COPY.campaigns.sortAscending : COPY.campaigns.sortDescending}
             </button>
           </div>
         ) : null}
@@ -200,8 +373,11 @@ export function CampaignTable({
           </div>
 
           {filteredRows.length === 0 ? (
-            <div className="px-5 py-8 text-center text-[13px] text-ink-faint">
-              No campaigns match these filters.
+            <div
+              data-testid="campaign-table-no-match"
+              className="px-5 py-8 text-center text-[13px] text-ink-faint"
+            >
+              {COPY.campaigns.noMatch}
             </div>
           ) : null}
           <ul className="divide-y divide-line-soft">
@@ -222,21 +398,29 @@ export function CampaignTable({
                   </div>
                   <div className="flex justify-between gap-4 text-[12px] sm:block">
                     <span className="text-ink-muted sm:hidden">Replies</span>
-                    <span data-testid={`replies-human-${row.id}`}>
-                      {isUnavailable(row.replies_human) ? (
-                        <Unavailable />
-                      ) : (
-                        <Figure>{formatCount(row.replies_human)}</Figure>
+                    <span className="flex items-baseline justify-end gap-1.5">
+                      <span data-testid={`replies-human-${row.id}`}>
+                        {isUnavailable(row.replies_human) ? (
+                          <Unavailable />
+                        ) : (
+                          <Figure>{formatCount(row.replies_human)}</Figure>
+                        )}
+                      </span>
+                      {isUnavailable(row.replies_autoresponder) ? null : (
+                        <span
+                          data-testid={`replies-auto-${row.id}`}
+                          className="text-[11px] text-ink-faint"
+                          title="Autoresponder replies, counted separately from humans"
+                        >
+                          +<Figure>{formatCount(row.replies_autoresponder)}</Figure>
+                        </span>
                       )}
                     </span>
                   </div>
-                  {/* The autoresponder split has its own "Auto" column. An
-                      earlier draft also appended a "+39" chip to the human
-                      count, which printed the same figure twice in one row and
-                      made the reply rate look inflated at a glance. One column
-                      owns the number. */}
-                  <div className="flex justify-between gap-4 text-[12px] sm:block">
-                    <span className="text-ink-muted sm:hidden">Auto replies</span>
+                  {/* Hidden on phone by CSS, present in the DOM. The autoresponder
+                      split already rides along with the human count above, so
+                      nothing is lost at 390px. */}
+                  <div className="hidden justify-end gap-4 text-[12px] sm:flex">
                     <CountCell
                       value={row.replies_autoresponder}
                       testId={`replies-auto-cell-${row.id}`}
@@ -258,9 +442,11 @@ export function CampaignTable({
             ))}
           </ul>
 
-          {hasUnreliableRate(rows) ? (
+          {hasUnreliableRate(filteredRows) ? (
             // The suppression is stated once, in full, rather than hidden in a
-            // tooltip nobody on a phone will ever tap.
+            // tooltip nobody on a phone will ever tap. It follows the rows on
+            // screen, not every row we loaded: a note about a rate that is
+            // filtered out is a claim about a figure the reader cannot see.
             <p className="border-t border-line-soft px-5 py-3 text-[11px] text-ink-faint">
               {COPY.replyRateUnreliable}
             </p>
