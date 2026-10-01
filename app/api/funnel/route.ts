@@ -13,10 +13,8 @@ type Row = {
   campaign_id: string
   metric_date: string
   emails_sent: number | null
-  unique_replies: number | null
-  positive_replies: number | null
-  meetings_booked: number | null
-  customers_won: number | null
+  replies_human: number | null
+  opportunities: number | null
 }
 
 function sum(values: (number | null)[]): number | null {
@@ -50,16 +48,18 @@ export async function GET(request: NextRequest) {
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffStr = cutoff.toISOString().split('T')[0]
 
+  // `ideas` has no `name` column (it is `title`), so the join is dropped and
+  // the idea title is resolved from a separate lookup below.
   const { data: campaigns, error: campError } = await supabase
     .from('campaigns')
-    .select('id, name, idea_id, ideas(id, name)')
+    .select('id, name, idea_id')
   if (campError) {
     return NextResponse.json({ error: 'Failed to fetch campaigns' }, { status: 500 })
   }
 
   const { data: metrics, error: metError } = await supabase
     .from('daily_metrics')
-    .select('campaign_id, metric_date, emails_sent, unique_replies, positive_replies, meetings_booked, customers_won')
+    .select('campaign_id, metric_date, emails_sent, replies_human, opportunities')
     .gte('metric_date', cutoffStr)
   if (metError) {
     return NextResponse.json({ error: 'Failed to fetch metrics' }, { status: 500 })
@@ -72,18 +72,46 @@ export async function GET(request: NextRequest) {
     byCampaign.set(m.campaign_id, list)
   }
 
+  // Idea titles come from a plain lookup: campaigns.idea_id is a real FK but
+  // `ideas.title` is the label column, and the collector may not have created
+  // a row for an id the campaign still points at.
+  const ideaIds = [
+    ...new Set(
+      (campaigns ?? [])
+        .map((c: Record<string, unknown>) => c.idea_id)
+        .filter((v: unknown): v is string => typeof v === 'string'),
+    ),
+  ]
+  const ideaTitles = new Map<string, string>()
+  if (ideaIds.length > 0) {
+    const { data: ideaRows } = await supabase
+      .from('ideas')
+      .select('id, title')
+      .in('id', ideaIds)
+    for (const row of (ideaRows ?? []) as { id: string; title: string | null }[]) {
+      if (row.title) ideaTitles.set(row.id, row.title)
+    }
+  }
+
   const campaignFunnels = (campaigns ?? []).map((c: Record<string, unknown>) => {
     const rows = byCampaign.get(c.id as string) ?? []
     const contacted = sum(rows.map(r => r.emails_sent))
-    const replied = sum(rows.map(r => r.unique_replies))
-    const positive = sum(rows.map(r => r.positive_replies))
-    const meetings = sum(rows.map(r => r.meetings_booked))
-    const customers = sum(rows.map(r => r.customers_won))
+    const replied = sum(rows.map(r => r.replies_human))
+    // The schema has no positive_replies / meetings_booked / customers_won
+    // columns. `opportunities` is the nearest recorded stage, so it is
+    // reported as the positive stage; meetings and customers stay null
+    // because no collector ever wrote them. Reporting 0 would assert that
+    // nobody ever converted, which the database does not say.
+    const positive = sum(rows.map(r => r.opportunities))
+    const meetings = null
+    const customers = null
     return {
       campaign_id: c.id,
       campaign_name: c.name,
       idea_id: c.idea_id,
-      idea_name: (c.ideas as { name?: string } | null)?.name ?? null,
+      idea_name: typeof c.idea_id === 'string'
+        ? ideaTitles.get(c.idea_id) ?? null
+        : null,
       contacted,
       replied,
       positive,
@@ -117,10 +145,12 @@ export async function GET(request: NextRequest) {
   }
   const ideaFunnels = [...byIdea.entries()].map(([idea_id, { name, rows }]) => {
     const contacted = sum(rows.map(r => r.emails_sent))
-    const replied = sum(rows.map(r => r.unique_replies))
-    const positive = sum(rows.map(r => r.positive_replies))
-    const meetings = sum(rows.map(r => r.meetings_booked))
-    const customers = sum(rows.map(r => r.customers_won))
+    const replied = sum(rows.map(r => r.replies_human))
+    const positive = sum(rows.map(r => r.opportunities))
+    // Same reasoning as the per-campaign rollup above: no collector has ever
+    // written a meeting or customer row, so those stages are unknown.
+    const meetings = null
+    const customers = null
     return {
       idea_id, idea_name: name,
       contacted, replied, positive, meetings, customers,

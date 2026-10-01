@@ -9,25 +9,36 @@ type Cost = {
   id: string
   amount_usd: number
   category: string
-  idea_id: string | null
-  spent_at: string
+  entity_ref: string | null
+  spent_at: string | null
   notes: string | null
-  ideas?: { name: string } | null
 }
 
 type Idea = { id: string; name: string }
 
-const CATEGORIES = ['domains', 'inboxes', 'verification', 'leads', 'tools', 'other']
+// These must match the costs.category CHECK constraint in
+// supabase/migrations/002_unified_model.sql exactly. An invented category
+// (a plural label, or an "other" bucket) is rejected by Postgres, so the form
+// offers only what the schema accepts.
+const CATEGORIES = ['domain', 'inbox', 'verification', 'tool', 'list'] as const
 
 export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ideas: Idea[] }) {
   const api = useApi()
   const [costs, setCosts] = useState<Cost[]>(initialCosts)
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('other')
+  const [category, setCategory] = useState<string>(CATEGORIES[0])
   const [ideaId, setIdeaId] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // entity_ref holds an idea id when a cost was linked to one. Resolve it
+  // against the ideas we were handed; an id with no matching idea renders as
+  // unknown rather than inventing a label.
+  const ideaNameFor = (ref: string | null): string | null => {
+    if (!ref) return null
+    return ideas.find(i => i.id === ref)?.name ?? null
+  }
 
   const refresh = async () => setCosts(await api('/api/costs'))
 
@@ -46,7 +57,10 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
         body: JSON.stringify({
           amount_usd: value,
           category,
-          idea_id: ideaId || null,
+          // costs has no idea_id column; entity_ref is the schema's free-text
+          // pointer, so the idea id is recorded there rather than in a
+          // column that does not exist.
+          entity_ref: ideaId || null,
           notes: notes.trim() || null,
         }),
       })
@@ -163,9 +177,13 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
               <tbody>
                 {costs.map(c => (
                   <tr key={c.id} className="border-b border-line last:border-0">
-                    <td className="px-4 py-2 tabular-nums text-ink-muted">{c.spent_at}</td>
+                    <td className="px-4 py-2 tabular-nums text-ink-muted">{c.spent_at ?? '—'}</td>
                     <td className="px-4 py-2 text-ink-muted">{c.category}</td>
-                    <td className="px-4 py-2 text-ink">{c.ideas?.name ?? '—'}</td>
+                    {/* costs has no ideas FK, so the linked idea is the
+                        free-text entity_ref we stored, not a joined row. */}
+                    <td className="px-4 py-2 text-ink">
+                      {ideaNameFor(c.entity_ref) ?? '—'}
+                    </td>
                     <td className="px-4 py-2 text-ink-faint">{c.notes ?? '—'}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-ink">
                       ${Number(c.amount_usd).toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })}
