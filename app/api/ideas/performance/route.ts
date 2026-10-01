@@ -22,9 +22,14 @@ export async function GET(request: NextRequest) {
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffStr = cutoff.toISOString().split('T')[0]
 
+  // Column lists follow 002_unified_model.sql: ideas stores its label in
+  // `title` (not `name`), daily_metrics has no unique_replies /
+  // positive_replies / meetings_booked / customers_won, and costs has no
+  // idea_id or spent_at (it is cost_date, and spend is linked by the free-text
+  // entity_ref). Outcomes with no stored column stay null rather than zero.
   const { data: ideas, error: ideaError } = await supabase
     .from('ideas')
-    .select('id, name, status')
+    .select('id, title, status')
     .order('created_at', { ascending: false })
   if (ideaError) {
     return NextResponse.json({ error: 'Failed to fetch ideas' }, { status: 500 })
@@ -36,13 +41,16 @@ export async function GET(request: NextRequest) {
 
   const { data: metrics } = await supabase
     .from('daily_metrics')
-    .select('campaign_id, emails_sent, unique_replies, positive_replies, meetings_booked, customers_won')
+    .select('campaign_id, replies_human, opportunities')
     .gte('metric_date', cutoffStr)
 
+  // costs carries no idea_id, so spend can only be attributed through
+  // entity_ref when it holds an idea id. Anything else is unattributable and
+  // leaves the idea's spend unknown instead of defaulting to zero spend.
   const { data: costs } = await supabase
     .from('costs')
-    .select('idea_id, amount_usd')
-    .gte('spent_at', cutoffStr)
+    .select('entity_ref, amount_usd')
+    .gte('cost_date', cutoffStr)
 
   const campaignsByIdea = new Map<string, string[]>()
   for (const c of (campaigns ?? []) as { id: string; idea_id: string | null }[]) {
@@ -59,9 +67,11 @@ export async function GET(request: NextRequest) {
     metricsByCampaign.set(cid, list)
   }
   const spendByIdea = new Map<string, number>()
-  for (const c of (costs ?? []) as { idea_id: string | null; amount_usd: number }[]) {
-    if (!c.idea_id) continue
-    spendByIdea.set(c.idea_id, (spendByIdea.get(c.idea_id) ?? 0) + Number(c.amount_usd))
+  for (const c of (costs ?? []) as { entity_ref: string | null; amount_usd: number }[]) {
+    // entity_ref holds an idea id when the cost was linked to one. An id we do
+    // not recognise is skipped rather than filed under an invented idea.
+    if (!c.entity_ref) continue
+    spendByIdea.set(c.entity_ref, (spendByIdea.get(c.entity_ref) ?? 0) + Number(c.amount_usd))
   }
 
   const sumCol = (rows: Record<string, unknown>[], col: string): number | null => {
@@ -74,13 +84,15 @@ export async function GET(request: NextRequest) {
     return seen ? total : null
   }
 
-  const rows = ((ideas ?? []) as { id: string; name: string; status: string }[]).map(idea => {
+  const rows = ((ideas ?? []) as { id: string; title: string | null; status: string }[]).map(idea => {
     const cids = campaignsByIdea.get(idea.id) ?? []
     const mrows = cids.flatMap(cid => metricsByCampaign.get(cid) ?? []) as Record<string, unknown>[]
     const spend = spendByIdea.get(idea.id) ?? null
-    const replies = sumCol(mrows, 'unique_replies')
-    const meetings = sumCol(mrows, 'meetings_booked')
-    const customers = sumCol(mrows, 'customers_won')
+    const replies = sumCol(mrows, 'replies_human')
+    // No collector has ever written a meeting or customer stage, so those two
+    // remain unknown. Reporting 0 would assert the idea produced none.
+    const meetings = null
+    const customers = null
 
     const per = (outcome: number | null): number | null =>
       outcome !== null && spend !== null && spend > 0
@@ -93,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     return {
       idea_id: idea.id,
-      idea_name: idea.name,
+      idea_name: idea.title ?? null,
       status: idea.status,
       spend_usd: spend,
       replies,

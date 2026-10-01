@@ -28,9 +28,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch angles' }, { status: 500 })
   }
 
+  // 002_unified_model.sql defines angle_daily_metrics as
+  // (angle_id, metric_date, sent, replies_human, replies_autoresponder,
+  //  positive_replies, meetings). There is no emails_sent / unique_replies /
+  // meetings_booked column, so the query uses the real names and the response
+  // keeps the field names the UI already reads.
   const { data: metrics } = await supabase
     .from('angle_daily_metrics')
-    .select('angle_id, emails_sent, unique_replies, positive_replies, meetings_booked')
+    .select('angle_id, sent, replies_human, replies_autoresponder, positive_replies, meetings')
     .gte('metric_date', cutoffStr)
 
   const byAngle = new Map<string, Record<string, unknown>[]>()
@@ -52,10 +57,12 @@ export async function GET(request: NextRequest) {
 
   const rows = ((angles ?? []) as Record<string, unknown>[]).map(a => {
     const mrows = byAngle.get(a.id as string) ?? []
-    const sent = sumCol(mrows, 'emails_sent')
-    const replies = sumCol(mrows, 'unique_replies')
+    const sent = sumCol(mrows, 'sent')
+    // Human replies are the ones a person wrote; the collector separates
+    // autoresponders, so they are excluded rather than folded in.
+    const replies = sumCol(mrows, 'replies_human')
     const positive = sumCol(mrows, 'positive_replies')
-    const meetings = sumCol(mrows, 'meetings_booked')
+    const meetings = sumCol(mrows, 'meetings')
     const humanReplyRate =
       sent !== null && sent > 0 && replies !== null
         ? Math.round((replies / sent) * 10000) / 10000

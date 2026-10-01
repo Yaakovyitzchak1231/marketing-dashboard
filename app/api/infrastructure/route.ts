@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
     .select('domain, registrar, expires_at, auto_renew, spf_ok, dkim_ok, dmarc_ok, dns_checked_at')
     .order('expires_at', { ascending: true, nullsFirst: false })
   if (domError) {
+    console.error(
+      `infrastructure: domains query failed (${domError.code}): ${domError.message}`,
+    )
     return NextResponse.json({ error: 'Failed to fetch domains' }, { status: 500 })
   }
 
@@ -32,6 +35,9 @@ export async function GET(request: NextRequest) {
     .select('email, domain, provider, warmup_status, warmup_score, instantly_connected, instantly_status, checked_at')
     .order('email')
   if (inboxError) {
+    console.error(
+      `infrastructure: inboxes query failed (${inboxError.code}): ${inboxError.message}`,
+    )
     return NextResponse.json({ error: 'Failed to fetch inboxes' }, { status: 500 })
   }
 
