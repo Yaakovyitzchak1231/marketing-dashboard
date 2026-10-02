@@ -36,7 +36,7 @@ function plottable(series: TrendPoint[]): TrendPoint[] {
   return series.filter((p) => !isUnavailable(p.value) && Number.isFinite(p.value))
 }
 
-function TrendSvg({ points }: { points: TrendPoint[] }) {
+function TrendSvg({ points, isFlat }: { points: TrendPoint[]; isFlat: boolean }) {
   const { width, height, padX, padY, strokeWidth, pointRadius, axisStrokeWidth } =
     CHART_GEOMETRY
   const values = points.map((p) => p.value as number)
@@ -54,22 +54,39 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
   const firstValue = values[CHART_GEOMETRY.zero]
   const lastValue = values[values.length - 1]
   const change = lastValue - firstValue
-  const range = max - min
-  const gridValues = [max, min + range / (CHART_GEOMETRY.gridLineCount - 1), min]
-  const gridY = gridValues.map((value) => scaleY(value, min, max))
+
+  // A flat series has no interior gridline to draw: max, min and their midpoint
+  // are the same number, so three gridlines stack on one y and the chart shows
+  // a dashed line drawn over itself. One baseline is the whole truth of a flat
+  // series, so one baseline is what gets drawn.
+  const gridY = isFlat
+    ? [scaleY(min, min, max)]
+    : [scaleY(max, min, max), scaleY(min + (max - min) / (CHART_GEOMETRY.gridLineCount - 1), min, max), scaleY(min, min, max)]
 
   return (
     <div className="relative">
       <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between text-[10px] text-ink-faint" aria-hidden="true">
-        <span>{formatCount(max)}</span>
-        <span>{formatCount(min)}</span>
+        {isFlat ? (
+          // Repeating the same figure twice on either side of the plot is what
+          // made this read as broken. One label, positioned, says the same thing.
+          <span>{formatCount(max)}</span>
+        ) : (
+          <>
+            <span>{formatCount(max)}</span>
+            <span>{formatCount(min)}</span>
+          </>
+        )}
       </div>
       <svg
       viewBox={chartViewBox()}
       preserveAspectRatio="none"
       className="h-32 w-full sm:h-40"
       role="img"
-      aria-label={`${points.length} days of data, from ${formatCount(firstValue)} to ${formatCount(lastValue)}, changing by ${change >= CHART_GEOMETRY.zero ? '+' : ''}${formatCount(change)}`}
+      aria-label={
+        isFlat
+          ? `${points.length} days, all reporting the same running total of ${formatCount(max)}`
+          : `${points.length} days of data, from ${formatCount(firstValue)} to ${formatCount(lastValue)}, changing by ${change >= CHART_GEOMETRY.zero ? '+' : ''}${formatCount(change)}`
+      }
     >
       {gridY.map((y, index) => (
         <line
@@ -106,8 +123,56 @@ function TrendSvg({ points }: { points: TrendPoint[] }) {
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
-      </svg>
+      {/* One marker per day, so the reader can count real observations rather
+          than infer them from the shape of a stroke. */}
+      {coords.map((c, i) => (
+        <circle
+          key={i}
+          cx={c.x}
+          cy={c.y}
+          r={pointRadius}
+          className="fill-accent"
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </svg>
+    </div>
+  )
+}
+
+/**
+ * The stored figures, day by day.
+ *
+ * A line is the wrong shape for three points and actively misleading for a
+ * running total, so the numbers a reader actually needs are printed. This
+ * deliberately receives EVERY day the source reported a date for -- not the
+ * null-filtered series -- because a day with no value is information: it
+ * appears as a dash, which says "the collector ran and Instantly reported
+ * nothing", rather than silently vanishing.
+ */
+function DailyBreakdown({ days }: { days: TrendPoint[] }) {
+  if (days.length === CHART_GEOMETRY.zero) return null
+  return (
+    <div data-testid="trend-breakdown" className="mt-3 border-t border-line-soft pt-3">
+      <SectionLabel>{COPY.trendBreakdownTitle}</SectionLabel>
+      <div data-tabular="true" className="mt-1">
+        <div className="flex justify-between gap-4 text-[11px] font-medium uppercase tracking-[0.06em] text-ink-muted">
+          <span>{COPY.trendBreakdownDay}</span>
+          <span className="text-right">{COPY.trendBreakdownSent}</span>
+        </div>
+        {days.map((p) => (
+          <div
+            key={p.day}
+            className="flex justify-between gap-4 border-b border-line-soft py-1 text-[12px] last:border-b-0"
+          >
+            <span className="text-ink-faint">{p.day}</span>
+            <span className="text-ink">
+              {isUnavailable(p.value) ? <Unavailable /> : <Figure>{formatCount(p.value)}</Figure>}
+            </span>
+          </div>
+        ))}
       </div>
+    </div>
   )
 }
 
@@ -119,12 +184,22 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
   const min = values.length > 0 ? Math.min(...values) : CHART_GEOMETRY.zero
   const max = values.length > 0 ? Math.max(...values) : CHART_GEOMETRY.zero
   const change = last?.value !== null && first?.value !== null && last && first ? last.value - first.value : CHART_GEOMETRY.zero
+  // Every day reporting the same figure is a property of the source -- a
+  // campaign-to-date total that has stopped moving -- and not an absence of
+  // data. The two are worth different words on screen. `>=`, not `>`: three
+  // identical days is the smallest series that can say this at all, and it is
+  // exactly the series the account actually has.
+  const isFlat = points.length >= CHART_GEOMETRY.minimumFlatPoints && min === max
+  // The table shows every dated day, including ones the line drops for having
+  // no value -- a missing day is a reported gap, and hiding it would be the
+  // same sin as zero-filling it.
+  const datedDays = series.filter((p) => !isUnavailable(p.day))
 
   return (
     <Card testId="trend-chart" className="px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <SectionLabel>{label}</SectionLabel>
-        {points.length > 1 ? (
+        <SectionLabel>{isFlat ? COPY.trendCumulativeLabel : label}</SectionLabel>
+        {points.length > 1 && !isFlat ? (
           <span className="text-[11px] text-ink-faint">
             <Figure>{formatCount(last.value)}</Figure>{' '}
             {change >= CHART_GEOMETRY.zero ? '+' : ''}{formatCount(change)} vs first day
@@ -162,24 +237,34 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
         // A single day is a fact, not a trend. Drawing a line here would
         // invent a slope.
         <div className="mt-3 border-t border-line-soft pt-3">
-          <TrendSvg points={points} />
+          <TrendSvg points={points} isFlat={isFlat} />
           <div data-testid="trend-single" className="mt-1 text-[11px] text-ink-faint">
             One day collected &mdash; a trend needs at least two.
           </div>
         </div>
       ) : (
         <div className="mt-3 border-t border-line-soft pt-3">
-          <TrendSvg points={points} />
+          <TrendSvg points={points} isFlat={isFlat} />
+          {isFlat ? (
+            // The flat line is real data, not a rendering fault, so it is
+            // explained rather than apologised for. Without this sentence a
+            // reader has no way to tell a quiet account from a cumulative
+            // counter that has stopped moving.
+            <p data-testid="trend-cumulative-note" className="mt-1 text-[11px] text-ink-faint">
+              {COPY.trendCumulativeNote}
+            </p>
+          ) : null}
           <div className="mt-1 flex justify-between text-[11px] text-ink-faint">
             <span>{first.day}</span>
             <span>{last.day}</span>
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-ink-faint">
-            <span>Observed range: {formatCount(min)}–{formatCount(max)}</span>
+            <span>Observed range: {formatCount(min)}&ndash;{formatCount(max)}</span>
             <span>
               Latest: {isUnavailable(last.value) ? <Unavailable /> : <Figure>{formatCount(last.value)}</Figure>}
             </span>
           </div>
+          <DailyBreakdown days={datedDays} />
         </div>
       )}
     </Card>

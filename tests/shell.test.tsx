@@ -62,6 +62,18 @@ describe('KpiRow', () => {
     expect(screen.getByText('Emails sent')).toBeInTheDocument()
     expect(screen.getByText('Reply rate')).toBeInTheDocument()
   })
+
+  it('renders every metric with no show/hide control', () => {
+    // The On/Off toggles were generic dashboard chrome AND a way to hide a
+    // gap. A metric that is permanently unreported must stay on screen.
+    render(<KpiRow kpis={kpis} />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^(On|Off)$/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Filter metrics')).not.toBeInTheDocument()
+    for (const kpi of kpis) {
+      expect(screen.getByTestId(`kpi-${kpi.key}`)).toBeInTheDocument()
+    }
+  })
 })
 
 describe('CampaignTable', () => {
@@ -105,11 +117,27 @@ describe('CampaignTable', () => {
     expect(screen.getByText('Not reliable')).toBeInTheDocument()
   })
 
-  it('shows the autoresponder split so the reply rate is auditable', () => {
+  it('shows the autoresponder split in its own column so the reply rate is auditable', () => {
     render(<CampaignTable rows={rows} />)
     // 1357 human + 39 automatic must both be visible and distinct.
     expect(screen.getByTestId('replies-human-c1')).toHaveTextContent('1,357')
-    expect(screen.getByTestId('replies-auto-c1')).toHaveTextContent('39')
+    expect(screen.getByTestId('replies-auto-cell-c1')).toHaveTextContent('39')
+  })
+
+  it('does not append a "+N" chip to the human reply count', () => {
+    // The chip duplicated the Auto column and made one row print 39 twice.
+    render(<CampaignTable rows={rows} />)
+    expect(screen.queryByTestId('replies-auto-c1')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('replies-human-c1')).queryByText(/^\+/)).toBeNull()
+  })
+
+  it('keeps the autoresponder figure at phone width, where the column header is hidden', () => {
+    // Removing the chip must not remove the data: at 390px the split is the
+    // only thing making an implausible reply rate auditable.
+    render(<CampaignTable rows={rows} />)
+    const auto = screen.getByTestId('replies-auto-cell-c1')
+    expect(auto).toHaveTextContent('39')
+    expect(within(auto).queryByText('—')).not.toBeInTheDocument()
   })
 
   it('renders open rate as unavailable rather than 0.0%', () => {
@@ -185,6 +213,68 @@ describe('TrendChartArea', () => {
     render(<TrendChartArea series={points} label="Emails sent" />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     expect(screen.getByTestId('trend-point-count')).toHaveTextContent('3')
+  })
+
+  it('explains a flat series instead of implying sending stopped', () => {
+    // Instantly stores a campaign-to-date total, so three identical days are
+    // the counter standing still -- not a quiet account. Without this the flat
+    // line reads as a broken chart or as bad news.
+    const flat: TrendPoint[] = [
+      { day: '2026-09-28', value: 31893 },
+      { day: '2026-09-29', value: 31893 },
+      { day: '2026-09-30', value: 31893 },
+    ]
+    render(<TrendChartArea series={flat} label="Emails sent" />)
+    expect(screen.getByTestId('trend-cumulative-note')).toBeInTheDocument()
+    // A "+0 vs first day" delta on a running total is noise, not a result.
+    expect(screen.queryByText(/vs first day/)).not.toBeInTheDocument()
+  })
+
+  it('prints the stored figure for every day so the line is never the only source', () => {
+    const points: TrendPoint[] = [
+      { day: '2026-09-28', value: 100 },
+      { day: '2026-09-29', value: 140 },
+      { day: '2026-09-30', value: null },
+    ]
+    render(<TrendChartArea series={points} label="Emails sent" />)
+    const table = screen.getByTestId('trend-breakdown')
+    expect(within(table).getByText('2026-09-28')).toBeInTheDocument()
+    expect(within(table).getByText('140')).toBeInTheDocument()
+    // A day the source did not report is a dash, never a zero.
+    expect(within(table).getByText('—')).toBeInTheDocument()
+  })
+
+  it('does not claim a two-day repeat is a stalled counter', () => {
+    // Two points cannot distinguish "coincidence" from "not moving".
+    const twoDays: TrendPoint[] = [
+      { day: '2026-09-29', value: 500 },
+      { day: '2026-09-30', value: 500 },
+    ]
+    render(<TrendChartArea series={twoDays} label="Emails sent" />)
+    expect(screen.queryByTestId('trend-cumulative-note')).not.toBeInTheDocument()
+  })
+
+  it('draws one marker per stored day', () => {
+    const points: TrendPoint[] = [
+      { day: '2026-09-28', value: 100 },
+      { day: '2026-09-29', value: 140 },
+      { day: '2026-09-30', value: 120 },
+    ]
+    const { container } = render(<TrendChartArea series={points} label="Emails sent" />)
+    // Three observations should be countable without hovering the stroke.
+    expect(container.querySelectorAll('svg circle')).toHaveLength(3)
+  })
+
+  it('draws a single gridline for a flat series rather than stacking three', () => {
+    // max, min and their midpoint coincide when the series is flat, so three
+    // gridlines collapse onto one y and the chart shows a dashed line over itself.
+    const flat: TrendPoint[] = [
+      { day: '2026-09-28', value: 31893 },
+      { day: '2026-09-29', value: 31893 },
+      { day: '2026-09-30', value: 31893 },
+    ]
+    const { container } = render(<TrendChartArea series={flat} label="Emails sent" />)
+    expect(container.querySelectorAll('svg line')).toHaveLength(1)
   })
 
   it('renders an empty-history first run as a real state, not a crash', () => {

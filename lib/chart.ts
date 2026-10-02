@@ -45,6 +45,14 @@ export const CHART_GEOMETRY = {
   gridStrokeWidth: 0.75,
   gridDash: '2 4',
   gridLineCount: 3,
+  /**
+   * How many days must agree before the series is called flat.
+   *
+   * Two days reporting one figure is a single observation repeated, which is
+   * not yet evidence of a stalled counter. Three is the smallest series that
+   * can distinguish "not moving" from "coincidence".
+   */
+  minimumFlatPoints: 3,
   zero: 0,
 } as const
 
