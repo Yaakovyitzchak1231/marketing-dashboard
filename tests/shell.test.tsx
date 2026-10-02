@@ -500,11 +500,11 @@ describe('SenderHealthPanel', () => {
 describe('TrendChartArea', () => {
   it('renders a real trend with at least two points', () => {
     const points: TrendPoint[] = [
-      { day: '2026-09-28', value: 100 },
-      { day: '2026-09-29', value: 140 },
-      { day: '2026-09-30', value: 120 },
+      { day: '2026-09-28', emails_sent: 100, replies_human: 5, opportunities: 1 },
+      { day: '2026-09-29', emails_sent: 140, replies_human: 7, opportunities: 2 },
+      { day: '2026-09-30', emails_sent: 120, replies_human: 6, opportunities: 0 },
     ]
-    render(<TrendChartArea series={points} label="Emails sent" />)
+    render(<TrendChartArea series={points} />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     expect(screen.getByTestId('trend-point-count')).toHaveTextContent('3')
   })
@@ -573,13 +573,13 @@ describe('TrendChartArea', () => {
 
   it('renders an empty-history first run as a real state, not a crash', () => {
     // Bug 4: one day of history. An empty series must look intentional.
-    render(<TrendChartArea series={[]} label="Emails sent" />)
+    render(<TrendChartArea series={[]} />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     expect(screen.getByTestId('trend-empty')).toBeInTheDocument()
   })
 
   it('renders a single day of history without pretending to be a trend', () => {
-    render(<TrendChartArea series={[{ day: '2026-09-30', value: 120 }]} label="Emails sent" />)
+    render(<TrendChartArea series={[{ day: '2026-09-30', emails_sent: 120, replies_human: 6, opportunities: 0 }]} />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     // A single point is not a trend and must be labelled as such.
     expect(screen.getByTestId('trend-single')).toBeInTheDocument()

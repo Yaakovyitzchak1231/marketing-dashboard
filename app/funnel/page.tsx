@@ -1,65 +1,10 @@
 import Link from 'next/link'
 import { getBaseUrl } from '@/lib/base-url'
 import { COPY } from '@/lib/copy'
-import { formatCount, formatRate } from '@/lib/format'
 import { PERFORMANCE_RANGE, PERFORMANCE_RANGE_LABEL } from '@/lib/range'
+import { FunnelTable, FunnelRow } from '@/components/funnel-manager'
 
 export const dynamic = 'force-dynamic'
-
-type FunnelRow = {
-  campaign_id?: string
-  campaign_name?: string
-  idea_id?: string
-  idea_name: string
-  contacted: number | null
-  replied: number | null
-  positive: number | null
-  meetings: number | null
-  customers: number | null
-  reply_rate: number | null
-  positive_rate: number | null
-  meeting_rate: number | null
-  close_rate: number | null
-}
-
-function FunnelTable({ rows, label }: { rows: FunnelRow[]; label: string }) {
-  if (rows.length === 0) {
-    return <p className="text-[13px] text-ink-faint">{COPY.funnel.noRows(label)}</p>
-  }
-  return (
-    <div className="overflow-x-auto rounded-card border border-line bg-surface shadow-card">
-      <table className="w-full min-w-[760px] text-[13px]">
-        <thead>
-          <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
-            <th className="px-4 py-2 font-medium">{label}</th>
-            <th className="px-4 py-2 text-right font-medium">Contacted</th>
-            <th className="px-4 py-2 text-right font-medium">Replied</th>
-            <th className="px-4 py-2 text-right font-medium">Opportunities</th>
-            <th className="px-4 py-2 text-right font-medium">Meetings</th>
-            <th className="px-4 py-2 text-right font-medium">Customers</th>
-            <th className="px-4 py-2 text-right font-medium">Reply %</th>
-            <th className="px-4 py-2 text-right font-medium">Opportunity %</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-line last:border-0">
-              <td className="px-4 py-2 text-ink">{r.campaign_name ?? r.idea_name}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatCount(r.contacted)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatCount(r.replied)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatCount(r.positive)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatCount(r.meetings)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatCount(r.customers)}</td>
-              {/* Rates are formatted in lib/format.ts; never recomputed with * 100 here. */}
-              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatRate(r.reply_rate)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatRate(r.positive_rate)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 export default async function FunnelPage() {
   // Origin for the server-side self-fetch. The fallback port lives in

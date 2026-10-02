@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useApi } from '@/components/use-api'
 import { SUM_START, MIN_AMOUNT_USD, CURRENCY_PRECISION } from '@/lib/format'
 import { COPY } from '@/lib/copy'
+import { exportToCsv } from '@/lib/csv'
 
 type Cost = {
   id: string
@@ -85,6 +86,22 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
     }
   }
 
+  const handleExportCosts = () => {
+    const headers = ['Date', 'Category', 'Idea', 'Amount USD', 'Notes']
+    const data = costs.map(c => {
+      const cat = CATEGORIES.find(cat => cat.id === c.category)
+      const linkedIdea = c.entity_ref ? ideas.find(i => i.id === c.entity_ref) : null
+      return [
+        c.spent_at ? c.spent_at.split('T')[0] : '—',
+        cat ? cat.label : c.category,
+        linkedIdea ? linkedIdea.name : c.entity_ref,
+        c.amount_usd,
+        c.notes
+      ]
+    })
+    exportToCsv('costs', headers, data)
+  }
+
   const total = costs.reduce((t, c) => t + Number(c.amount_usd), SUM_START)
 
   return (
@@ -151,13 +168,24 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
       </section>
 
       <section>
-        <div className="mb-3 flex items-baseline justify-between">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
             History
           </h2>
-          <p className="text-[13px] tabular-nums text-ink">
-            Total <span className="font-medium">${total.toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })}</span>
-          </p>
+          <div className="flex items-center gap-4 text-[13px] text-ink">
+            {costs.length > 0 && (
+              <button
+                type="button"
+                onClick={handleExportCosts}
+                className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2"
+              >
+                Export CSV
+              </button>
+            )}
+            <p className="tabular-nums">
+              Total <span className="font-medium">${total.toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })}</span>
+            </p>
+          </div>
         </div>
         {costs.length === 0 ? (
           <p className="text-[13px] text-ink-faint">No costs recorded yet.</p>
