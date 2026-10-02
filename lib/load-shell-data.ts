@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import type {
   Overview,
   CampaignList,
@@ -100,6 +101,26 @@ async function requestCookieHeader(): Promise<string | null> {
   }
 }
 
+
+/**
+ * Cached individual loaders to prevent duplicate fetches when loadShellData is
+ * called multiple times in a single RSC render pass (e.g. loadShellData(null)
+ * and loadShellData(firstCampaignId)).
+ */
+const getOverview = cache(async (base: string, cookie: string | null) =>
+  getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview, cookie)
+)
+
+const getCampaigns = cache(async (base: string, cookie: string | null) =>
+  getJson<CampaignList>(`${base}/api/campaigns?range=${DEFAULT_RANGE}`, SHAPES.campaigns, cookie)
+)
+
+const getTrend = cache(async (base: string, cookie: string | null, campaignId: string | null) =>
+  campaignId
+    ? getJson<CampaignTrend>(`${base}/api/campaigns/${campaignId}/trend?range=30d`, SHAPES.trend, cookie)
+    : Promise.resolve(null)
+)
+
 export async function loadShellData(
   campaignId: string | null,
   suppliedFreshness?: Freshness,
@@ -108,15 +129,9 @@ export async function loadShellData(
   const cookie = await requestCookieHeader()
 
   const [overview, campaigns, trendResult] = await Promise.all([
-    getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview, cookie),
-    getJson<CampaignList>(`${base}/api/campaigns?range=${DEFAULT_RANGE}`, SHAPES.campaigns, cookie),
-    campaignId
-      ? getJson<CampaignTrend>(
-          `${base}/api/campaigns/${campaignId}/trend?range=30d`,
-          SHAPES.trend,
-          cookie,
-        )
-      : Promise.resolve(null),
+    getOverview(base, cookie),
+    getCampaigns(base, cookie),
+    getTrend(base, cookie, campaignId),
   ])
 
   // The trend was requested and came back empty -> that is a failed request,
