@@ -126,7 +126,11 @@ export function KpiRow({ kpis }: { kpis: Kpi[] }) {
                 aria-pressed={active}
                 title={kpi.label}
                 onClick={() => toggleMetric(kpi.key)}
-                className={`rounded border px-2 py-1 text-[11px] ${active ? 'border-ink-muted text-ink' : 'border-line text-ink-faint'}`}
+                className={`rounded border px-2 py-1 text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted ${
+                  active
+                    ? 'border-ink-muted text-ink'
+                    : 'border-line text-ink-faint hover:border-ink-muted/50 hover:text-ink-muted'
+                }`}
               >
                 <span aria-hidden="true">{active ? 'On' : 'Off'}</span>
               </button>

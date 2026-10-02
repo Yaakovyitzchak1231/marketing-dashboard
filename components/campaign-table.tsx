@@ -158,7 +158,7 @@ export function CampaignTable({
               <option value="reply_rate">Reply rate</option>
               <option value="open_rate">Open rate</option>
             </select>
-            <button type="button" onClick={() => setDirection((value) => value === 'asc' ? 'desc' : 'asc')} className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft" aria-label={`Sort ${direction === 'asc' ? 'descending' : 'ascending'}`}>
+            <button type="button" onClick={() => setDirection((value) => value === 'asc' ? 'desc' : 'asc')} className="h-8 rounded border border-line px-2.5 text-ink transition-colors hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" aria-label={`Sort ${direction === 'asc' ? 'descending' : 'ascending'}`}>
               {direction === 'asc' ? 'Ascending' : 'Descending'}
             </button>
           </div>
