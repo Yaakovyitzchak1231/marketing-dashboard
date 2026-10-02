@@ -32,6 +32,39 @@ export const COPY = {
   metricUnavailable: 'Not reported by Instantly',
   replyRateUnreliable: 'Reply rate is unreliable. Autoresponders are included in this count.',
   trendEmpty: 'Collecting history',
+
+  /**
+   * The trend card's own explanation of why the line is flat.
+   *
+   * Instantly reports `emails_sent_count` as a campaign-to-date total, and the
+   * collector stores that same total on each day it runs. Charting it as a
+   * per-day series therefore draws a flat line whose slope is always zero --
+   * not because sending stopped, but because a running total barely moves.
+   * Saying so is the honest reading; leaving a reader to conclude the account
+   * went quiet would be a claim the data does not support.
+   */
+  trendCumulativeNote:
+    'Running total, not per-day. Instantly reports each campaign\'s emails-sent-to-date, so this line stays flat by construction. The day-by-day figures are below.',
+
+  /** The header for the per-day readout that accompanies the chart. */
+  trendBreakdownTitle: 'Daily figures',
+
+  /** Column heading for the day itself. */
+  trendBreakdownDay: 'Day',
+
+  /** Column heading for the stored running total. */
+  trendBreakdownSent: 'Sent to date',
+
+  /** Column heading for the human replies recorded on that day. */
+  trendBreakdownReplies: 'Replies',
+
+  /**
+   * What the card title says about what the series is.
+   *
+   * "Emails sent" on its own reads as a per-day count and is what made the flat
+   * line look like a bug. The qualifier is the correction.
+   */
+  trendCumulativeLabel: 'Emails sent (running total)',
   staleDataOk: (lastCollectedAt: string) => `Collected ${lastCollectedAt}`,
   staleDataFailed: 'Last collection failed',
   /**
