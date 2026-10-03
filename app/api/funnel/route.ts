@@ -17,11 +17,12 @@ type Row = {
   opportunities: number | null
 }
 
-function sum(values: (number | null)[]): number | null {
+function sumCol<T>(rows: T[], col: keyof T): number | null {
   let total = 0
   let seen = false
-  for (const v of values) {
-    if (v !== null && v !== undefined) {
+  for (const r of rows) {
+    const v = r[col]
+    if (typeof v === 'number') {
       total += v
       seen = true
     }
@@ -101,14 +102,14 @@ export async function GET(request: NextRequest) {
 
   const campaignFunnels = (campaigns ?? []).map((c: Record<string, unknown>) => {
     const rows = byCampaign.get(c.id as string) ?? []
-    const contacted = sum(rows.map(r => r.emails_sent))
-    const replied = sum(rows.map(r => r.replies_human))
+    const contacted = sumCol(rows, 'emails_sent')
+    const replied = sumCol(rows, 'replies_human')
     // The schema has no positive_replies / meetings_booked / customers_won
     // columns. `opportunities` is the nearest recorded stage, so it is
     // reported as the positive stage; meetings and customers stay null
     // because no collector ever wrote them. Reporting 0 would assert that
     // nobody ever converted, which the database does not say.
-    const positive = sum(rows.map(r => r.opportunities))
+    const positive = sumCol(rows, 'opportunities')
     const meetings = null
     const customers = null
     return {
@@ -145,9 +146,9 @@ export async function GET(request: NextRequest) {
     byIdea.set(iid, entry)
   }
   const ideaFunnels = [...byIdea.entries()].map(([idea_id, { name, rows }]) => {
-    const contacted = sum(rows.map(r => r.emails_sent))
-    const replied = sum(rows.map(r => r.replies_human))
-    const positive = sum(rows.map(r => r.opportunities))
+    const contacted = sumCol(rows, 'emails_sent')
+    const replied = sumCol(rows, 'replies_human')
+    const positive = sumCol(rows, 'opportunities')
     // Same reasoning as the per-campaign rollup above: no collector has ever
     // written a meeting or customer row, so those stages are unknown.
     const meetings = null
