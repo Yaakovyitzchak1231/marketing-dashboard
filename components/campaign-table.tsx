@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { formatCount, formatRate, formatDate, rateIsPlausible, isUnavailable } from '@/lib/format'
 import { Card, SectionLabel, Figure, Unavailable } from '@/components/primitives'
 import { COPY } from '@/lib/copy'
@@ -211,7 +212,72 @@ function hasUnreliableRate(rows: CampaignRow[]): boolean {
   return rows.some((r) => rateIsImplausible(r.reply_rate) || rateIsImplausible(r.bounce_rate))
 }
 
-export function CampaignTable({
+/**
+ * Download the rows the reader can currently see, as CSV.
+ *
+ * A cell is quoted when it contains a comma, quote, or newline, and quotes are
+ * doubled inside. A leading `=`, `+`, `-` or `@` is prefixed with a single
+ * quote so a spreadsheet treats the cell as text: a campaign name is
+ * attacker-influenced text from the mail provider, and an unescaped one becomes
+ * a formula the moment Jacob opens the file.
+ *
+ * An absent metric is written as an EMPTY CELL, never as 0. `null` means the
+ * source did not report the figure, and a 0 in the export would assert a
+ * measurement nobody made -- the same rule the screen follows.
+ */
+function downloadCsv(rows: CampaignRow[]): void {
+  const cell = (value: string | number | null): string => {
+    if (value === null || value === undefined) return ''
+    let str = String(value)
+    if (/^[=+\-@]/.test(str)) str = `'${str}`
+    if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`
+    return str
+  }
+
+  const headers = [
+    'Campaign',
+    'Status',
+    'Sent',
+    'Replies (human)',
+    'Auto replies',
+    'Reply rate',
+    'Bounce rate',
+    'Open rate',
+  ]
+  const lines = [headers.join(',')]
+  for (const row of rows) {
+    lines.push(
+      [
+        cell(row.name),
+        cell(row.status),
+        cell(row.emails_sent),
+        cell(row.replies_human),
+        cell(row.replies_autoresponder),
+        cell(row.reply_rate),
+        cell(row.bounce_rate),
+        cell(row.open_rate),
+      ].join(','),
+    )
+  }
+
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.setAttribute('href', url)
+  link.setAttribute('download', `campaigns-${new Date().toISOString().slice(0, 10)}.csv`)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+/** True when a `?dir=` value from the URL is a direction we have. */
+function isSortDirection(value: string | null): value is SortDirection {
+  return value === 'asc' || value === 'desc'
+}
+
+function CampaignTableInner({
   rows,
   total,
   rowLimit,
@@ -230,10 +296,49 @@ export function CampaignTable({
    */
   rowLimit?: number | null
 }) {
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('all')
-  const [sort, setSort] = useState<SortKey>('name')
-  const [direction, setDirection] = useState<SortDirection>('asc')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Seeded from the URL, and every value is VALIDATED rather than cast. A
+  // shared link is untrusted input: an `as any` here let `?dir=sideways`
+  // render a direction the type says cannot exist. Each seed falls back to the
+  // same default the control would show with no URL at all, so a malformed link
+  // degrades to the default view instead of to a wrong one.
+  const [query, setQuery] = useState(() => searchParams?.get('q') ?? '')
+  const [status, setStatus] = useState(() => {
+    const fromUrl = searchParams?.get('status')
+    return fromUrl && fromUrl !== 'all' ? fromUrl : 'all'
+  })
+  const [sort, setSort] = useState<SortKey>(() => {
+    const fromUrl = searchParams?.get('sort')
+    return isSortKey(fromUrl ?? '') ? (fromUrl as SortKey) : 'name'
+  })
+  const [direction, setDirection] = useState<SortDirection>(() => {
+    const fromUrl = searchParams?.get('dir')
+    return isSortDirection(fromUrl) ? fromUrl : 'asc'
+  })
+
+  // Write the four params back, and PRESERVE every other param already on the
+  // URL. An earlier draft built a fresh URLSearchParams from these four alone
+  // and called router.replace with it, which silently deleted `?range=30d`
+  // (verified: a URL carrying range=30d came back as "/?"). The range selector
+  // owns `range`; this table owns only its own four keys.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams?.toString() ?? '')
+    const setOrDelete = (key: string, value: string, isDefault: boolean) => {
+      if (isDefault) next.delete(key)
+      else next.set(key, value)
+    }
+    setOrDelete('q', query, query === '')
+    setOrDelete('status', status, status === 'all')
+    setOrDelete('sort', sort, sort === 'name')
+    setOrDelete('dir', direction, direction === 'asc')
+
+    const queryString = next.toString()
+    if (queryString === (searchParams?.toString() ?? '')) return
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false })
+  }, [direction, pathname, query, router, searchParams, sort, status])
 
   const statuses = useMemo(
     () =>
@@ -296,6 +401,12 @@ export function CampaignTable({
    * truncated list with no filter applied.
    */
   const showCount = !isEmpty && !(notice !== null && !isFiltered)
+  /**
+   * The export covers the rows ON SCREEN, not the rows loaded. A reader who
+   * filtered to one campaign and exported 148 rows would be handed a file that
+   * contradicts the table above the button.
+   */
+  const exportVisible = useCallback(() => downloadCsv(filteredRows), [filteredRows])
 
   return (
     <Card testId="campaign-table" className="overflow-hidden">
@@ -314,6 +425,16 @@ export function CampaignTable({
                 />
               ) : null}
             </div>
+          ) : null}
+          {rows.length > 0 ? (
+            <button
+              type="button"
+              onClick={exportVisible}
+              data-testid="campaign-table-export"
+              className="text-[11px] text-ink-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+            >
+              {COPY.campaigns.exportCsv}
+            </button>
           ) : null}
         </div>
         {!isEmpty ? (
@@ -473,5 +594,32 @@ export function CampaignTable({
         </>
       )}
     </Card>
+  )
+}
+
+/**
+ * `useSearchParams` opts a client component out of static rendering, so the
+ * table needs a Suspense boundary above it or the whole route de-opts to
+ * client-side rendering with nothing to wait on. The fallback states the same
+ * thing the empty state does -- the rows are still coming -- rather than
+ * implying the list is empty, which is a claim about data we have not read yet.
+ */
+export function CampaignTable(props: {
+  rows: CampaignRow[]
+  total?: number | null
+  rowLimit?: number | null
+}) {
+  return (
+    <Suspense
+      fallback={
+        <Card testId="campaign-table" className="overflow-hidden">
+          <div className="px-5 py-10 text-center text-[13px] text-ink-faint" data-testid="campaign-table-loading">
+            {COPY.campaigns.loading}
+          </div>
+        </Card>
+      }
+    >
+      <CampaignTableInner {...props} />
+    </Suspense>
   )
 }

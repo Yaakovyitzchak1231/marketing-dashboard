@@ -186,6 +186,17 @@ export const COPY = {
      */
     countOf: 'of',
     countShown: 'shown',
+    /**
+     * The CSV button, and the words its Suspense fallback uses.
+     *
+     * `exportCsv` names the SCOPE, not just the format: the file holds the rows
+     * on screen, which is a claim a reader will check against the table above
+     * the button. `loading` deliberately does not say "no campaigns" -- the
+     * rows have not been read yet, and an empty table would be a claim about
+     * data nobody has fetched.
+     */
+    exportCsv: 'Export visible CSV',
+    loading: 'Loading campaigns…',
   },
 
   costManager: {
