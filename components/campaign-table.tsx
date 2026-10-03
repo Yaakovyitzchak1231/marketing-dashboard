@@ -144,15 +144,15 @@ export function CampaignTable({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search campaigns"
-              className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-ink-muted"
+              className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
             <label className="sr-only" htmlFor="campaign-status">Filter by status</label>
-            <select id="campaign-status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-8 rounded border border-line bg-surface px-2 text-ink">
+            <select id="campaign-status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-8 rounded border border-line bg-surface px-2 text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted">
               <option value="all">All statuses</option>
               {statuses.map((value) => <option key={value} value={value as string}>{value}</option>)}
             </select>
             <label className="sr-only" htmlFor="campaign-sort">Sort campaigns</label>
-            <select id="campaign-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-8 rounded border border-line bg-surface px-2 text-ink">
+            <select id="campaign-sort" value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="h-8 rounded border border-line bg-surface px-2 text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted">
               <option value="name">Name</option>
               <option value="sent">Sent</option>
               <option value="reply_rate">Reply rate</option>
