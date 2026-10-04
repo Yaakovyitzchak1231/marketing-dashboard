@@ -144,7 +144,7 @@ export function CampaignTable({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search campaigns"
-              className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none placeholder:text-ink-faint focus:border-ink-muted"
+              className="h-8 min-w-48 flex-1 rounded border border-line bg-transparent px-2.5 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted placeholder:text-ink-faint focus:border-ink-muted"
             />
             <label className="sr-only" htmlFor="campaign-status">Filter by status</label>
             <select id="campaign-status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-8 rounded border border-line bg-surface px-2 text-ink">

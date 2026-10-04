@@ -90,7 +90,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
   return (
     <div className="space-y-8">
       {error && (
-        <div className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
@@ -103,7 +103,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
               onChange={e => setAmount(e.target.value)}
               inputMode="decimal"
               placeholder={COPY.costManager.amountPlaceholder}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] tabular-nums text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] tabular-nums text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-ink-muted"
             />
           </label>
           <label>
@@ -111,7 +111,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-ink-muted"
             >
               {CATEGORIES.map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -123,7 +123,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
             <select
               value={ideaId}
               onChange={e => setIdeaId(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-ink-muted"
             >
               <option value="">Unlinked</option>
               {ideas.map(i => (
@@ -137,7 +137,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="What was this for?"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-ink-muted"
             />
           </label>
           <button
