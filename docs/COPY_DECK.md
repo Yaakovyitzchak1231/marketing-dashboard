@@ -73,6 +73,7 @@ Actors are passed through. A human is an email. An agent is `agent:<profile>`, f
 ### Heading
 
 - Title: **Shared workspace**
+- Header link back: **Back to dashboard**
 - What it is: **Same live artifact. One current version.**
 - Who is in it: **The owner, and agents that authenticate as themselves.**
 - What it costs: **Nothing. Same dashboard, same data.**
@@ -96,6 +97,7 @@ A failed load is **Something went wrong. Try again.** It is not **No revisions y
 
 ### Approval and ownership
 
+- Card heading: **Approvals**
 - **Owner: <email>**
 - Missing owner: **Owner not recorded**
 - **Last changed by <actor>**
