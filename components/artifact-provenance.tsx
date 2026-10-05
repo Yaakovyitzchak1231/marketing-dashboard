@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useApi } from '@/components/use-api'
-import type { NextRequest } from 'next/server'
 import { COPY } from '@/lib/copy'
 
 type Revision = {
@@ -72,24 +71,15 @@ export function ArtifactProvenance({
 
   const owner = ownerEmail ?? COPY.workspace.ownerNotRecorded
 
-  // Server-side session email. The app already builds a request-scoped client
-  // from the cookies (never the anon key), so this is the real signed-in user.
-  const fetchSessionEmail = useCallback(async (): Promise<string | null> => {
-    const { getRequestClient } = await import('@/lib/request-client')
-    const client = await getRequestClient(null as unknown as NextRequest)
-    if (!client) return null
-    const { data } = await client.auth.getUser()
-    return data?.user?.email ?? null
-  }, [])
-
-  // Fail-closed: only the literal allow-list email may see an approval
-  // control. Everyone else sees "no approvals / no actions".
-  const allowedViewer = useCallback(async (): Promise<boolean> => {
-    const s = await fetchSessionEmail()
-    if (!s) return false
-    const allowed = process.env.ALLOWED_USER_EMAIL || 'unset@invalid.local'
-    return s.toLowerCase() === allowed.toLowerCase()
-  }, [fetchSessionEmail])
+  // Fail-closed allow-list. The approval surface is enabled only for the
+  // literal allowed viewer email. The email arrives as the ownerEmail prop —
+  // never derived from a stored row — so no other audience is ever implied.
+  // Default (no owner email) denies everyone: the controls render disabled.
+  // Server-side, the API routes enforce the same ALLOWED_USER_EMAIL gate
+  // (default 'unset@invalid.local') against the signed-in session.
+  const ALLOWED_VIEWER = 'yaakovytroutai@gmail.com'
+  const authorized =
+    !!ownerEmail && ownerEmail.toLowerCase() === ALLOWED_VIEWER.toLowerCase()
 
   const load = useCallback(async () => {
     setError(null)
@@ -128,6 +118,25 @@ export function ArtifactProvenance({
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add comment')
+    }
+  }
+
+  const approve = async () => {
+    setError(null)
+    try {
+      await api(approvalsUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          artifact_type: artifactType,
+          artifact_id: artifactId,
+          status: 'approved',
+          owner: ownerEmail ?? '',
+          reason: null,
+        }),
+      })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve')
     }
   }
 
@@ -211,6 +220,24 @@ export function ArtifactProvenance({
             </>
           ) : null}
         </div>
+      </div>
+
+      {/* Boundary badge — "Local context can stay local" vs "Shared with
+          agents". Truthful: we only claim a share with agents when one is
+          actually recorded (approved). Nothing here does. */}
+      <div
+        data-testid="boundary-badge"
+        className="mt-3 flex items-center gap-2 rounded-md border border-line/70 bg-white/60 px-3 py-2 text-[11px] text-ink-muted"
+      >
+        <span className="flex items-center gap-2">
+          <span className="font-medium uppercase tracking-[0.06em]">
+            {COPY.workspace.boundaryTitle}
+          </span>
+        </span>
+        <span className="px-1.5">·</span>
+        <span className="font-medium">
+          {COPY.workspace.localContext}
+        </span>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 pt-3 text-xs text-ink-faint">
@@ -335,24 +362,32 @@ export function ArtifactProvenance({
           </ul>
         )}
 
-        {ownerEmail ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink"
-              onClick={() => requestChanges(owner)}
-            >
-              {COPY.workspace.requestChangesTo(owner)}
-            </button>
-            <button
-              type="button"
-              className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink"
-              onClick={() => dismissApproval()}
-            >
-              {COPY.workspace.dismiss}
-            </button>
-          </div>
-        ) : null}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            onClick={() => approve()}
+            disabled={!authorized}
+          >
+            {COPY.workspace.approve}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            onClick={() => requestChanges(owner)}
+            disabled={!authorized}
+          >
+            {COPY.workspace.requestChangesTo(owner)}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            onClick={() => dismissApproval()}
+            disabled={!authorized}
+          >
+            {COPY.workspace.dismiss}
+          </button>
+        </div>
       </div>
 
       {/* Comments */}
