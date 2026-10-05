@@ -1,4 +1,4 @@
--- 007_collaboration_store.sql
+-- 008_collaboration_store.sql
 --
 -- Approvals, comments, and restore/pin checkpoints. Read-only provenance
 -- surface on the shared workspace: same single-owner RLS gate, no anon
