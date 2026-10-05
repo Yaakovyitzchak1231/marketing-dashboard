@@ -1,4 +1,5 @@
 import { AngleManager } from '@/components/angle-manager'
+import { ArtifactProvenance } from '@/components/artifact-provenance'
 import { getBaseUrl } from '@/lib/base-url'
 import { PERFORMANCE_RANGE } from '@/lib/range'
 
@@ -49,6 +50,17 @@ export default async function AnglesPage() {
         initialAngles={angles ?? []}
         initialPerformance={performance?.angles ?? []}
         campaigns={(campaigns?.campaigns ?? []) as { id: string; name: string }[]}
+      />
+
+      {/* Shared workspace provenance on the same live artifact. */}
+      <ArtifactProvenance
+        ownerEmail={undefined}
+        revisionsUrl={`${base}/api/revisions`}
+        approvalsUrl={`${base}/api/approvals`}
+        commentsUrl={`${base}/api/comments`}
+        artifactType="angles"
+        artifactId=""
+        rowName="Angle"
       />
     </main>
   )
