@@ -11,6 +11,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockClient = {
   from: vi.fn(),
+  auth: {
+    getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
+  },
 }
 
 vi.mock('@/lib/request-client', () => ({
@@ -19,10 +22,19 @@ vi.mock('@/lib/request-client', () => ({
 
 function chain(result: { data?: unknown; error?: unknown }) {
   const built: Record<string, unknown> = {}
+  const finish = () => Promise.resolve(result)
   built.eq = vi.fn(() => built)
-  built.select = vi.fn(() => Promise.resolve(result))
+  built.select = vi.fn(() => built)
   built.delete = vi.fn(() => built)
-  built.single = vi.fn(() => Promise.resolve(result))
+  built.insert = vi.fn(() => built)
+  built.update = vi.fn(() => built)
+  built.upsert = vi.fn(() => Promise.resolve({ data: null, error: null }))
+  built.single = vi.fn(() => finish())
+  built.maybeSingle = vi.fn(() => finish())
+  built.then = (
+    resolve: (value: unknown) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => finish().then(resolve, reject)
   return built
 }
 

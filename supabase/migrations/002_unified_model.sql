@@ -1,5 +1,13 @@
 -- Unified data model v2: ideas, channels, angles, leads, verification,
 -- domains, inboxes, costs.
+--
+-- Sequence choice: 001 creates tables -> 002 audits the three editable objects
+-- (ideas, costs, angles). Live history 001 -> 002 -> 003 -> 004 -> 005 is
+-- frozen and must keep applying cleanly. Audit columns are appended with
+-- ALTER TABLE ... ADD COLUMN IF NOT EXISTS. A database that already applied
+-- an earlier copy of this file does not re-run it; 006_revision_history.sql
+-- repeats the same ALTERs, adds the revisions table, and backfills.
+--
 -- Follows the house rules: NULL means "the source did not say", 0 is a
 -- measurement; rates are recomputed from raw counts, never stored; natural-key
 -- upserts; RLS on, session-scoped reads (mirrors the t10-deploy RLS setup).
@@ -188,3 +196,27 @@ END $$;
 CREATE POLICY ideas_write ON ideas FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY costs_write ON costs FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE POLICY angles_write ON angles FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- ---------------------------------------------------------------------------
+-- Audit columns on the three editable objects only (ideas, costs, angles).
+-- Agents edit these, not the collector tables. NULL until a write or the
+-- one-time backfill says otherwise — no default actor, no invented message.
+-- Idempotent so a fresh replay of 002 and the repeat in 006 both apply.
+-- ---------------------------------------------------------------------------
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS revision_id uuid;
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS revision_number int;
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS change_kind text;
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS change_message text;
+ALTER TABLE ideas ADD COLUMN IF NOT EXISTS actor text;
+
+ALTER TABLE costs ADD COLUMN IF NOT EXISTS revision_id uuid;
+ALTER TABLE costs ADD COLUMN IF NOT EXISTS revision_number int;
+ALTER TABLE costs ADD COLUMN IF NOT EXISTS change_kind text;
+ALTER TABLE costs ADD COLUMN IF NOT EXISTS change_message text;
+ALTER TABLE costs ADD COLUMN IF NOT EXISTS actor text;
+
+ALTER TABLE angles ADD COLUMN IF NOT EXISTS revision_id uuid;
+ALTER TABLE angles ADD COLUMN IF NOT EXISTS revision_number int;
+ALTER TABLE angles ADD COLUMN IF NOT EXISTS change_kind text;
+ALTER TABLE angles ADD COLUMN IF NOT EXISTS change_message text;
+ALTER TABLE angles ADD COLUMN IF NOT EXISTS actor text;
