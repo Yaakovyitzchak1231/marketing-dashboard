@@ -1,0 +1,96 @@
+{
+  "viewer": {
+    "id": "reviewer@fixture.invalid",
+    "authorized": true
+  },
+  "artifacts": [
+    {
+      "id": "art-opening",
+      "title": "Opening line",
+      "owner": "agent:build-copy",
+      "lastChangeAt": "2026-10-04T18:12:00Z",
+      "lastActor": "agent:build-copy",
+      "boundary": "local",
+      "pending": {
+        "id": "chg-opening",
+        "summary": "Rewrote the first sentence so it does not claim a result we have not measured.",
+        "writer": "agent:build-copy",
+        "at": "2026-10-04T18:12:00Z",
+        "status": "pending"
+      },
+      "rows": [
+        {
+          "id": "row-opening",
+          "label": "Opening",
+          "text": "We write to jewelry retailers who already buy from a wholesaler."
+        },
+        {
+          "id": "row-ask",
+          "label": "Ask",
+          "text": "Worth a look this week, or should we leave it?"
+        }
+      ],
+      "comments": [
+        {
+          "id": "note-opening",
+          "rowId": "row-opening",
+          "parentId": null,
+          "author": "reviewer@fixture.invalid",
+          "body": "This line states who it is for. It does not state a result.",
+          "at": "2026-10-04T19:01:00Z"
+        },
+        {
+          "id": "note-opening-reply",
+          "rowId": "row-opening",
+          "parentId": "note-opening",
+          "author": "agent:build-copy",
+          "body": "Agreed. The measured line stays out of the draft.",
+          "at": "2026-10-04T19:06:00Z"
+        }
+      ],
+      "actions": []
+    },
+    {
+      "id": "art-self",
+      "title": "Follow-up line",
+      "owner": "agent:build-ui",
+      "lastChangeAt": "2026-10-04T16:40:00Z",
+      "lastActor": "reviewer@fixture.invalid",
+      "boundary": "local",
+      "pending": {
+        "id": "chg-self",
+        "summary": "Shortened the follow-up so it does not repeat the opening.",
+        "writer": "reviewer@fixture.invalid",
+        "at": "2026-10-04T16:40:00Z",
+        "status": "pending"
+      },
+      "rows": [
+        {
+          "id": "row-followup",
+          "label": "Follow-up",
+          "text": "Leaving this here in case the first note was buried."
+        }
+      ],
+      "comments": [],
+      "actions": []
+    },
+    {
+      "id": "art-unrecorded",
+      "title": "Untitled draft",
+      "owner": null,
+      "lastChangeAt": null,
+      "lastActor": null,
+      "boundary": "local",
+      "pending": null,
+      "rows": [
+        {
+          "id": "row-blank",
+          "label": "Body",
+          "text": "No owner was recorded for this draft."
+        }
+      ],
+      "comments": [],
+      "actions": []
+    }
+  ]
+}

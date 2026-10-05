@@ -1,7 +1,10 @@
 # Copy Deck
 
-Use these strings for the seven honest dashboard states listed in the copy task.
+Sections 1–7 are the seven honest dashboard states. Section 8 is the shared workspace.
 All copy is plain, direct, and specific. No hype. No invented numbers.
+
+Runtime source is `lib/copy.ts`. This deck is the review copy of those strings.
+Components import `COPY` and do not retype the words.
 
 ## 1. Metric unavailable
 
@@ -58,3 +61,74 @@ Use when a fetch fails.
 - Error text: **Something went wrong. Try again.**
 
 This gives one action without overpromising help text.
+
+## 8. Shared workspace
+
+Use for the shared-workspace section. Import `COPY.workspace`. Do not retype these strings in a component.
+
+The section is the same dashboard and the same data. It does not add a price, a second artifact, or a public link.
+
+Actors are passed through. A human is an email. An agent is `agent:<profile>`, for example `agent:build-data`. Never default an author. If the actor was not recorded, the UI says **Author not recorded**, not a dash and not a zero.
+
+### Heading
+
+- Title: **Shared workspace**
+- What it is: **Same live artifact. One current version.**
+- Who is in it: **The owner, and agents that authenticate as themselves.**
+- What it costs: **Nothing. Same dashboard, same data.**
+
+### Artifact and revisions
+
+- **Same live artifact**
+- **One current version**
+- **Change history**
+- **Revisions stay local unless shared**
+- **Restore this version**
+- Restore note: **Restore this version. The current version stays in change history.**
+- Saved by: **Saved by <actor or agent:build-data>**
+- Missing author: **Author not recorded**
+- Column labels: **Change**, **Note**, **When**
+- **Save** — **Save names the current version in change history.**
+- **Pin this version** — **Pin this version. The workspace opens it by default.**
+- Empty history: **No revisions yet**
+
+A failed load is **Something went wrong. Try again.** It is not **No revisions yet**. An empty list and a failed load are different facts.
+
+### Approval and ownership
+
+- **Owner: <email>**
+- Missing owner: **Owner not recorded**
+- **Last changed by <actor>**
+- **Approved by**
+- With an actor: **Approved by <actor>**
+- **No approvals yet**
+- First run, nothing submitted: **No approval needed yet**
+- **Approve**
+- **Request changes to <owner>**
+- **Dismiss**
+- **Dismiss keeps the reason with this approval.**
+- **Dismissed by <actor>**
+- Reason label: **Reason**
+
+Do not render **Approved by** with no actor. That is a dangling approval. Do not render the word approved on its own.
+
+### Comments
+
+- **Comments**
+- **No comments yet**
+- **Comment on <row name>**
+
+### Boundary
+
+- **Open to ideas. Closed to chaos.**
+- Current local state: **Local context can stay local.**
+- **Every approval has an owner.**
+- **Every revision has a history.**
+- **Agents authenticate as agents. Permissions are explicit. Your work remains yours.**
+- Current shared state, only when a share grant exists: **Shared with agents**
+
+The local sentence is a rule and, when nothing has been shared, the badge. Do not show **Shared with agents** as decoration. The page badge stays on **Local context can stay local.** until a grant exists.
+
+### Words that do not belong here
+
+Do not write sync, collaboration, synergy, or an exclamation mark. Do not use an emoji as a jar, a badge, or decoration.
