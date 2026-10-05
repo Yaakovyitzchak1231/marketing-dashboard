@@ -133,6 +133,74 @@ export const COPY = {
     noneRecorded: 'No costs recorded yet.',
     nonNegative: 'Enter a non-negative amount.',
   },
+
+  /**
+   * Shared workspace. One import path for every word on that section.
+   *
+   * Actors are passed through: a human email, or `agent:<profile>`.
+   * These functions do not invent an actor. Call them only with a recorded
+   * one. A missing actor is `authorNotRecorded`, never a dash and never a
+   * made-up name.
+   *
+   * No counts live here. "One current version" is the model, not a measurement.
+   */
+  workspace: {
+    title: 'Shared workspace',
+    back: 'Back to dashboard',
+
+    whatItIs: 'What it is',
+    whatItIsBody: 'Same live artifact. One current version.',
+    sameArtifact: 'Same live artifact',
+    oneVersion: 'One current version',
+
+    whoIsInIt: 'Who is in it',
+    whoBody: 'The owner, and agents that authenticate as themselves.',
+
+    whatItCosts: 'What it costs',
+    costBody: 'Nothing. Same dashboard, same data.',
+
+    changeHistory: 'Change history',
+    revisionsStayLocal: 'Revisions stay local unless shared',
+    noRevisions: 'No revisions yet',
+    restoreThisVersion: 'Restore this version',
+    restoreNote: 'Restore this version. The current version stays in change history.',
+    savedBy: (actor: string) => `Saved by ${actor}`,
+    authorNotRecorded: 'Author not recorded',
+    changeKind: 'Change',
+    changeMessage: 'Note',
+    changeWhen: 'When',
+    save: 'Save',
+    saveNote: 'Save names the current version in change history.',
+    pinThisVersion: 'Pin this version',
+    pinNote: 'Pin this version. The workspace opens it by default.',
+
+    approvals: 'Approvals',
+    owner: (email: string) => `Owner: ${email}`,
+    ownerNotRecorded: 'Owner not recorded',
+    lastChangedBy: (actor: string) => `Last changed by ${actor}`,
+    approvedBy: 'Approved by',
+    approvedByActor: (actor: string) => `Approved by ${actor}`,
+    noApprovals: 'No approvals yet',
+    noApprovalNeeded: 'No approval needed yet',
+    approve: 'Approve',
+    requestChangesTo: (owner: string) => `Request changes to ${owner}`,
+    dismiss: 'Dismiss',
+    dismissNote: 'Dismiss keeps the reason with this approval.',
+    dismissedBy: (actor: string) => `Dismissed by ${actor}`,
+    reason: 'Reason',
+
+    comments: 'Comments',
+    noComments: 'No comments yet',
+    commentOn: (rowName: string) => `Comment on ${rowName}`,
+
+    boundaryTitle: 'Open to ideas. Closed to chaos.',
+    localContext: 'Local context can stay local.',
+    everyApproval: 'Every approval has an owner.',
+    everyRevision: 'Every revision has a history.',
+    agentsAuthenticate:
+      'Agents authenticate as agents. Permissions are explicit. Your work remains yours.',
+    sharedWithAgents: 'Shared with agents',
+  },
 } as const satisfies Record<string, CopyValue>
 
 export type CopyKey = keyof typeof COPY
