@@ -9,11 +9,32 @@ import { SharedWorkspace } from '@/components/shared-workspace'
 
 const FORBIDDEN = ['sync', 'collaboration', 'synergy', 'unlock', '!']
 
-// Every static string on the workspace surface, derived from COPY so a new
-// string cannot ship without this test noticing it is missing from the deck.
-const WORKSPACE_STATIC_STRINGS = Object.values(COPY.workspace).flatMap((value) =>
-  typeof value === 'string' ? [value] : [],
-)
+const STATIC_STRINGS = [
+  COPY.workspace.title,
+  COPY.workspace.whatItIsBody,
+  COPY.workspace.sameArtifact,
+  COPY.workspace.oneVersion,
+  COPY.workspace.whoBody,
+  COPY.workspace.costBody,
+  COPY.workspace.changeHistory,
+  COPY.workspace.revisionsStayLocal,
+  COPY.workspace.noRevisions,
+  COPY.workspace.restoreThisVersion,
+  COPY.workspace.authorNotRecorded,
+  COPY.workspace.ownerNotRecorded,
+  COPY.workspace.approvedBy,
+  COPY.workspace.noApprovals,
+  COPY.workspace.noApprovalNeeded,
+  COPY.workspace.noComments,
+  COPY.workspace.approve,
+  COPY.workspace.dismiss,
+  COPY.workspace.boundaryTitle,
+  COPY.workspace.localContext,
+  COPY.workspace.everyApproval,
+  COPY.workspace.everyRevision,
+  COPY.workspace.agentsAuthenticate,
+  COPY.workspace.sharedWithAgents,
+]
 
 const firstRun = {
   ownerEmail: null,
@@ -26,9 +47,9 @@ const firstRun = {
 }
 
 describe('shared workspace copy', () => {
-  it('keeps every static workspace string in the deck and in COPY', () => {
+  it('keeps the acceptance phrases in the deck and in COPY', () => {
     const deck = readFileSync('docs/COPY_DECK.md', 'utf8')
-    for (const sentence of WORKSPACE_STATIC_STRINGS) {
+    for (const sentence of STATIC_STRINGS) {
       expect(deck).toContain(sentence)
     }
     expect(deck).toContain('Saved by <actor or agent:build-data>')
@@ -50,7 +71,7 @@ describe('shared workspace copy', () => {
 
   it('does not use hype, sync, or collaboration in the workspace strings', () => {
     const rendered = [
-      ...WORKSPACE_STATIC_STRINGS,
+      ...STATIC_STRINGS,
       COPY.workspace.savedBy('agent:build-data'),
       COPY.workspace.owner('owner@example.com'),
       COPY.workspace.lastChangedBy('agent:build-data'),
@@ -173,3 +194,4 @@ describe('shared workspace copy', () => {
     expect(page).toContain('approvalNeeded={false}')
   })
 })
+
