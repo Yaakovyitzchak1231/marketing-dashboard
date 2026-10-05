@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
+import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 /**
  * Angles: named message variants attached to campaigns.
@@ -37,11 +38,18 @@ export async function POST(request: NextRequest) {
   if (!name) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }
+  const stamp = await auditStamp(supabase, request, {
+    artifactType: 'angles',
+    artifactId: null,
+    changeKind: 'create',
+    changeMessage: changeMessageFrom(body),
+  })
   const row = {
     name,
     description: typeof body.description === 'string' ? body.description : null,
     campaign_id: typeof body.campaign_id === 'string' ? body.campaign_id : null,
     variant_label: typeof body.variant_label === 'string' ? body.variant_label : null,
+    ...stamp,
   }
   const { data, error } = await supabase
     .from('angles')
@@ -50,6 +58,23 @@ export async function POST(request: NextRequest) {
     .single()
   if (error) {
     return NextResponse.json({ error: 'Failed to create angle' }, { status: 500 })
+  }
+  const createdId = (data as { id?: string } | null)?.id
+  if (!createdId) {
+    return NextResponse.json({ error: 'Failed to create angle' }, { status: 500 })
+  }
+  const recorded = await recordRevision(supabase, {
+    revision_id: stamp.revision_id,
+    artifact_type: 'angles',
+    artifact_id: createdId,
+    revision_number: stamp.revision_number,
+    actor: stamp.actor,
+    change_kind: stamp.change_kind,
+    change_message: stamp.change_message,
+  })
+  if ('error' in recorded) {
+    console.error(`angles POST revision: ${recorded.error}`)
+    return NextResponse.json({ error: 'Failed to record revision' }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })
 }
