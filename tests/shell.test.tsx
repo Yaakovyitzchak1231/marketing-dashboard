@@ -5,8 +5,9 @@
  * rather than globally so the pure-logic `.test.ts` suites keep running in
  * `node`.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { replaceCalls, setSearchParams } from './mock-navigation'
 import { KpiRow, type Kpi } from '@/components/kpi-row'
 import { CampaignTable, type CampaignRow } from '@/components/campaign-table'
 import { SenderHealthPanel, type SenderHealth } from '@/components/sender-health'
@@ -633,5 +634,147 @@ describe('FreshnessIndicator', () => {
     const el = screen.getByTestId('freshness')
     expect(el).toHaveAttribute('data-freshness', 'failed')
     expect(el).toHaveTextContent('Last collection failed')
+  })
+})
+
+describe('CampaignTable URL state', () => {
+  const urlRows: CampaignRow[] = [
+    { id: 'u1', name: 'Bravo', status: 'active', emails_sent: 10, replies_human: 1, replies_autoresponder: 0, bounces: 0, opportunities: null, reply_rate: 0.1, bounce_rate: 0, open_rate: null, unsubscribe: null, metric_date: '2026-10-01' },
+    { id: 'u2', name: 'Alpha', status: 'paused', emails_sent: 99, replies_human: 9, replies_autoresponder: 0, bounces: 0, opportunities: null, reply_rate: 0.09, bounce_rate: 0, open_rate: null, unsubscribe: null, metric_date: '2026-10-01' },
+  ]
+
+  it('falls back to defaults rather than trusting an arbitrary sort key from the URL', () => {
+    // A shared link is untrusted input. `?sort=DROP TABLE` must not become a
+    // sort key, and the control must not be left showing a value it does not
+    // have among its options.
+    setSearchParams('sort=DROP+TABLE&dir=sideways')
+    render(<CampaignTable rows={urlRows} />)
+    const sort = screen.getByLabelText('Sort campaigns') as HTMLSelectElement
+    expect(sort.value).toBe('name')
+    expect(screen.getByRole('button', { name: 'Ascending' })).toBeInTheDocument()
+  })
+
+  it('honours a sort key the URL names correctly', () => {
+    setSearchParams('sort=emails_sent&dir=desc')
+    render(<CampaignTable rows={urlRows} />)
+    expect((screen.getByLabelText('Sort campaigns') as HTMLSelectElement).value).toBe('emails_sent')
+    expect(screen.getByRole('button', { name: 'Descending' })).toBeInTheDocument()
+    // Descending means largest first, so the 99-sent campaign leads.
+    const names = screen.getAllByRole('listitem').map((li) => li.textContent ?? '')
+    expect(names[0]).toContain('Alpha')
+  })
+
+  it('preserves query params it does not own, such as the range', () => {
+    // The table owns q/status/sort/dir. The range selector owns `range`, and an
+    // earlier version of this sync rebuilt the URL from its own four params and
+    // called router.replace with the result, which deleted `range` and sent the
+    // reader to "/?". Nothing is asserted about the initial mount -- with no
+    // filter set there is nothing to write, so not navigating is correct. What
+    // matters is that the next navigation carries `range` through.
+    setSearchParams('range=30d')
+    render(<CampaignTable rows={urlRows} />)
+    expect(replaceCalls()).toEqual([])
+    fireEvent.change(screen.getByLabelText('Search campaigns by name'), {
+      target: { value: 'Bravo' },
+    })
+    expect(replaceCalls().at(-1)).toBe('/?range=30d&q=Bravo')
+  })
+
+  it('writes its own state to the URL when the reader filters', () => {
+    setSearchParams('range=30d')
+    render(<CampaignTable rows={urlRows} />)
+    fireEvent.change(screen.getByLabelText('Search campaigns by name'), {
+      target: { value: 'Bravo' },
+    })
+    expect(replaceCalls().at(-1)).toBe('/?range=30d&q=Bravo')
+  })
+})
+
+describe('CampaignTable CSV export', () => {
+  const exportRows: CampaignRow[] = [
+    { id: 'e1', name: 'Bravo', status: 'active', emails_sent: 10, replies_human: 1, replies_autoresponder: 0, bounces: 0, opportunities: null, reply_rate: 0.1, bounce_rate: 0, open_rate: null, unsubscribe: null, metric_date: '2026-10-01' },
+  ]
+
+  /**
+   * Click the export button and return the CSV text.
+   *
+   * The Blob is captured by replacing the global with a recorder rather than by
+   * reading `blob.text()`: jsdom's Blob does not implement `text()`, so an
+   * assertion written against it fails for a reason that has nothing to do with
+   * the code under test.
+   */
+  function exportCsvFor(rows: CampaignRow[]): string {
+    const parts: string[] = []
+    vi.stubGlobal(
+      'Blob',
+      class {
+        constructor(chunks: string[]) {
+          parts.push(chunks.join(''))
+        }
+      },
+    )
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: () => 'blob:csv',
+      revokeObjectURL: () => {},
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    render(<CampaignTable rows={rows} />)
+    fireEvent.click(screen.getByTestId('campaign-table-export'))
+    return parts[0] ?? ''
+  }
+
+  it('writes an unreported metric as an empty cell, never as 0', () => {
+    // `null` means the source did not say. A 0 in the file would assert a
+    // measurement nobody made -- the rule the screen follows, in the export.
+    const dataLine = exportCsvFor(exportRows).split('\r\n')[1]
+    expect(dataLine).toContain('Bravo,active,10,1,0,0.1,0,')
+    expect(dataLine.endsWith(',')).toBe(true)
+  })
+
+  it('neutralises a campaign name that would otherwise be a spreadsheet formula', () => {
+    // Campaign names come from the mail provider. Unescaped, a name beginning
+    // with = is a formula the moment Jacob opens the file. The leading quote is
+    // what makes the cell text; no surrounding quotes are needed because the
+    // value then contains no comma, quote, or newline of its own.
+    const hostile: CampaignRow[] = [{ ...exportRows[0], name: '=cmd|\' /c calc\'!A0' }]
+    const line = exportCsvFor(hostile).split('\r\n')[1]
+    expect(line.startsWith(`'=cmd|' /c calc'!A0,active,`)).toBe(true)
+  })
+
+  it('quotes a formula-bearing name that also needs quoting', () => {
+    const hostile: CampaignRow[] = [{ ...exportRows[0], name: '=SUM(A1:A9), "urgent"' }]
+    const line = exportCsvFor(hostile).split('\r\n')[1]
+    expect(line.startsWith(`"'=SUM(A1:A9), ""urgent""",`)).toBe(true)
+  })
+
+  it('quotes a name containing a comma and doubles the quotes inside it', () => {
+    const awkward: CampaignRow[] = [{ ...exportRows[0], name: 'Q3 "jewelry", IRS' }]
+    expect(exportCsvFor(awkward)).toContain('"Q3 ""jewelry"", IRS"')
+  })
+
+  it('exports only the rows on screen, not every row loaded', () => {
+    const many: CampaignRow[] = [
+      exportRows[0],
+      { ...exportRows[0], id: 'e2', name: 'Charlie' },
+    ]
+    render(<CampaignTable rows={many} />)
+    fireEvent.change(screen.getByLabelText('Search campaigns by name'), {
+      target: { value: 'Bravo' },
+    })
+    const parts: string[] = []
+    vi.stubGlobal(
+      'Blob',
+      class {
+        constructor(chunks: string[]) {
+          parts.push(chunks.join(''))
+        }
+      },
+    )
+    vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:csv', revokeObjectURL: () => {} })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    fireEvent.click(screen.getByTestId('campaign-table-export'))
+    expect(parts[0]).toContain('Bravo')
+    expect(parts[0]).not.toContain('Charlie')
   })
 })
