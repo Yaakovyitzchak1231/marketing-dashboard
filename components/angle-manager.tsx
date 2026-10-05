@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useApi } from '@/components/use-api'
 import { formatRate } from '@/lib/format'
 import { PERFORMANCE_RANGE_LABEL } from '@/lib/range'
+import { exportToCsv } from '@/lib/csv'
+import { compareByMetric, compareByName } from '@/lib/sort'
+import { COPY } from '@/lib/copy'
 
 type Angle = {
   id: string
@@ -42,6 +45,25 @@ export function AngleManager({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [perfSort, setPerfSort] = useState<'name' | 'human_reply_rate'>('human_reply_rate')
+  const [perfDirection, setPerfDirection] = useState<'asc' | 'desc'>('desc')
+  const [angleQuery, setAngleQuery] = useState('')
+
+  const perfLabel = (row: PerfRow) => row.angle_name
+  const sortedPerf = [...perf].sort((a, b) =>
+    perfSort === 'name'
+      ? compareByName(a, b, perfDirection, perfLabel)
+      // A reply rate Instantly never reported is absent, so it sinks in both
+      // directions rather than floating to the top of a descending sort.
+      : compareByMetric(a, b, 'human_reply_rate', perfDirection, perfLabel),
+  )
+
+  const filteredAngles = angles.filter(a =>
+    !angleQuery ||
+    a.name.toLowerCase().includes(angleQuery.toLowerCase()) ||
+    a.campaigns?.name.toLowerCase().includes(angleQuery.toLowerCase())
+  )
+
   const refresh = async () => setAngles(await api('/api/angles'))
 
   const create = async (e: React.FormEvent) => {
@@ -77,6 +99,18 @@ export function AngleManager({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete angle')
     }
+  }
+
+  const handleExportPerformance = () => {
+    const headers = ['Angle', 'Campaign', 'Sent', 'Unique Replies', 'Human Reply Rate']
+    const data = sortedPerf.map(p => [
+      p.angle_name,
+      p.campaign_name,
+      p.emails_sent,
+      p.unique_replies,
+      p.human_reply_rate
+    ])
+    exportToCsv('angles_performance', headers, data)
   }
 
   return (
@@ -134,9 +168,44 @@ export function AngleManager({
       </section>
 
       <section>
-        <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
-          Human-reply rate — {PERFORMANCE_RANGE_LABEL}
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+            Human-reply rate — {PERFORMANCE_RANGE_LABEL}
+          </h2>
+          {perf.length > 0 && (
+            <div className="flex items-center gap-2 text-[12px]">
+              <button
+                type="button"
+                onClick={handleExportPerformance}
+                className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
+              >
+                Export visible CSV
+              </button>
+              <select
+                aria-label="Sort performance"
+                value={perfSort}
+                onChange={e => {
+                  const next = e.target.value
+                  if (next === 'name' || next === 'human_reply_rate') setPerfSort(next)
+                }}
+                className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+              >
+                <option value="name">Name</option>
+                <option value="human_reply_rate">Reply rate</option>
+              </select>
+              {/* The visible text IS the accessible name; an aria-label naming the
+                  action would contradict the screen (WCAG 2.5.3). */}
+              <button
+                type="button"
+                onClick={() => setPerfDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+                title={COPY.campaigns.sortDirectionAction(perfDirection)}
+              >
+                {perfDirection === 'asc' ? COPY.campaigns.sortAscending : COPY.campaigns.sortDescending}
+              </button>
+            </div>
+          )}
+        </div>
         {perf.length === 0 ? (
           <p className="text-[13px] text-ink-faint">No angle metrics yet.</p>
         ) : (
@@ -152,7 +221,7 @@ export function AngleManager({
                 </tr>
               </thead>
               <tbody>
-                {perf.map(p => (
+                {sortedPerf.map(p => (
                   <tr key={p.angle_id} className="border-b border-line last:border-0">
                     <td className="px-4 py-2 text-ink">{p.angle_name}</td>
                     <td className="px-4 py-2 text-ink-muted">{p.campaign_name ?? '—'}</td>
@@ -174,11 +243,22 @@ export function AngleManager({
       </section>
 
       <section>
-        <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
-          All angles
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+            All angles
+          </h2>
+          {angles.length > 0 && (
+            <input
+              type="text"
+              placeholder="Search angles or campaigns..."
+              value={angleQuery}
+              onChange={e => setAngleQuery(e.target.value)}
+              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted min-w-64"
+            />
+          )}
+        </div>
         <div className="space-y-2">
-          {angles.map(a => (
+          {filteredAngles.map(a => (
             <div
               key={a.id}
               className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
@@ -199,6 +279,9 @@ export function AngleManager({
               </button>
             </div>
           ))}
+          {angles.length > 0 && filteredAngles.length === 0 && (
+            <p className="text-[13px] text-ink-faint">No angles match your search.</p>
+          )}
           {angles.length === 0 && (
             <p className="text-[13px] text-ink-faint">No angles yet. Add the first one above.</p>
           )}

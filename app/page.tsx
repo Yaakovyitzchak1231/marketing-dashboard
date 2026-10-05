@@ -4,10 +4,11 @@ import { CampaignTable } from '@/components/campaign-table'
 import { TrendChartArea } from '@/components/trend-chart'
 import { SenderHealthPanel } from '@/components/sender-health'
 import { FreshnessIndicator } from '@/components/freshness'
+import { RangeSelector } from '@/components/range-selector'
 import { COPY } from '@/lib/copy'
 import { buildShellModel } from '@/lib/shell-model'
 import { loadShellData } from '@/lib/load-shell-data'
-import { RANGE_LABEL } from '@/lib/range'
+import { DEFAULT_RANGE, isSupportedRange, Range } from '@/lib/range'
 
 /**
  * The dashboard shell. A Server Component: every figure below arrives already
@@ -31,15 +32,23 @@ import { RANGE_LABEL } from '@/lib/range'
  */
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardPage() {
-  const campaigns = await loadShellData(null)
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
+  const params = await searchParams
+  const rangeParam = typeof params.range === 'string' ? params.range : DEFAULT_RANGE
+  const activeRange: Range = isSupportedRange(rangeParam) ? rangeParam : DEFAULT_RANGE
+
+  const campaigns = await loadShellData(null, undefined, activeRange)
 
   // The trend needs a campaign id, which we only learn from the campaign list,
   // so the two fetches cannot be parallelised here without inventing a
   // portfolio total. The extra round trip is the cost of not fabricating.
   const firstCampaignId = campaigns.campaigns?.campaigns?.[0]?.id ?? null
   const withTrend = firstCampaignId
-    ? await loadShellData(firstCampaignId, campaigns.freshness)
+    ? await loadShellData(firstCampaignId, campaigns.freshness, activeRange)
     : campaigns
 
   const model = buildShellModel({
@@ -58,18 +67,28 @@ export default async function DashboardPage() {
         quiet title with the freshness line beside it is what an internal tool
         actually needs.
       */}
-      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-4">
         <div className="min-w-0">
           <h1 className="text-[15px] font-medium tracking-[-0.01em] text-ink">
             Marketing dashboard
           </h1>
-          <p className="mt-0.5 text-[11px] text-ink-faint">
-            Instantly account &mdash; {RANGE_LABEL}
+          <p className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-faint">
+            Instantly account
+            <span className="h-3 w-px bg-line"></span>
+            <FreshnessIndicator
+              generatedAt={model.freshness.generatedAt}
+              stale={model.freshness.collectionFailed}
+            />
           </p>
         </div>
-        <FreshnessIndicator
-          generatedAt={model.freshness.generatedAt}
-          stale={model.freshness.collectionFailed}
+
+        <RangeSelector
+          currentRange={activeRange}
+          searchParams={new URLSearchParams(
+            Object.entries(params)
+              .filter(([, v]) => typeof v === 'string')
+              .map(([k, v]) => [k, v as string]),
+          )}
         />
       </header>
 
@@ -105,7 +124,7 @@ export default async function DashboardPage() {
             <p className="mt-1 text-[13px] text-ink-faint">{COPY.error}</p>
           </div>
         ) : (
-          <TrendChartArea series={model.trend} label="Emails sent" />
+          <TrendChartArea series={model.trend} />
         )}
 
         <CampaignTable

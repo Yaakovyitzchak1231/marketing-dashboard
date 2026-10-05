@@ -137,9 +137,11 @@ describe('buildShellModel', () => {
       ],
     }
     const model = buildShellModel({ overview, campaigns, trend, freshness })
+    // All three per-day metrics ride along so the trend card can switch between
+    // them from the same rows, and each is the stored count verbatim.
     expect(model.trend).toEqual([
-      { day: '2026-09-28', value: 100 },
-      { day: '2026-09-29', value: 140 },
+      { day: '2026-09-28', emails_sent: 100, replies_human: 5, opportunities: 1 },
+      { day: '2026-09-29', emails_sent: 140, replies_human: 7, opportunities: 2 },
     ])
   })
 
@@ -159,7 +161,12 @@ describe('buildShellModel', () => {
       ],
     }
     const model = buildShellModel({ overview, campaigns, trend, freshness })
-    expect(model.trend[1].value).toBeNull()
+    expect(model.trend[1].emails_sent).toBeNull()
+    // Every per-day metric travels with the day so the card can switch between
+    // them without a refetch, and an unreported one stays null rather than 0.
+    expect(model.trend[1].replies_human).toBeNull()
+    expect(model.trend[0].emails_sent).toBe(100)
+    expect(model.trend[0].opportunities).toBe(1)
   })
 
   it('carries the collection-failed flag to the freshness line', () => {

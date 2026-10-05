@@ -13,9 +13,16 @@
  */
 const RANGE_DAYS = 7
 
+/**
+ * Every window the API accepts. Exported rather than re-typed at each
+ * call site, so a control that offers a range and the validation that
+ * accepts one cannot drift apart.
+ */
 const SUPPORTED_RANGES = ['7d', '30d', '90d'] as const
 
 export type Range = (typeof SUPPORTED_RANGES)[number]
+
+export const SUPPORTED_RANGE_KEYS = SUPPORTED_RANGES
 
 /** The default window: the last week. */
 export const DEFAULT_RANGE: Range = '7d'
