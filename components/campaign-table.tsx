@@ -426,28 +426,19 @@ export function CampaignTable({
                   </div>
                   <div className="flex justify-between gap-4 text-[12px] sm:block">
                     <span className="text-ink-muted sm:hidden">Replies</span>
-                    <span className="flex items-baseline justify-end gap-1.5">
-                      <span data-testid={`replies-human-${row.id}`}>
-                        {isUnavailable(row.replies_human) ? (
-                          <Unavailable />
-                        ) : (
-                          <Figure>{formatCount(row.replies_human)}</Figure>
-                        )}
-                      </span>
-                      {isUnavailable(row.replies_autoresponder) ? null : (
-                        <span
-                          data-testid={`replies-auto-${row.id}`}
-                          className="text-[11px] text-ink-faint"
-                          title="Autoresponder replies, counted separately from humans"
-                        >
-                          +<Figure>{formatCount(row.replies_autoresponder)}</Figure>
-                        </span>
+                    <span data-testid={`replies-human-${row.id}`}>
+                      {isUnavailable(row.replies_human) ? (
+                        <Unavailable />
+                      ) : (
+                        <Figure>{formatCount(row.replies_human)}</Figure>
                       )}
                     </span>
                   </div>
-                  {/* Hidden on phone by CSS, present in the DOM. The autoresponder
-                      split already rides along with the human count above, so
-                      nothing is lost at 390px. */}
+                  {/* The autoresponder split has its own "Auto" column. An
+                      earlier draft also appended a "+39" chip to the human
+                      count, which printed the same figure twice in one row and
+                      made the reply rate look inflated at a glance. One column
+                      owns the number. */}
                   <div className="hidden justify-end gap-4 text-[12px] sm:flex">
                     <CountCell
                       value={row.replies_autoresponder}
