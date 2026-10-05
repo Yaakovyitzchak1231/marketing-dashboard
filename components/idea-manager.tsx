@@ -88,7 +88,7 @@ export function IdeaManager({
   return (
     <div className="space-y-8">
       {error && (
-        <div className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
@@ -100,7 +100,7 @@ export function IdeaManager({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Jewelry retailers outreach"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <label className="flex-[2]">
@@ -109,7 +109,7 @@ export function IdeaManager({
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="What is the offer, who is it for?"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <button
