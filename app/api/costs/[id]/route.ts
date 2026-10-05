@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
+import { auditStamp, businessSnapshot, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 // costs stores cost_date (not spent_at) and links to what the spend served via
 // the free-text entity_ref; there is no idea_id or campaign_id column. Listing
@@ -59,6 +59,7 @@ export async function PATCH(
     actor: stamp.actor,
     change_kind: stamp.change_kind,
     change_message: stamp.change_message,
+    snapshot: businessSnapshot('costs', data as Record<string, unknown> | null),
   })
   if ('error' in recorded) {
     console.error(`costs PATCH revision: ${recorded.error}`)

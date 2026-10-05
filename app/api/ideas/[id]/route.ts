@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
+import { auditStamp, businessSnapshot, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 // The writable columns are the ones ideas actually has: title, hypothesis,
 // status. There is no name / description / channel_id column, so accepting
@@ -52,6 +52,7 @@ export async function PATCH(
     actor: stamp.actor,
     change_kind: stamp.change_kind,
     change_message: stamp.change_message,
+    snapshot: businessSnapshot('ideas', data as Record<string, unknown> | null),
   })
   if ('error' in recorded) {
     console.error(`ideas PATCH revision: ${recorded.error}`)

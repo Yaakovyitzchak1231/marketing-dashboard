@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
+import { auditStamp, businessSnapshot, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 /**
  * Ideas: the manual entry point for "what are we trying?".
@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
     actor: stamp.actor,
     change_kind: stamp.change_kind,
     change_message: stamp.change_message,
+    snapshot: businessSnapshot('ideas', data as Record<string, unknown> | null),
   })
   if ('error' in recorded) {
     console.error(`ideas POST revision: ${recorded.error}`)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
+import { auditStamp, businessSnapshot, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 const UPDATABLE = ['name', 'description', 'campaign_id', 'variant_label'] as const
 
@@ -49,6 +49,7 @@ export async function PATCH(
     actor: stamp.actor,
     change_kind: stamp.change_kind,
     change_message: stamp.change_message,
+    snapshot: businessSnapshot('angles', data as Record<string, unknown> | null),
   })
   if ('error' in recorded) {
     console.error(`angles PATCH revision: ${recorded.error}`)
