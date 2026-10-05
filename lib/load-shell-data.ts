@@ -107,12 +107,21 @@ async function requestCookieHeader(): Promise<string | null> {
  * called multiple times in a single RSC render pass (e.g. loadShellData(null)
  * and loadShellData(firstCampaignId)).
  */
-const getOverview = cache(async (base: string, cookie: string | null) =>
-  getJson<Overview>(`${base}/api/overview?range=${DEFAULT_RANGE}`, SHAPES.overview, cookie)
+/**
+ * Cached individual loaders to prevent duplicate fetches when loadShellData is
+ * called multiple times in a single RSC render pass (e.g. loadShellData(null)
+ * and loadShellData(firstCampaignId)).
+ *
+ * `range` is part of every cache key, not a captured constant. Pinning the
+ * default here would make `?range=90d` and `?range=7d` share one cache entry
+ * within a render pass and serve whichever page rendered first.
+ */
+const getOverview = cache(async (base: string, cookie: string | null, range: string) =>
+  getJson<Overview>(`${base}/api/overview?range=${range}`, SHAPES.overview, cookie)
 )
 
-const getCampaigns = cache(async (base: string, cookie: string | null) =>
-  getJson<CampaignList>(`${base}/api/campaigns?range=${DEFAULT_RANGE}`, SHAPES.campaigns, cookie)
+const getCampaigns = cache(async (base: string, cookie: string | null, range: string) =>
+  getJson<CampaignList>(`${base}/api/campaigns?range=${range}`, SHAPES.campaigns, cookie)
 )
 
 const getTrend = cache(async (base: string, cookie: string | null, campaignId: string | null) =>
@@ -124,13 +133,14 @@ const getTrend = cache(async (base: string, cookie: string | null, campaignId: s
 export async function loadShellData(
   campaignId: string | null,
   suppliedFreshness?: Freshness,
+  range: string = DEFAULT_RANGE,
 ): Promise<ShellData> {
   const base = getBaseUrl()
   const cookie = await requestCookieHeader()
 
   const [overview, campaigns, trendResult] = await Promise.all([
-    getOverview(base, cookie),
-    getCampaigns(base, cookie),
+    getOverview(base, cookie, range),
+    getCampaigns(base, cookie, range),
     getTrend(base, cookie, campaignId),
   ])
 

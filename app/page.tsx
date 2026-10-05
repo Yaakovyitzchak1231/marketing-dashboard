@@ -82,7 +82,14 @@ export default async function DashboardPage({
           </p>
         </div>
 
-        <RangeSelector currentRange={activeRange} />
+        <RangeSelector
+          currentRange={activeRange}
+          searchParams={new URLSearchParams(
+            Object.entries(params)
+              .filter(([, v]) => typeof v === 'string')
+              .map(([k, v]) => [k, v as string]),
+          )}
+        />
       </header>
 
       {model.overviewUnavailable ? (

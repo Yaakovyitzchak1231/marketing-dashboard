@@ -129,7 +129,15 @@ function toTrendPoints(trend: CampaignTrend | null): TrendPoint[] {
   if (!trend) return []
   return trend.trend
     .filter((d) => !isUnavailable(d.metric_date))
-    .map((d) => ({ day: d.metric_date as string, value: d.emails_sent }))
+    // All three per-day metrics travel together so the trend card can switch
+    // between them without a refetch. Each is the raw stored count or null --
+    // never a rate, and never derived from another column here.
+    .map((d) => ({
+      day: d.metric_date as string,
+      emails_sent: d.emails_sent,
+      replies_human: d.replies_human,
+      opportunities: d.opportunities,
+    }))
     .sort((a, b) => a.day.localeCompare(b.day))
 }
 

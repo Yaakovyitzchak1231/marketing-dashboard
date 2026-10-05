@@ -500,11 +500,11 @@ describe('SenderHealthPanel', () => {
 describe('TrendChartArea', () => {
   it('renders a real trend with at least two points', () => {
     const points: TrendPoint[] = [
-      { day: '2026-09-28', emails_sent: 100, replies_human: 5, opportunities: 1 },
-      { day: '2026-09-29', emails_sent: 140, replies_human: 7, opportunities: 2 },
-      { day: '2026-09-30', emails_sent: 120, replies_human: 6, opportunities: 0 },
+      { day: '2026-09-28', emails_sent: 100, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 140, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 120, replies_human: null, opportunities: null },
     ]
-    render(<TrendChartArea series={points} />)
+    render(<TrendChartArea series={points} label="Emails sent" />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     expect(screen.getByTestId('trend-point-count')).toHaveTextContent('3')
   })
@@ -514,9 +514,9 @@ describe('TrendChartArea', () => {
     // the counter standing still -- not a quiet account. Without this the flat
     // line reads as a broken chart or as bad news.
     const flat: TrendPoint[] = [
-      { day: '2026-09-28', value: 31893 },
-      { day: '2026-09-29', value: 31893 },
-      { day: '2026-09-30', value: 31893 },
+      { day: '2026-09-28', emails_sent: 31893, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 31893, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 31893, replies_human: null, opportunities: null },
     ]
     render(<TrendChartArea series={flat} label="Emails sent" />)
     expect(screen.getByTestId('trend-cumulative-note')).toBeInTheDocument()
@@ -526,9 +526,9 @@ describe('TrendChartArea', () => {
 
   it('prints the stored figure for every day so the line is never the only source', () => {
     const points: TrendPoint[] = [
-      { day: '2026-09-28', value: 100 },
-      { day: '2026-09-29', value: 140 },
-      { day: '2026-09-30', value: null },
+      { day: '2026-09-28', emails_sent: 100, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 140, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: null, replies_human: null, opportunities: null },
     ]
     render(<TrendChartArea series={points} label="Emails sent" />)
     const table = screen.getByTestId('trend-breakdown')
@@ -541,8 +541,8 @@ describe('TrendChartArea', () => {
   it('does not claim a two-day repeat is a stalled counter', () => {
     // Two points cannot distinguish "coincidence" from "not moving".
     const twoDays: TrendPoint[] = [
-      { day: '2026-09-29', value: 500 },
-      { day: '2026-09-30', value: 500 },
+      { day: '2026-09-29', emails_sent: 500, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 500, replies_human: null, opportunities: null },
     ]
     render(<TrendChartArea series={twoDays} label="Emails sent" />)
     expect(screen.queryByTestId('trend-cumulative-note')).not.toBeInTheDocument()
@@ -550,9 +550,9 @@ describe('TrendChartArea', () => {
 
   it('draws one marker per stored day', () => {
     const points: TrendPoint[] = [
-      { day: '2026-09-28', value: 100 },
-      { day: '2026-09-29', value: 140 },
-      { day: '2026-09-30', value: 120 },
+      { day: '2026-09-28', emails_sent: 100, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 140, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 120, replies_human: null, opportunities: null },
     ]
     const { container } = render(<TrendChartArea series={points} label="Emails sent" />)
     // Three observations should be countable without hovering the stroke.
@@ -563,9 +563,9 @@ describe('TrendChartArea', () => {
     // max, min and their midpoint coincide when the series is flat, so three
     // gridlines collapse onto one y and the chart shows a dashed line over itself.
     const flat: TrendPoint[] = [
-      { day: '2026-09-28', value: 31893 },
-      { day: '2026-09-29', value: 31893 },
-      { day: '2026-09-30', value: 31893 },
+      { day: '2026-09-28', emails_sent: 31893, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 31893, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 31893, replies_human: null, opportunities: null },
     ]
     const { container } = render(<TrendChartArea series={flat} label="Emails sent" />)
     expect(container.querySelectorAll('svg line')).toHaveLength(1)
@@ -573,13 +573,13 @@ describe('TrendChartArea', () => {
 
   it('renders an empty-history first run as a real state, not a crash', () => {
     // Bug 4: one day of history. An empty series must look intentional.
-    render(<TrendChartArea series={[]} />)
+    render(<TrendChartArea series={[]} label="Emails sent" />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     expect(screen.getByTestId('trend-empty')).toBeInTheDocument()
   })
 
   it('renders a single day of history without pretending to be a trend', () => {
-    render(<TrendChartArea series={[{ day: '2026-09-30', emails_sent: 120, replies_human: 6, opportunities: 0 }]} />)
+    render(<TrendChartArea series={[{ day: '2026-09-30', emails_sent: 120, replies_human: null, opportunities: null }]} label="Emails sent" />)
     expect(screen.getByTestId('trend-chart')).toBeInTheDocument()
     // A single point is not a trend and must be labelled as such.
     expect(screen.getByTestId('trend-single')).toBeInTheDocument()

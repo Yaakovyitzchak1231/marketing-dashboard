@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import { formatCount, isUnavailable } from '@/lib/format'
 import { CHART_GEOMETRY, chartViewBox, scaleX, scaleY } from '@/lib/chart'
 import { Card, SectionLabel, Figure, Unavailable } from '@/components/primitives'
@@ -22,21 +25,54 @@ import { COPY } from '@/lib/copy'
  *   - 2+ points       -> a real line
  */
 
-/** One stored day. `value` is the raw count from the API, never derived here. */
+/**
+ * One stored day.
+ *
+ * Three metrics the source records per day, none of them derived here. The
+ * card plots one at a time, so every field is `number | null` and switching
+ * metrics re-reads the SAME rows rather than refetching or recomputing.
+ */
 export type TrendPoint = {
   day: string
-  value: number | null
+  emails_sent: number | null
+  replies_human: number | null
+  opportunities: number | null
 }
+
+/** The metrics the card can plot. Each is a stored per-day count, not a rate. */
+type TrendMetric = 'emails_sent' | 'replies_human' | 'opportunities'
+
+const TREND_METRIC_LABELS: Record<TrendMetric, string> = {
+  emails_sent: COPY.trend.emailsSent,
+  replies_human: COPY.trend.uniqueReplies,
+  opportunities: COPY.trend.opportunities,
+}
+
+const TREND_METRICS: { key: TrendMetric; label: string }[] = (
+  Object.keys(TREND_METRIC_LABELS) as TrendMetric[]
+).map((key) => ({ key, label: TREND_METRIC_LABELS[key] }))
+
+function isTrendMetric(value: string): value is TrendMetric {
+  return TREND_METRICS.some((metric) => metric.key === value)
+}
+
+/** A point reduced to the one metric being plotted. */
+type Plotted = { day: string; value: number }
 
 /**
  * Days the source did not report are dropped from the line rather than
  * interpolated to zero. A gap in reporting is a gap, not a dip.
  */
-function plottable(series: TrendPoint[]): TrendPoint[] {
-  return series.filter((p) => !isUnavailable(p.value) && Number.isFinite(p.value))
+function plottable(series: TrendPoint[], metric: TrendMetric): Plotted[] {
+  const out: Plotted[] = []
+  for (const point of series) {
+    const value = point[metric]
+    if (!isUnavailable(value) && Number.isFinite(value)) out.push({ day: point.day, value })
+  }
+  return out
 }
 
-function TrendSvg({ points, isFlat }: { points: TrendPoint[]; isFlat: boolean }) {
+function TrendSvg({ points, isFlat }: { points: Plotted[]; isFlat: boolean }) {
   const { width, height, padX, padY, strokeWidth, pointRadius, axisStrokeWidth } =
     CHART_GEOMETRY
   const values = points.map((p) => p.value as number)
@@ -150,40 +186,49 @@ function TrendSvg({ points, isFlat }: { points: TrendPoint[]; isFlat: boolean })
  * appears as a dash, which says "the collector ran and Instantly reported
  * nothing", rather than silently vanishing.
  */
-function DailyBreakdown({ days }: { days: TrendPoint[] }) {
+function DailyBreakdown({ days, metric }: { days: TrendPoint[]; metric: TrendMetric }) {
   if (days.length === CHART_GEOMETRY.zero) return null
+  const columnLabel = TREND_METRICS.find((m) => m.key === metric)?.label ?? metric
   return (
     <div data-testid="trend-breakdown" className="mt-3 border-t border-line-soft pt-3">
       <SectionLabel>{COPY.trendBreakdownTitle}</SectionLabel>
       <div data-tabular="true" className="mt-1">
         <div className="flex justify-between gap-4 text-[11px] font-medium uppercase tracking-[0.06em] text-ink-muted">
           <span>{COPY.trendBreakdownDay}</span>
-          <span className="text-right">{COPY.trendBreakdownSent}</span>
+          <span className="text-right">{columnLabel}</span>
         </div>
-        {days.map((p) => (
-          <div
-            key={p.day}
-            className="flex justify-between gap-4 border-b border-line-soft py-1 text-[12px] last:border-b-0"
-          >
-            <span className="text-ink-faint">{p.day}</span>
-            <span className="text-ink">
-              {isUnavailable(p.value) ? <Unavailable /> : <Figure>{formatCount(p.value)}</Figure>}
-            </span>
-          </div>
-        ))}
+        {days.map((p) => {
+          const value = p[metric]
+          return (
+            <div
+              key={p.day}
+              className="flex justify-between gap-4 border-b border-line-soft py-1 text-[12px] last:border-b-0"
+            >
+              <span className="text-ink-faint">{p.day}</span>
+              <span className="text-ink">
+                {isUnavailable(value) ? <Unavailable /> : <Figure>{formatCount(value)}</Figure>}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-export function TrendChartArea({ series, label }: { series: TrendPoint[]; label: string }) {
-  const points = plottable(series)
+export function TrendChartArea({ series, label }: { series: TrendPoint[]; label?: string }) {
+  // Metric choice is local view state, not a data-loading decision: all three
+  // series arrive in the same rows, so switching re-reads what is already here
+  // and never refetches. `emails_sent` is the default because that is the
+  // series the card was built around.
+  const [metric, setMetric] = useState<TrendMetric>('emails_sent')
+  const points = plottable(series, metric)
   const first = points[0]
   const last = points[points.length - 1]
-  const values = points.flatMap((point) => point.value === null ? [] : [point.value])
+  const values = points.map((point) => point.value)
   const min = values.length > 0 ? Math.min(...values) : CHART_GEOMETRY.zero
   const max = values.length > 0 ? Math.max(...values) : CHART_GEOMETRY.zero
-  const change = last?.value !== null && first?.value !== null && last && first ? last.value - first.value : CHART_GEOMETRY.zero
+  const change = last && first ? last.value - first.value : CHART_GEOMETRY.zero
   // Every day reporting the same figure is a property of the source -- a
   // campaign-to-date total that has stopped moving -- and not an absence of
   // data. The two are worth different words on screen. `>=`, not `>`: three
@@ -194,11 +239,32 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
   // no value -- a missing day is a reported gap, and hiding it would be the
   // same sin as zero-filling it.
   const datedDays = series.filter((p) => !isUnavailable(p.day))
+  // The running-total state belongs to the metric that is actually flat, so the
+  // label names that metric rather than always saying "emails sent". A reader
+  // who switched to replies must not be told the line totals emails.
+  const sectionLabel = isFlat
+    ? COPY.trend.cumulativeLabel[metric]
+    : (label ?? TREND_METRIC_LABELS[metric])
 
   return (
     <Card testId="trend-chart" className="px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <SectionLabel>{isFlat ? COPY.trendCumulativeLabel : label}</SectionLabel>
+        <div className="flex items-baseline gap-2">
+          <SectionLabel>{sectionLabel}</SectionLabel>
+          <select
+            aria-label={COPY.trend.metricLabel}
+            value={metric}
+            onChange={(e) => {
+              const next = e.target.value
+              if (isTrendMetric(next)) setMetric(next)
+            }}
+            className="h-6 rounded border border-line bg-surface px-1 text-[11px] text-ink-muted outline-none focus:text-ink focus-visible:ring-2 focus-visible:ring-ink-muted"
+          >
+            {TREND_METRICS.map((m) => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </select>
+        </div>
         {points.length > 1 && !isFlat ? (
           <span className="text-[11px] text-ink-faint">
             <Figure>{formatCount(last.value)}</Figure>{' '}
@@ -264,7 +330,7 @@ export function TrendChartArea({ series, label }: { series: TrendPoint[]; label:
               Latest: {isUnavailable(last.value) ? <Unavailable /> : <Figure>{formatCount(last.value)}</Figure>}
             </span>
           </div>
-          <DailyBreakdown days={datedDays} />
+          <DailyBreakdown days={datedDays} metric={metric} />
         </div>
       )}
     </Card>

@@ -88,15 +88,17 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
 
   const handleExportCosts = () => {
     const headers = ['Date', 'Category', 'Idea', 'Amount USD', 'Notes']
+    // `c.category` is the stored value and is written as-is: it is either one of
+    // CATEGORIES or whatever the API last accepted, and relabelling it here
+    // would put a word in the file that the row does not carry.
     const data = costs.map(c => {
-      const cat = CATEGORIES.find(cat => cat.id === c.category)
       const linkedIdea = c.entity_ref ? ideas.find(i => i.id === c.entity_ref) : null
       return [
-        c.spent_at ? c.spent_at.split('T')[0] : '—',
-        cat ? cat.label : c.category,
+        c.spent_at ? c.spent_at.split('T')[0] : null,
+        c.category,
         linkedIdea ? linkedIdea.name : c.entity_ref,
         c.amount_usd,
-        c.notes
+        c.notes,
       ]
     })
     exportToCsv('costs', headers, data)
@@ -179,7 +181,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
                 onClick={handleExportCosts}
                 className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2"
               >
-                Export CSV
+                Export visible CSV
               </button>
             )}
             <p className="tabular-nums">

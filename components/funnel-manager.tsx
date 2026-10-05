@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { COPY } from '@/lib/copy'
 import { formatCount, formatRate } from '@/lib/format'
 import { exportToCsv } from '@/lib/csv'
+import { compareByMetric, compareByName } from '@/lib/sort'
 
 export type FunnelRow = {
   campaign_id?: string
@@ -21,28 +22,42 @@ export type FunnelRow = {
   close_rate: number | null
 }
 
+/**
+ * The sort options, keyed on real `FunnelRow` field names rather than display
+ * labels, so the comparator reads a field it can type and an unknown option
+ * value can be rejected instead of cast into the sort state.
+ */
+const FUNNEL_SORT_OPTIONS = [
+  { value: 'name', label: 'Name' },
+  { value: 'contacted', label: 'Contacted' },
+  { value: 'replied', label: 'Replied' },
+  { value: 'positive', label: 'Opportunities' },
+  { value: 'reply_rate', label: 'Reply %' },
+  { value: 'positive_rate', label: 'Opportunity %' },
+] as const
+
+type FunnelSortKey = (typeof FUNNEL_SORT_OPTIONS)[number]['value']
+
+function isFunnelSortKey(value: string): value is FunnelSortKey {
+  return FUNNEL_SORT_OPTIONS.some((option) => option.value === value)
+}
+
 export function FunnelTable({ rows, label }: { rows: FunnelRow[]; label: string }) {
-  const [sortField, setSortField] = useState<'name' | 'contacted' | 'replied' | 'positive' | 'reply_rate' | 'positive_rate'>('name')
+  const [sortField, setSortField] = useState<FunnelSortKey>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   if (rows.length === 0) {
     return <p className="text-[13px] text-ink-faint">{COPY.funnel.noRows(label)}</p>
   }
-
-  const sortedRows = [...rows].sort((a, b) => {
-    let aVal: string | number = (a.campaign_name ?? a.idea_name)
-    let bVal: string | number = (b.campaign_name ?? b.idea_name)
-
-    if (sortField !== 'name') {
-      aVal = a[sortField] ?? (sortDirection === 'asc' ? Infinity : -Infinity)
-      bVal = b[sortField] ?? (sortDirection === 'asc' ? Infinity : -Infinity)
-    }
-
-    const cmp = typeof aVal === 'string'
-      ? aVal.localeCompare(bVal as string)
-      : (aVal as number) - (bVal as number)
-    return sortDirection === 'asc' ? cmp : -cmp
-  })
+  const rowLabel = (row: FunnelRow) => row.campaign_name ?? row.idea_name
+  const sortedRows = [...rows].sort((a, b) =>
+    sortField === 'name'
+      ? compareByName(a, b, sortDirection, rowLabel)
+      // Meetings and customers are structurally null here -- no collector ever
+      // wrote them -- so they are the case this rule exists for. A null stage
+      // must sink, not lead a descending sort.
+      : compareByMetric(a, b, sortField, sortDirection, rowLabel),
+  )
 
   const handleExportFunnel = () => {
     const headers = ['Name', 'Contacted', 'Replied', 'Opportunities', 'Meetings', 'Customers', 'Reply Rate', 'Opportunity Rate']
@@ -65,31 +80,36 @@ export function FunnelTable({ rows, label }: { rows: FunnelRow[]; label: string 
         <button
           type="button"
           onClick={handleExportFunnel}
-          className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2"
+          className="text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
         >
-          Export CSV
+          Export visible CSV
         </button>
         <div className="flex items-center gap-2">
           <select
-          aria-label={`Sort ${label.toLowerCase()} funnel`}
-          value={sortField}
-          onChange={e => setSortField(e.target.value as typeof sortField)}
-          className="h-8 rounded border border-line bg-surface px-2 text-ink"
-        >
-          <option value="name">Name</option>
-          <option value="contacted">Contacted</option>
-          <option value="replied">Replied</option>
-          <option value="positive">Opportunities</option>
-          <option value="reply_rate">Reply %</option>
-          <option value="positive_rate">Opportunity %</option>
-        </select>
-        <button
-          type="button"
-          onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-          className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft"
-          aria-label={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`}
-        >
-            {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            aria-label={COPY.funnel.sortBy(label)}
+            value={sortField}
+            onChange={e => {
+              const next = e.target.value
+              if (isFunnelSortKey(next)) setSortField(next)
+            }}
+            className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+          >
+            {FUNNEL_SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          {/* The visible text IS the accessible name. An aria-label naming the
+              ACTION ("Sort descending") on a button that reads "Ascending"
+              contradicts the screen for anyone not reading it visually, which is
+              WCAG 2.5.3. The action lives in title, where it is still available
+              and cannot misname the control. */}
+          <button
+            type="button"
+            onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+            className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+            title={COPY.campaigns.sortDirectionAction(sortDirection)}
+          >
+            {sortDirection === 'asc' ? COPY.campaigns.sortAscending : COPY.campaigns.sortDescending}
           </button>
         </div>
       </div>

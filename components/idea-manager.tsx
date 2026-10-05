@@ -5,6 +5,8 @@ import { useApi } from '@/components/use-api'
 import { PERFORMANCE_RANGE_LABEL } from '@/lib/range'
 import { CURRENCY_PRECISION } from '@/lib/format'
 import { exportToCsv } from '@/lib/csv'
+import { compareByMetric, compareByName } from '@/lib/sort'
+import { COPY } from '@/lib/copy'
 
 type Idea = {
   id: string
@@ -55,25 +57,21 @@ export function IdeaManager({
   const [perfDirection, setPerfDirection] = useState<'asc' | 'desc'>('asc')
   const [ideaQuery, setIdeaQuery] = useState('')
 
-  const sortedPerf = [...perf].sort((a, b) => {
-    let aValue: string | number = a.idea_name
-    let bValue: string | number = b.idea_name
-    if (perfSort === 'spend') {
-      aValue = a.spend_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-      bValue = b.spend_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-    } else if (perfSort === 'cost_per_reply') {
-      aValue = a.cost_per_reply_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-      bValue = b.cost_per_reply_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-    } else if (perfSort === 'cost_per_meeting') {
-      aValue = a.cost_per_meeting_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-      bValue = b.cost_per_meeting_usd ?? (perfDirection === 'asc' ? Infinity : -Infinity)
-    }
+  // A cost the collector never computed is absent, so it sinks in both
+  // directions rather than floating to the top of a descending sort. The key is
+  // mapped to the column it really names so the comparator reads a typed field.
+  const PERF_SORT_KEYS = {
+    spend: 'spend_usd',
+    cost_per_reply: 'cost_per_reply_usd',
+    cost_per_meeting: 'cost_per_meeting_usd',
+  } as const
 
-    const cmp = typeof aValue === 'string'
-      ? aValue.localeCompare(bValue as string)
-      : (aValue as number) - (bValue as number)
-    return perfDirection === 'asc' ? cmp : -cmp
-  })
+  const perfLabel = (row: PerfRow) => row.idea_name
+  const sortedPerf = [...perf].sort((a, b) =>
+    perfSort === 'name'
+      ? compareByName(a, b, perfDirection, perfLabel)
+      : compareByMetric(a, b, PERF_SORT_KEYS[perfSort], perfDirection, perfLabel),
+  )
 
   const filteredIdeas = ideas.filter(i =>
     !ideaQuery || i.name.toLowerCase().includes(ideaQuery.toLowerCase())
@@ -176,26 +174,33 @@ export function IdeaManager({
                 onClick={handleExportPerformance}
                 className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
               >
-                Export CSV
+                Export visible CSV
               </button>
               <select
                 aria-label="Sort performance"
                 value={perfSort}
-                onChange={e => setPerfSort(e.target.value as typeof perfSort)}
-                className="h-8 rounded border border-line bg-surface px-2 text-ink"
+                onChange={e => {
+                  const next = e.target.value
+                  if (next in PERF_SORT_KEYS || next === 'name') {
+                    setPerfSort(next as typeof perfSort)
+                  }
+                }}
+                className="h-8 rounded border border-line bg-surface px-2 text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               >
                 <option value="name">Name</option>
                 <option value="spend">Spend</option>
                 <option value="cost_per_reply">Cost / reply</option>
                 <option value="cost_per_meeting">Cost / meeting</option>
               </select>
+              {/* The visible text IS the accessible name; an aria-label naming the
+                  action would contradict the screen (WCAG 2.5.3). */}
               <button
                 type="button"
                 onClick={() => setPerfDirection(d => d === 'asc' ? 'desc' : 'asc')}
-                className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft"
-                aria-label={`Sort ${perfDirection === 'asc' ? 'descending' : 'ascending'}`}
+                className="h-8 rounded border border-line px-2.5 text-ink hover:bg-line-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+                title={COPY.campaigns.sortDirectionAction(perfDirection)}
               >
-                {perfDirection === 'asc' ? 'Ascending' : 'Descending'}
+                {perfDirection === 'asc' ? COPY.campaigns.sortAscending : COPY.campaigns.sortDescending}
               </button>
             </div>
           )}

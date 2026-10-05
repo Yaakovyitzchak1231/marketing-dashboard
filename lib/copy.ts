@@ -69,6 +69,36 @@ export const COPY = {
    * line look like a bug. The qualifier is the correction.
    */
   trendCumulativeLabel: 'Emails sent (running total)',
+
+  /**
+   * The reporting-window switcher's accessible name.
+   */
+  rangeSelector: 'Reporting window',
+
+  /**
+   * The trend card's metric switcher, and the labels its states take.
+   *
+   * Each option names a metric the source actually stores per day, so choosing
+   * one never invents a series. `trendMetricLabel` is the card's accessible
+   * name for the control; the visible options are the words themselves, which
+   * is why they are not assembled into a sentence here.
+   */
+  trend: {
+    metricLabel: 'Trend metric',
+    emailsSent: 'Emails sent',
+    uniqueReplies: 'Unique replies',
+    opportunities: 'Opportunities',
+    /**
+     * The running-total state, which only the cumulative emails-sent series can
+     * be in. Phrased per metric so a reader who switched to replies is not told
+     * the line is a running total of emails.
+     */
+    cumulativeLabel: {
+      emails_sent: 'Emails sent (running total)',
+      replies_human: 'Unique replies (running total)',
+      opportunities: 'Opportunities (running total)',
+    },
+  },
   staleDataOk: (lastCollectedAt: string) => `Collected ${lastCollectedAt}`,
   staleDataFailed: 'Last collection failed',
   /**
@@ -127,6 +157,8 @@ export const COPY = {
     byCampaign: 'By campaign',
     noRows: (label: string) => `No ${label} funnel data yet.`,
     unavailable: 'Funnel data is unavailable right now.',
+    /** The sort control's accessible name, which names what it sorts. */
+    sortBy: (label: string) => `Sort ${label.toLowerCase()} funnel`,
   },
 
   /**

@@ -16,9 +16,9 @@ import { KpiRow, type Kpi } from '@/components/kpi-row'
 import { CampaignTable, type CampaignRow } from '@/components/campaign-table'
 
 const LIVE_FLAT: TrendPoint[] = [
-  { day: '2026-08-31', value: 31893 },
-  { day: '2026-09-15', value: 31893 },
-  { day: '2026-09-30', value: 31893 },
+  { day: '2026-08-31', emails_sent: 31893, replies_human: null, opportunities: null },
+  { day: '2026-09-15', emails_sent: 31893, replies_human: null, opportunities: null },
+  { day: '2026-09-30', emails_sent: 31893, replies_human: null, opportunities: null },
 ]
 
 const KPIS: Kpi[] = [
@@ -106,9 +106,9 @@ describe("Jacob's comment 2: the useless flat graph", () => {
 
   it('still draws a normal grid when the data genuinely varies', () => {
     const varied: TrendPoint[] = [
-      { day: '2026-09-28', value: 100 },
-      { day: '2026-09-29', value: 140 },
-      { day: '2026-09-30', value: 120 },
+      { day: '2026-09-28', emails_sent: 100, replies_human: null, opportunities: null },
+      { day: '2026-09-29', emails_sent: 140, replies_human: null, opportunities: null },
+      { day: '2026-09-30', emails_sent: 120, replies_human: null, opportunities: null },
     ]
     const { container } = render(<TrendChartArea series={varied} label="Emails sent" />)
     expect(container.querySelectorAll('svg line')).toHaveLength(3)
