@@ -83,11 +83,20 @@ export function ArtifactProvenance({
 
   const load = useCallback(async () => {
     setError(null)
+    // No artifact selected (list pages pass artifactId=""): show the empty
+    // states without firing requests the routes would reject.
+    if (!artifactId) {
+      setRevisions([])
+      setApprovals([])
+      setComments([])
+      return
+    }
+    const qs = `?artifact_type=${encodeURIComponent(artifactType)}&artifact_id=${encodeURIComponent(artifactId)}`
     try {
       const [r, a, c] = await Promise.all([
-        api(revisionsUrl),
-        api(approvalsUrl),
-        api(commentsUrl),
+        api(`${revisionsUrl}${qs}`),
+        api(`${approvalsUrl}${qs}`),
+        api(`${commentsUrl}${qs}`),
       ])
       setRevisions(Array.isArray(r) ? (r as Revision[]) : [])
       setApprovals(Array.isArray(a) ? (a as Approval[]) : [])
@@ -95,7 +104,7 @@ export function ArtifactProvenance({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     }
-  }, [api, revisionsUrl, approvalsUrl, commentsUrl])
+  }, [api, revisionsUrl, approvalsUrl, commentsUrl, artifactType, artifactId])
 
   useEffect(() => {
     void load()
@@ -421,7 +430,7 @@ export function ArtifactProvenance({
           </ul>
         )}
 
-        {rowName ? (
+        {rowName && artifactId ? (
           <form onSubmit={submitComment} className="mt-2 flex flex-wrap gap-2">
             <label className="flex-1 min-w-0 rounded border border-line bg-white/60 px-2.5 py-1.5 text-[11px] text-ink">
               {COPY.workspace.commentOn(rowName)}
