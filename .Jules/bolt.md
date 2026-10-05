@@ -6,3 +6,7 @@
 ## 2024-05-18 - Reduce Garbage Collection Overhead in API Route Data Aggregation
 **Learning:** In API routes that aggregate large datasets (like `app/api/funnel/route.ts`), chaining array methods such as `rows.map(r => r.value)` before passing the result to a `sum()` function creates a new intermediate array for every metric column and for every campaign/idea group. This leads to heavy object allocation and subsequent garbage collection churn, slowing down request processing time, especially for accounts with extensive history.
 **Action:** Replace `sum(rows.map(r => r.key))` with a purpose-built `sumCol(rows, 'key')` function that iterates directly over the original array of objects and retrieves the property. This avoids allocating any temporary arrays and significantly reduces memory overhead and GC pressure.
+
+## 2024-10-05 - Optimize intermediate array allocations via flatMap and map chaining
+**Learning:** Chaining array methods like `flatMap()` followed by nested loops mapping logic can lead to unnecessary allocations and memory overhead, especially in Node.js/Next.js API routes when iterating large arrays (like joining database results).
+**Action:** When computing aggregates or sums on nested items within mapping functions, write inline `for...of` loops rather than allocating intermediate mapping arrays (like `flatMap`). This speeds up runtime logic heavily while helping memory usage.

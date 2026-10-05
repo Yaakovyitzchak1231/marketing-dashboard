@@ -74,21 +74,27 @@ export async function GET(request: NextRequest) {
     spendByIdea.set(c.entity_ref, (spendByIdea.get(c.entity_ref) ?? 0) + Number(c.amount_usd))
   }
 
-  const sumCol = (rows: Record<string, unknown>[], col: string): number | null => {
-    let total = 0
-    let seen = false
-    for (const r of rows) {
-      const v = r[col]
-      if (typeof v === 'number') { total += v; seen = true }
-    }
-    return seen ? total : null
-  }
-
   const rows = ((ideas ?? []) as { id: string; title: string | null; status: string }[]).map(idea => {
     const cids = campaignsByIdea.get(idea.id) ?? []
-    const mrows = cids.flatMap(cid => metricsByCampaign.get(cid) ?? []) as Record<string, unknown>[]
     const spend = spendByIdea.get(idea.id) ?? null
-    const replies = sumCol(mrows, 'replies_human')
+
+    // Compute sums in a single pass to avoid intermediate array allocations
+    let replies: number | null = null
+    let seenReplies = false
+
+    for (const cid of cids) {
+      const campMetrics = metricsByCampaign.get(cid)
+      if (!campMetrics) continue
+      for (const m of campMetrics) {
+        const v = m.replies_human
+        if (typeof v === 'number') {
+          replies = (replies ?? 0) + v
+          seenReplies = true
+        }
+      }
+    }
+    if (!seenReplies) replies = null
+
     // No collector has ever written a meeting or customer stage, so those two
     // remain unknown. Reporting 0 would assert the idea produced none.
     const meetings = null
