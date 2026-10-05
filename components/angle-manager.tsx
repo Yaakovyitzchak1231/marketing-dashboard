@@ -82,7 +82,7 @@ export function AngleManager({
   return (
     <div className="space-y-8">
       {error && (
-        <div className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
@@ -94,7 +94,7 @@ export function AngleManager({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Penalty-fear opener"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <label>
@@ -102,7 +102,7 @@ export function AngleManager({
             <select
               value={campaignId}
               onChange={e => setCampaignId(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             >
               <option value="">None</option>
               {campaigns.map(c => (
@@ -116,7 +116,7 @@ export function AngleManager({
               value={variant}
               onChange={e => setVariant(e.target.value)}
               placeholder="A / B"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <button
