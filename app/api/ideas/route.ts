@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
+import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 /**
  * Ideas: the manual entry point for "what are we trying?".
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   // renamed in the schema.
   const { data, error } = await supabase
     .from('ideas')
-    .select('id, title, hypothesis, status, created_at, updated_at')
+    .select('id, title, hypothesis, status, created_at, updated_at, revision_id, revision_number, change_kind, change_message, actor')
     .order('created_at', { ascending: false })
   if (error) {
     console.error(`ideas: query failed (${error.code}): ${error.message}`)
@@ -52,10 +53,17 @@ export async function POST(request: NextRequest) {
   // status CHECK constraint from 002_unified_model.sql. There is no
   // channel_id on ideas, so a requested channel is dropped rather than
   // silently attached to the wrong table.
+  const stamp = await auditStamp(supabase, request, {
+    artifactType: 'ideas',
+    artifactId: null,
+    changeKind: 'create',
+    changeMessage: changeMessageFrom(body),
+  })
   const row = {
     title: name,
     hypothesis: typeof body.description === 'string' ? body.description : null,
     status: typeof body.status === 'string' ? body.status : 'backlog',
+    ...stamp,
   }
   const { data, error } = await supabase
     .from('ideas')
@@ -64,6 +72,23 @@ export async function POST(request: NextRequest) {
     .single()
   if (error) {
     return NextResponse.json({ error: 'Failed to create idea' }, { status: 500 })
+  }
+  const createdId = (data as { id?: string } | null)?.id
+  if (!createdId) {
+    return NextResponse.json({ error: 'Failed to create idea' }, { status: 500 })
+  }
+  const recorded = await recordRevision(supabase, {
+    revision_id: stamp.revision_id,
+    artifact_type: 'ideas',
+    artifact_id: createdId,
+    revision_number: stamp.revision_number,
+    actor: stamp.actor,
+    change_kind: stamp.change_kind,
+    change_message: stamp.change_message,
+  })
+  if ('error' in recorded) {
+    console.error(`ideas POST revision: ${recorded.error}`)
+    return NextResponse.json({ error: 'Failed to record revision' }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })
 }

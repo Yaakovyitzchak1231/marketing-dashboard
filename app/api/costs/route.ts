@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
+import { auditStamp, changeMessageFrom, recordRevision } from '@/lib/revisions'
 
 /**
  * Costs: manual spend entry. Amounts are stored in the currency given;
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   // pointer to whatever the spend was for.
   const query = supabase
     .from('costs')
-    .select('id, cost_date, category, entity_ref, amount_usd, notes, created_at')
+    .select('id, cost_date, category, entity_ref, amount_usd, notes, created_at, revision_id, revision_number, change_kind, change_message, actor')
     .order('cost_date', { ascending: false })
     .limit(500)
   const { data, error } = await query
@@ -63,6 +64,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     )
   }
+  const stamp = await auditStamp(supabase, request, {
+    artifactType: 'costs',
+    artifactId: null,
+    changeKind: 'create',
+    changeMessage: changeMessageFrom(body),
+  })
   const row = {
     amount_usd: amount,
     category: requested,
@@ -76,6 +83,7 @@ export async function POST(request: NextRequest) {
           ? body.cost_date
           : new Date().toISOString().split('T')[0],
     notes: typeof body.notes === 'string' ? body.notes : null,
+    ...stamp,
   }
   const { data, error } = await supabase
     .from('costs')
@@ -84,6 +92,23 @@ export async function POST(request: NextRequest) {
     .single()
   if (error) {
     return NextResponse.json({ error: 'Failed to record cost' }, { status: 500 })
+  }
+  const createdId = (data as { id?: string } | null)?.id
+  if (!createdId) {
+    return NextResponse.json({ error: 'Failed to record cost' }, { status: 500 })
+  }
+  const recorded = await recordRevision(supabase, {
+    revision_id: stamp.revision_id,
+    artifact_type: 'costs',
+    artifact_id: createdId,
+    revision_number: stamp.revision_number,
+    actor: stamp.actor,
+    change_kind: stamp.change_kind,
+    change_message: stamp.change_message,
+  })
+  if ('error' in recorded) {
+    console.error(`costs POST revision: ${recorded.error}`)
+    return NextResponse.json({ error: 'Failed to record revision' }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })
 }
