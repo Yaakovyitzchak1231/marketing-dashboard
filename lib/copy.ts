@@ -315,6 +315,15 @@ export const COPY = {
     agentsAuthenticate:
       'Agents authenticate as agents. Permissions are explicit. Your work remains yours.',
     sharedWithAgents: 'Shared with agents',
+
+    submit: 'Submit',
+    wroteThis: 'You wrote this. Someone else has to approve it.',
+    cannotApprove: 'You cannot approve this.',
+    dismissNeedsReason: 'A dismissal needs a reason.',
+    commentNeedsWords: 'A comment needs words.',
+    noteNotEdit: 'A note does not change the row.',
+    restoreDidNotRun: 'Restore did not run.',
+    writerNotRecorded: 'The writer was not recorded, so this cannot be approved.',
   },
 } as const satisfies Record<string, CopyValue>
 

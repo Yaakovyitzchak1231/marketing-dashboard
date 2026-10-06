@@ -159,6 +159,9 @@ export default async function DashboardPage({
             <Link href="/costs" className="text-ink underline-offset-4 hover:underline">
               Costs
             </Link>
+            <Link href="/workspace" className="text-ink underline-offset-4 hover:underline">
+              {COPY.workspace.title}
+            </Link>
           </div>
         </nav>
       </div>
