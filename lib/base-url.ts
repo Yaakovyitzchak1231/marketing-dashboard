@@ -20,6 +20,18 @@
  */
 const DEFAULT_DEV_PORT = 3000
 
+/**
+ * Owner email for the provenance surface, read server-side from the same
+ * allow-list env the API routes enforce. The fail-closed placeholder is not
+ * a person, so it comes back undefined and the approval controls render
+ * disabled. Never derived from a stored row.
+ */
+export function getOwnerEmail(): string | undefined {
+  const email = process.env.ALLOWED_USER_EMAIL
+  if (!email || email === 'unset@invalid.local') return undefined
+  return email
+}
+
 export function getBaseUrl(): string {
   // The PORT fallback matters more than it looks: without it the self-fetch
   // targeted the default dev port while the server actually listened on
