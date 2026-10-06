@@ -54,16 +54,36 @@ export function nextRevisionNumber(current: number | null): number {
   return 1
 }
 
+/**
+ * Email straight from a JWT payload, without a network call. The Supabase
+ * access token carries the user's email claim; decoding it locally is enough
+ * for an audit label. Returns null when there is no token or no email claim.
+ */
+export function emailFromJwt(jwt?: string): string | null {
+  if (!jwt) return null
+  try {
+    const payload = JSON.parse(
+      Buffer.from(jwt.split('.')[1] ?? '', 'base64').toString('utf8'),
+    ) as { email?: unknown }
+    const email = payload.email
+    return typeof email === 'string' && email.includes('@') ? email : null
+  } catch {
+    return null
+  }
+}
+
 export async function sessionEmail(
   supabase: SupabaseClient,
   jwt?: string,
 ): Promise<string | null> {
+  // Prefer the local decode: no network, no session-refresh dependency.
+  // The cookie-based server client (persistSession: false) resolves RLS
+  // fine but auth.getUser() returns nothing — which stored NULL actors.
+  const local = emailFromJwt(jwt)
+  if (local) return local
   const getUser = (supabase as AuthClient).auth?.getUser
   if (typeof getUser !== 'function') return null
   try {
-    // Pass the caller's JWT explicitly: a request-scoped client built around
-    // a Bearer token does not always resolve auth.getUser() without one,
-    // which stored NULL actors on live rows. NULL still means unknown.
     const { data } = await getUser(jwt)
     const email = data?.user?.email
     return typeof email === 'string' && email.includes('@') ? email : null
@@ -73,12 +93,44 @@ export async function sessionEmail(
 }
 
 /**
- * Bearer token from the request, if the caller sent one. Routes pass this
- * to sessionEmail so the actor is the real signed-in user.
+ * Access token for the caller, from the Bearer header or the Supabase auth
+ * cookie (`sb-<ref>-auth-token`, a JSON blob with access_token inside).
+ * The browser panel sends a Bearer via useApi; direct same-origin fetches
+ * ride the cookie. Either way the routes pass this to sessionEmail so the
+ * actor is the real signed-in user. Undefined when neither is present.
  */
-export function requestJwt(req: { headers: { get(name: string): string | null } }): string | undefined {
+export function requestJwt(req: {
+  headers: { get(name: string): string | null }
+  cookies?: { get(name: string): { value: string } | undefined } | undefined
+  url?: string
+}): string | undefined {
   const header = req.headers.get('authorization') || ''
-  return header.startsWith('Bearer ') ? header.slice(7) : undefined
+  if (header.startsWith('Bearer ')) return header.slice(7)
+  const cookies = req.cookies
+  if (!cookies) return undefined
+  // Cookie name embeds the project ref, which we do not know here — scan.
+  const store = cookies as unknown as {
+    getAll?: () => { name: string }[]
+  }
+  const names: string[] =
+    typeof store.getAll === 'function'
+      ? store.getAll().map((c) => c.name)
+      : []
+  for (const name of names) {
+    if (!name.endsWith('-auth-token')) continue
+    const raw = cookies.get(name)?.value
+    if (!raw) continue
+    try {
+      const parsed = JSON.parse(raw) as { access_token?: unknown }
+      if (typeof parsed.access_token === 'string' && parsed.access_token) {
+        return parsed.access_token
+      }
+    } catch {
+      // Some deployments store the raw JWT in a chunked cookie instead.
+      if (raw.split('.').length === 3) return raw
+    }
+  }
+  return undefined
 }
 
 export async function readRevisionNumber(
