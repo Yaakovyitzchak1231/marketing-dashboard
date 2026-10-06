@@ -20,25 +20,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   }
 
-  // Pull in pages; the table can be large.
-  const all: Record<string, unknown>[] = []
-  let from = 0
-  const page = 1000
-  for (;;) {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('source, source_detail, zb_status, zb_substatus, mv_result')
-      .range(from, from + page - 1)
-    if (error) {
-      return NextResponse.json({ error: 'Failed to fetch leads' }, { status: 500 })
-    }
-    if (!data || data.length === 0) break
-    all.push(...(data as Record<string, unknown>[]))
-    if (data.length < page) break
-    from += page
-    if (from > 50000) break // sanity cap
-  }
-
   type Bucket = {
     total: number; verified: number; clean: number; dirty: number;
     catch_all: number; role_skipped: number; unverified: number;
@@ -53,26 +34,46 @@ export async function GET(request: NextRequest) {
     return b
   }
 
-  for (const l of all) {
-    const key = (l.source_detail as string) || (l.source as string) || 'unknown'
-    const b = bucket(key)
-    b.total += 1
-    const zb = (l.zb_status as string | null)?.toLowerCase() ?? null
-    const mv = (l.mv_result as string | null)?.toLowerCase() ?? null
-    const status = zb ?? mv
-    if (!status) { b.unverified += 1; continue }
-    b.verified += 1
-    if (zb === 'do_not_mail' && (l.zb_substatus as string) === 'role_address') {
-      b.role_skipped += 1
-    } else if (status === 'catch-all' || status === 'catch_all' || status === 'catchall') {
-      b.catch_all += 1
-    } else if (CLEAN.has(status)) {
-      b.clean += 1
-    } else if (DIRTY.has(status) || status === 'do_not_mail') {
-      b.dirty += 1
-    } else {
-      b.catch_all += 1 // unknown / other: neither clean nor dirty
+  // Pull in pages; the table can be large.
+  // Optimization: Process pages as they arrive without buffering up to 50k rows in memory
+  // to reduce object allocation and GC pressure.
+  let from = 0
+  const page = 1000
+  for (;;) {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('source, source_detail, zb_status, zb_substatus, mv_result')
+      .range(from, from + page - 1)
+    if (error) {
+      return NextResponse.json({ error: 'Failed to fetch leads' }, { status: 500 })
     }
+    if (!data || data.length === 0) break
+
+    for (const l of data as Record<string, unknown>[]) {
+      const key = (l.source_detail as string) || (l.source as string) || 'unknown'
+      const b = bucket(key)
+      b.total += 1
+      const zb = (l.zb_status as string | null)?.toLowerCase() ?? null
+      const mv = (l.mv_result as string | null)?.toLowerCase() ?? null
+      const status = zb ?? mv
+      if (!status) { b.unverified += 1; continue }
+      b.verified += 1
+      if (zb === 'do_not_mail' && (l.zb_substatus as string) === 'role_address') {
+        b.role_skipped += 1
+      } else if (status === 'catch-all' || status === 'catch_all' || status === 'catchall') {
+        b.catch_all += 1
+      } else if (CLEAN.has(status)) {
+        b.clean += 1
+      } else if (DIRTY.has(status) || status === 'do_not_mail') {
+        b.dirty += 1
+      } else {
+        b.catch_all += 1 // unknown / other: neither clean nor dirty
+      }
+    }
+
+    if (data.length < page) break
+    from += page
+    if (from > 50000) break // sanity cap
   }
 
   const sources = [...bySource.entries()].map(([source, b]) => ({

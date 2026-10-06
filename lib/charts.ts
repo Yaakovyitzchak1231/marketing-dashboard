@@ -84,6 +84,17 @@ export function sumKnown(values: Count[]): number | null {
   return total
 }
 
+export function sumKnownCol<T>(items: T[], key: keyof T): number | null {
+  if (items.length === 0) return null
+  let total = 0
+  for (const item of items) {
+    const v = item[key] as Count
+    if (!isKnown(v)) return null
+    total += v
+  }
+  return total
+}
+
 // ---------------------------------------------------------------------------
 // Reply-rate trend
 // ---------------------------------------------------------------------------
@@ -154,9 +165,9 @@ export function buildReplyTrend(days: TrendDayInput[]): ReplyTrend {
 
   // The period rate is recomputed from the SUMMED raw counts.
   // It is never the mean of the daily rates — that is the averaging error.
-  const sentTotal = sumKnown(points.map((p) => p.emails_sent))
-  const humanTotal = sumKnown(points.map((p) => p.replies_human))
-  const autoTotal = sumKnown(points.map((p) => p.replies_autoresponder))
+  const sentTotal = sumKnownCol(points, 'emails_sent')
+  const humanTotal = sumKnownCol(points, 'replies_human')
+  const autoTotal = sumKnownCol(points, 'replies_autoresponder')
 
   let period: TrendPeriod | null = null
   if (sentTotal !== null && humanTotal !== null) {
