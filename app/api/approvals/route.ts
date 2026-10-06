@@ -89,6 +89,14 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error(`approvals POST: ${error.message}`)
+    // UNIQUE (artifact_type, artifact_id, status): this decision is already
+    // recorded. Say so plainly instead of a generic failure.
+    if (error.code === '23505' || error.message.includes('duplicate')) {
+      return NextResponse.json(
+        { error: 'This decision is already recorded for this row.' },
+        { status: 409 },
+      )
+    }
     return NextResponse.json({ error: 'Failed to record approval' }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })
