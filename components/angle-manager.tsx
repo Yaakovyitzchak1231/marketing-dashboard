@@ -7,6 +7,7 @@ import { PERFORMANCE_RANGE_LABEL } from '@/lib/range'
 import { exportToCsv } from '@/lib/csv'
 import { compareByMetric, compareByName } from '@/lib/sort'
 import { COPY } from '@/lib/copy'
+import { ArtifactProvenance } from '@/components/artifact-provenance'
 
 type Angle = {
   id: string
@@ -31,10 +32,14 @@ export function AngleManager({
   initialAngles,
   initialPerformance,
   campaigns,
+  ownerEmail,
+  apiBase,
 }: {
   initialAngles: Angle[]
   initialPerformance: PerfRow[]
   campaigns: { id: string; name: string }[]
+  ownerEmail?: string
+  apiBase?: string
 }) {
   const api = useApi()
   const [angles, setAngles] = useState<Angle[]>(initialAngles)
@@ -259,8 +264,8 @@ export function AngleManager({
         </div>
         <div className="space-y-2">
           {filteredAngles.map(a => (
+            <div key={`prov-${a.id}`} className="space-y-2">
             <div
-              key={a.id}
               className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
             >
               <div className="min-w-0">
@@ -277,6 +282,21 @@ export function AngleManager({
               >
                 Delete
               </button>
+            </div>
+            <details className="rounded-card border border-line bg-surface px-4 py-2">
+              <summary className="cursor-pointer text-[12px] text-ink-muted">
+                History & approvals
+              </summary>
+              <ArtifactProvenance
+                ownerEmail={ownerEmail}
+                revisionsUrl={`${apiBase ?? ''}/api/revisions`}
+                approvalsUrl={`${apiBase ?? ''}/api/approvals`}
+                commentsUrl={`${apiBase ?? ''}/api/comments`}
+                artifactType="angles"
+                artifactId={a.id}
+                rowName={a.name}
+              />
+            </details>
             </div>
           ))}
           {angles.length > 0 && filteredAngles.length === 0 && (

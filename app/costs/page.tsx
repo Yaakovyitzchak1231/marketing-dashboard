@@ -1,5 +1,4 @@
 import { CostManager } from '@/components/cost-manager'
-import { ArtifactProvenance } from '@/components/artifact-provenance'
 import { getBaseUrl, getOwnerEmail } from '@/lib/base-url'
 
 import Link from 'next/link'
@@ -41,17 +40,11 @@ export default async function CostsPage() {
           Back to ideas
         </Link>
       </header>
-      <CostManager initialCosts={costs} ideas={ideas} />
-
-      {/* Shared workspace provenance on the same live artifact. */}
-      <ArtifactProvenance
+      <CostManager
+        initialCosts={costs}
+        ideas={ideas}
         ownerEmail={getOwnerEmail()}
-        revisionsUrl={`${base}/api/revisions`}
-        approvalsUrl={`${base}/api/approvals`}
-        commentsUrl={`${base}/api/comments`}
-        artifactType="costs"
-        artifactId=""
-        rowName="Cost"
+        apiBase={base}
       />
     </main>
   )

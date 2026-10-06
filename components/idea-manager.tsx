@@ -7,6 +7,7 @@ import { CURRENCY_PRECISION } from '@/lib/format'
 import { exportToCsv } from '@/lib/csv'
 import { compareByMetric, compareByName } from '@/lib/sort'
 import { COPY } from '@/lib/copy'
+import { ArtifactProvenance } from '@/components/artifact-provenance'
 
 type Idea = {
   id: string
@@ -41,9 +42,13 @@ const fmt = (v: number | null, digits = CURRENCY_PRECISION) =>
 export function IdeaManager({
   initialIdeas,
   initialPerformance,
+  ownerEmail,
+  apiBase,
 }: {
   initialIdeas: Idea[]
   initialPerformance: PerfRow[]
+  ownerEmail?: string
+  apiBase?: string
 }) {
   const api = useApi()
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
@@ -266,8 +271,8 @@ export function IdeaManager({
         </div>
         <div className="space-y-2">
           {filteredIdeas.map(idea => (
+            <div key={`prov-${idea.id}`} className="space-y-2">
             <div
-              key={idea.id}
               className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
             >
               <div className="min-w-0">
@@ -286,6 +291,21 @@ export function IdeaManager({
               >
                 Delete
               </button>
+            </div>
+            <details className="rounded-card border border-line bg-surface px-4 py-2">
+              <summary className="cursor-pointer text-[12px] text-ink-muted">
+                History & approvals
+              </summary>
+              <ArtifactProvenance
+                ownerEmail={ownerEmail}
+                revisionsUrl={`${apiBase ?? ''}/api/revisions`}
+                approvalsUrl={`${apiBase ?? ''}/api/approvals`}
+                commentsUrl={`${apiBase ?? ''}/api/comments`}
+                artifactType="ideas"
+                artifactId={idea.id}
+                rowName={idea.name}
+              />
+            </details>
             </div>
           ))}
           {ideas.length > 0 && filteredIdeas.length === 0 && (

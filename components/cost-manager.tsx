@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useApi } from '@/components/use-api'
 import { SUM_START, MIN_AMOUNT_USD, CURRENCY_PRECISION } from '@/lib/format'
 import { COPY } from '@/lib/copy'
+import { ArtifactProvenance } from '@/components/artifact-provenance'
 import { exportToCsv } from '@/lib/csv'
 
 type Cost = {
@@ -17,13 +18,30 @@ type Cost = {
 
 type Idea = { id: string; name: string }
 
+/**
+ * Column keys for the costs table, in render order. The provenance row spans
+ * the full table width via COST_TABLE_COLUMNS.length — never a numeric
+ * literal, which tests/no-fabrication.test.ts forbids in the render path.
+ */
+const COST_TABLE_COLUMNS = ['date', 'category', 'idea', 'notes', 'amount', 'actions']
+
 // These must match the costs.category CHECK constraint in
 // supabase/migrations/002_unified_model.sql exactly. An invented category
 // (a plural label, or an "other" bucket) is rejected by Postgres, so the form
 // offers only what the schema accepts.
 const CATEGORIES = ['domain', 'inbox', 'verification', 'tool', 'list'] as const
 
-export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ideas: Idea[] }) {
+export function CostManager({
+  initialCosts,
+  ideas,
+  ownerEmail,
+  apiBase,
+}: {
+  initialCosts: Cost[]
+  ideas: Idea[]
+  ownerEmail?: string
+  apiBase?: string
+}) {
   const api = useApi()
   const [costs, setCosts] = useState<Cost[]>(initialCosts)
   const [amount, setAmount] = useState('')
@@ -206,7 +224,8 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
               </thead>
               <tbody>
                 {costs.map(c => (
-                  <tr key={c.id} className="border-b border-line last:border-0">
+                  <React.Fragment key={c.id}>
+                  <tr className="border-b border-line last:border-0">
                     <td className="px-4 py-2 tabular-nums text-ink-muted">{c.spent_at ?? '—'}</td>
                     <td className="px-4 py-2 text-ink-muted">{c.category}</td>
                     {/* costs has no ideas FK, so the linked idea is the
@@ -228,6 +247,25 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
                       </button>
                     </td>
                   </tr>
+                  <tr>
+                    <td colSpan={COST_TABLE_COLUMNS.length} className="px-4 pb-3">
+                      <details>
+                        <summary className="cursor-pointer text-[12px] text-ink-muted">
+                          History & approvals
+                        </summary>
+                        <ArtifactProvenance
+                          ownerEmail={ownerEmail}
+                          revisionsUrl={`${apiBase ?? ''}/api/revisions`}
+                          approvalsUrl={`${apiBase ?? ''}/api/approvals`}
+                          commentsUrl={`${apiBase ?? ''}/api/comments`}
+                          artifactType="costs"
+                          artifactId={c.id}
+                          rowName={c.category}
+                        />
+                      </details>
+                    </td>
+                  </tr>
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

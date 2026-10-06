@@ -1,5 +1,4 @@
 import { IdeaManager } from '@/components/idea-manager'
-import { ArtifactProvenance } from '@/components/artifact-provenance'
 import { getBaseUrl, getOwnerEmail } from '@/lib/base-url'
 import { PERFORMANCE_RANGE } from '@/lib/range'
 
@@ -53,17 +52,8 @@ export default async function IdeasPage() {
       <IdeaManager
         initialIdeas={(ideas ?? []) as never[]}
         initialPerformance={((performance?.ideas ?? []) as never[])}
-      />
-
-      {/* Shared workspace provenance on the same live artifact. */}
-      <ArtifactProvenance
         ownerEmail={getOwnerEmail()}
-        revisionsUrl={`${base}/api/revisions`}
-        approvalsUrl={`${base}/api/approvals`}
-        commentsUrl={`${base}/api/comments`}
-        artifactType="ideas"
-        artifactId=""
-        rowName="Idea"
+        apiBase={base}
       />
     </main>
   )
