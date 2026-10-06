@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { EDITABLE_ARTIFACTS, sessionEmail } from '@/lib/revisions'
+import { EDITABLE_ARTIFACTS, sessionEmail, requestJwt } from '@/lib/revisions'
 
 const ARTIFACT_TYPES = EDITABLE_ARTIFACTS
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         snapshot !== undefined && snapshot !== null
           ? (snapshot as Record<string, unknown>)
           : null,
-      actor: await sessionEmail(supabase),
+      actor: await sessionEmail(supabase, requestJwt(req)),
     })
     .select()
     .single()

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { nextRevisionNumber, recordRevision, readRevisionNumber, sessionEmail } from '@/lib/revisions'
+import { nextRevisionNumber, recordRevision, readRevisionNumber, sessionEmail, requestJwt } from '@/lib/revisions'
 import { EDITABLE_ARTIFACTS } from '@/lib/revisions'
 
 export async function POST(req: NextRequest) {
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     artifact_type: t,
     artifact_id: artifact_id as string,
     revision_number: next,
-    actor: await sessionEmail(supabase),
+    actor: await sessionEmail(supabase, requestJwt(req)),
     change_kind: 'update',
     change_message: 'restored to this version',
   })

@@ -20,7 +20,9 @@ type ActorSource = {
 
 type AuthClient = {
   auth?: {
-    getUser?: () => Promise<{ data?: { user?: { email?: string | null } | null } }>
+    getUser?: (
+      jwt?: string,
+    ) => Promise<{ data?: { user?: { email?: string | null } | null } }>
   }
 }
 
@@ -52,16 +54,31 @@ export function nextRevisionNumber(current: number | null): number {
   return 1
 }
 
-export async function sessionEmail(supabase: SupabaseClient): Promise<string | null> {
+export async function sessionEmail(
+  supabase: SupabaseClient,
+  jwt?: string,
+): Promise<string | null> {
   const getUser = (supabase as AuthClient).auth?.getUser
   if (typeof getUser !== 'function') return null
   try {
-    const { data } = await getUser()
+    // Pass the caller's JWT explicitly: a request-scoped client built around
+    // a Bearer token does not always resolve auth.getUser() without one,
+    // which stored NULL actors on live rows. NULL still means unknown.
+    const { data } = await getUser(jwt)
     const email = data?.user?.email
     return typeof email === 'string' && email.includes('@') ? email : null
   } catch {
     return null
   }
+}
+
+/**
+ * Bearer token from the request, if the caller sent one. Routes pass this
+ * to sessionEmail so the actor is the real signed-in user.
+ */
+export function requestJwt(req: { headers: { get(name: string): string | null } }): string | undefined {
+  const header = req.headers.get('authorization') || ''
+  return header.startsWith('Bearer ') ? header.slice(7) : undefined
 }
 
 export async function readRevisionNumber(
@@ -99,7 +116,13 @@ export async function auditStamp(
     revision_number: input.changeKind === 'create' ? 1 : nextRevisionNumber(prior),
     change_kind: input.changeKind,
     change_message: input.changeMessage,
-    actor: resolveActor(request, await sessionEmail(supabase)),
+    actor: resolveActor(
+      request,
+      await sessionEmail(
+        supabase,
+        request.headers ? requestJwt({ headers: request.headers }) : undefined,
+      ),
+    ),
   }
 }
 

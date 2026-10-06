@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { EDITABLE_ARTIFACTS, sessionEmail } from '@/lib/revisions'
+import { EDITABLE_ARTIFACTS, sessionEmail, requestJwt } from '@/lib/revisions'
 
 const ARTIFACT_TYPES = EDITABLE_ARTIFACTS
 
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       artifact_id: artifact_id as string,
       row_name: typeof row_name === 'string' ? row_name : '',
       text: text.trim(),
-      author: await sessionEmail(supabase),
+      author: await sessionEmail(supabase, requestJwt(req)),
     })
     .select()
     .single()

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { EDITABLE_ARTIFACTS, sessionEmail } from '@/lib/revisions'
+import { EDITABLE_ARTIFACTS, sessionEmail, requestJwt } from '@/lib/revisions'
 
 const ARTIFACT_TYPES = EDITABLE_ARTIFACTS
 const STATUSES = ['approved', 'requested', 'dismissed'] as const
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       artifact_type: t,
       artifact_id: artifact_id as string,
       status,
-      actor: await sessionEmail(supabase),
+      actor: await sessionEmail(supabase, requestJwt(req)),
       owner: typeof owner === 'string' ? owner : null,
       reason: typeof reason === 'string' ? reason : null,
     })
