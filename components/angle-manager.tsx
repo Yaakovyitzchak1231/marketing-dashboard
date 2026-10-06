@@ -33,13 +33,11 @@ export function AngleManager({
   initialPerformance,
   campaigns,
   ownerEmail,
-  apiBase,
 }: {
   initialAngles: Angle[]
   initialPerformance: PerfRow[]
   campaigns: { id: string; name: string }[]
   ownerEmail?: string
-  apiBase?: string
 }) {
   const api = useApi()
   const [angles, setAngles] = useState<Angle[]>(initialAngles)
@@ -289,9 +287,9 @@ export function AngleManager({
               </summary>
               <ArtifactProvenance
                 ownerEmail={ownerEmail}
-                revisionsUrl={`${apiBase ?? ''}/api/revisions`}
-                approvalsUrl={`${apiBase ?? ''}/api/approvals`}
-                commentsUrl={`${apiBase ?? ''}/api/comments`}
+                revisionsUrl="/api/revisions"
+                approvalsUrl="/api/approvals"
+                commentsUrl="/api/comments"
                 artifactType="angles"
                 artifactId={a.id}
                 rowName={a.name}

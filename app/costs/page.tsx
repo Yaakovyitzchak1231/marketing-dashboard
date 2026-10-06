@@ -44,7 +44,6 @@ export default async function CostsPage() {
         initialCosts={costs}
         ideas={ideas}
         ownerEmail={getOwnerEmail()}
-        apiBase={base}
       />
     </main>
   )

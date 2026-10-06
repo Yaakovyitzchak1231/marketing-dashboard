@@ -53,7 +53,6 @@ export default async function IdeasPage() {
         initialIdeas={(ideas ?? []) as never[]}
         initialPerformance={((performance?.ideas ?? []) as never[])}
         ownerEmail={getOwnerEmail()}
-        apiBase={base}
       />
     </main>
   )

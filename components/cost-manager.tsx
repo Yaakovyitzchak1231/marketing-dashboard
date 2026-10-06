@@ -35,12 +35,10 @@ export function CostManager({
   initialCosts,
   ideas,
   ownerEmail,
-  apiBase,
 }: {
   initialCosts: Cost[]
   ideas: Idea[]
   ownerEmail?: string
-  apiBase?: string
 }) {
   const api = useApi()
   const [costs, setCosts] = useState<Cost[]>(initialCosts)
@@ -255,9 +253,9 @@ export function CostManager({
                         </summary>
                         <ArtifactProvenance
                           ownerEmail={ownerEmail}
-                          revisionsUrl={`${apiBase ?? ''}/api/revisions`}
-                          approvalsUrl={`${apiBase ?? ''}/api/approvals`}
-                          commentsUrl={`${apiBase ?? ''}/api/comments`}
+                          revisionsUrl="/api/revisions"
+                          approvalsUrl="/api/approvals"
+                          commentsUrl="/api/comments"
                           artifactType="costs"
                           artifactId={c.id}
                           rowName={c.category}

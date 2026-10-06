@@ -43,12 +43,10 @@ export function IdeaManager({
   initialIdeas,
   initialPerformance,
   ownerEmail,
-  apiBase,
 }: {
   initialIdeas: Idea[]
   initialPerformance: PerfRow[]
   ownerEmail?: string
-  apiBase?: string
 }) {
   const api = useApi()
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
@@ -298,9 +296,9 @@ export function IdeaManager({
               </summary>
               <ArtifactProvenance
                 ownerEmail={ownerEmail}
-                revisionsUrl={`${apiBase ?? ''}/api/revisions`}
-                approvalsUrl={`${apiBase ?? ''}/api/approvals`}
-                commentsUrl={`${apiBase ?? ''}/api/comments`}
+                revisionsUrl="/api/revisions"
+                approvalsUrl="/api/approvals"
+                commentsUrl="/api/comments"
                 artifactType="ideas"
                 artifactId={idea.id}
                 rowName={idea.name}

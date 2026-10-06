@@ -50,7 +50,6 @@ export default async function AnglesPage() {
         initialPerformance={performance?.angles ?? []}
         campaigns={(campaigns?.campaigns ?? []) as { id: string; name: string }[]}
         ownerEmail={getOwnerEmail()}
-        apiBase={base}
       />
     </main>
   )
