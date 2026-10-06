@@ -263,7 +263,7 @@ export function IdeaManager({
               placeholder="Search ideas..."
               value={ideaQuery}
               onChange={e => setIdeaQuery(e.target.value)}
-              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted"
+              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           )}
         </div>

@@ -277,7 +277,7 @@ export function ArtifactProvenance({
         </div>
 
         {error && revisions.length > 0 ? (
-          <p className="mt-1 text-xs text-ink-muted">{error}</p>
+          <p role="alert" className="mt-1 text-xs text-ink-muted">{error}</p>
         ) : revisions.length === 0 ? (
           <p className="mt-1 text-xs text-ink-faint">{COPY.workspace.noRevisions}</p>
         ) : (
@@ -438,7 +438,7 @@ export function ArtifactProvenance({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Say something"
-                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none"
+                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               />
             </label>
             <button
@@ -452,7 +452,7 @@ export function ArtifactProvenance({
         ) : null}
 
         {error ? (
-          <p className="mt-2 text-xs text-ink-muted">{error}</p>
+          <p role="alert" className="mt-2 text-xs text-ink-muted">{error}</p>
         ) : null}
       </div>
     </section>
