@@ -26,6 +26,7 @@ vi.mock('@/lib/revisions', async (importOriginal) => {
 import { getRequestClient } from '@/lib/request-client'
 import { GET as approvalsGET, POST as approvalsPOST } from '@/app/api/approvals/route'
 import { GET as commentsGET, POST as commentsPOST } from '@/app/api/comments/route'
+import { GET as checkpointsGET, POST as checkpointsPOST } from '@/app/api/checkpoints/route'
 
 const getClient = getRequestClient as unknown as ReturnType<typeof vi.fn>
 
@@ -163,5 +164,57 @@ describe('comments route', () => {
     )
     expect(res.status).toBe(201)
     expect(inserted[0]?.author).toBe('yaakovytroutai@gmail.com')
+  })
+})
+
+describe('checkpoints route', () => {
+  it('rejects an unknown artifact_type with 400', async () => {
+    getClient.mockResolvedValue(chain({ data: [], error: null }))
+    const res = await checkpointsGET(req('http://x/api/checkpoints?artifact_type=nope&artifact_id=1'))
+    expect(res.status).toBe(400)
+  })
+
+  it('requires artifact_id with 400 and writes nothing', async () => {
+    const inserted: Record<string, unknown>[] = []
+    getClient.mockResolvedValue({
+      from: () => ({
+        insert: (row: Record<string, unknown>) => {
+          inserted.push(row)
+          return { select: () => ({ single: () => Promise.resolve({ data: row, error: null }) }) }
+        },
+      }),
+    })
+    const res = await checkpointsPOST(
+      jsonReq('http://x/api/checkpoints', { artifact_type: 'ideas' }),
+    )
+    expect(res.status).toBe(400)
+    expect(inserted).toHaveLength(0)
+  })
+
+  it('pins with the session email as actor', async () => {
+    const inserted: Record<string, unknown>[] = []
+    getClient.mockResolvedValue({
+      from: () => ({
+        insert: (row: Record<string, unknown>) => {
+          inserted.push(row)
+          return { select: () => ({ single: () => Promise.resolve({ data: row, error: null }) }) }
+        },
+      }),
+    })
+    const res = await checkpointsPOST(
+      jsonReq('http://x/api/checkpoints', {
+        artifact_type: 'ideas',
+        artifact_id: 'c4f4',
+        revision_number: 2,
+      }),
+    )
+    expect(res.status).toBe(201)
+    expect(inserted[0]).toMatchObject({
+      artifact_type: 'ideas',
+      artifact_id: 'c4f4',
+      revision_number: 2,
+      name: 'Pin revision 2',
+      actor: 'yaakovytroutai@gmail.com',
+    })
   })
 })
