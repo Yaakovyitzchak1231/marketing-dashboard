@@ -277,7 +277,7 @@ export function ArtifactProvenance({
         </div>
 
         {error && revisions.length > 0 ? (
-          <p className="mt-1 text-xs text-ink-muted">{error}</p>
+          <p role="alert" className="mt-1 text-xs text-ink-muted">{error}</p>
         ) : revisions.length === 0 ? (
           <p className="mt-1 text-xs text-ink-faint">{COPY.workspace.noRevisions}</p>
         ) : (
@@ -374,7 +374,7 @@ export function ArtifactProvenance({
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             onClick={() => approve()}
             disabled={!authorized}
           >
@@ -382,7 +382,7 @@ export function ArtifactProvenance({
           </button>
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             onClick={() => requestChanges(owner)}
             disabled={!authorized}
           >
@@ -390,7 +390,7 @@ export function ArtifactProvenance({
           </button>
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             onClick={() => dismissApproval()}
             disabled={!authorized}
           >
@@ -438,12 +438,12 @@ export function ArtifactProvenance({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Say something"
-                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none"
+                className="mt-0.5 w-full border-0 outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               />
             </label>
             <button
               type="submit"
-              className="shrink-0 rounded bg-ink px-3 py-1.5 text-[11px] text-white disabled:opacity-40"
+              className="shrink-0 rounded bg-ink px-3 py-1.5 text-[11px] text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               disabled={!commentText.trim()}
             >
               {COPY.workspace.save}
@@ -452,7 +452,7 @@ export function ArtifactProvenance({
         ) : null}
 
         {error ? (
-          <p className="mt-2 text-xs text-ink-muted">{error}</p>
+          <p role="alert" className="mt-2 text-xs text-ink-muted">{error}</p>
         ) : null}
       </div>
     </section>

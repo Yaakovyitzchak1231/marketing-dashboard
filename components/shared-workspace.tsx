@@ -132,7 +132,7 @@ function EmptyOrError({
 }) {
   if (rows === null) {
     return (
-      <p data-testid={testId} data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
+      <p role="alert" data-testid={testId} data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
         {COPY.error}
       </p>
     )
@@ -164,7 +164,7 @@ function ActionButton({
       data-testid={testId}
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+      className="rounded border border-line px-2.5 py-1 text-[13px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
     >
       {children}
     </button>
@@ -436,7 +436,7 @@ export function SharedWorkspace({
             ) : null}
           </div>
           {shownApprovals === null ? (
-            <p data-testid="workspace-approvals-state" data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
+            <p role="alert" data-testid="workspace-approvals-state" data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
               {COPY.error}
             </p>
           ) : null}
@@ -494,7 +494,7 @@ export function SharedWorkspace({
                     <input
                       name="reason"
                       data-testid="dismiss-reason"
-                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                     />
                   </label>
                   <p className="text-[12px] text-ink-faint">{COPY.workspace.dismissNote}</p>
@@ -502,7 +502,7 @@ export function SharedWorkspace({
                     type="submit"
                     data-testid="dismiss"
                     disabled={!canAct()}
-                    className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+                    className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
                   >
                     {COPY.workspace.dismiss}
                   </button>
@@ -535,12 +535,12 @@ export function SharedWorkspace({
                         name="body"
                         data-testid={`comment-input-${row.id}`}
                         aria-label={COPY.workspace.commentOn(row.label)}
-                        className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+                        className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                       />
                       <button
                         type="submit"
                         data-testid={`comment-submit-${row.id}`}
-                        className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+                        className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
                       >
                         {COPY.workspace.commentOn(row.label)}
                       </button>
