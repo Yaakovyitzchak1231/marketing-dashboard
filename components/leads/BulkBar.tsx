@@ -6,6 +6,7 @@ import { STAGES, type Stage } from '@/lib/leads/types'
 import { STAGE_LABELS } from '@/lib/leads/filters'
 import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { VerifyButton } from '@/components/verify/VerifyButton'
+import Link from 'next/link'
 
 export interface Selected {
   companyIds: number[]
@@ -96,6 +97,14 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
           Verify selected
         </span>
       )}
+      <Link
+        href={`/leads/instantly?companies=${selected.companyIds.join(',')}`}
+        prefetch={false}
+        className={BUTTON}
+        title="Pick a campaign and preview who would be added; nothing is sent until you confirm"
+      >
+        Add to Instantly
+      </Link>
       <span className="flex items-center gap-1">
         <label className="sr-only" htmlFor="bulk-stage">
           Set stage

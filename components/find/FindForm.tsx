@@ -27,13 +27,22 @@ export function parseWhere(where: string): { states: string[]; cities: string[] 
   return { states, cities }
 }
 
-export function FindForm({ jewelerQueries, agencyQueries }: { jewelerQueries: string[]; agencyQueries: string[] }) {
+export function FindForm({
+  jewelerQueries,
+  agencyQueries,
+  initialSegment = 'jeweler',
+}: {
+  jewelerQueries: string[]
+  agencyQueries: string[]
+  /** Pre-picked segment, e.g. from a "Find more leads" button on the runway screen (/find?segment=ai_agency). */
+  initialSegment?: 'jeweler' | 'ai_agency'
+}) {
   const router = useRouter()
-  const [segment, setSegment] = useState<'jeweler' | 'ai_agency'>('jeweler')
+  const [segment, setSegment] = useState<'jeweler' | 'ai_agency'>(initialSegment)
   const [where, setWhere] = useState('MD')
   const [allUs, setAllUs] = useState(false)
   const [max, setMax] = useState('100')
-  const [queries, setQueries] = useState(jewelerQueries.join(', '))
+  const [queries, setQueries] = useState((initialSegment === 'ai_agency' ? agencyQueries : jewelerQueries).join(', '))
   const [stages, setStages] = useState<string[]>(STAGES.filter((s) => !('extra' in s && s.extra)).map((s) => s.id))
   const [proxies, setProxies] = useState(false)
   const [busy, setBusy] = useState(false)

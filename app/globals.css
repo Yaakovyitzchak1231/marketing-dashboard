@@ -52,3 +52,25 @@ body {
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.005em;
 }
+
+/* Print (the weekly one-pager's "Save as PDF"): white page, no nav or buttons,
+   cards keep their hairlines and don't split across pages. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .shadow-card {
+    box-shadow: none !important;
+  }
+  section {
+    break-inside: avoid;
+  }
+}
