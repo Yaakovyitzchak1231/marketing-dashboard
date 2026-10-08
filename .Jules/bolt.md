@@ -10,3 +10,7 @@
 ## 2024-10-05 - Optimize intermediate array allocations via flatMap and map chaining
 **Learning:** Chaining array methods like `flatMap()` followed by nested loops mapping logic can lead to unnecessary allocations and memory overhead, especially in Node.js/Next.js API routes when iterating large arrays (like joining database results).
 **Action:** When computing aggregates or sums on nested items within mapping functions, write inline `for...of` loops rather than allocating intermediate mapping arrays (like `flatMap`). This speeds up runtime logic heavily while helping memory usage.
+
+## 2024-10-08 - Process paginated datasets directly in loops
+**Learning:** In API routes fetching large datasets via pagination (e.g., using Supabase `.range()`), pushing all chunked results into a single array (`all.push(...data)`) before processing buffers a massive array in memory. This degrades performance as memory scales from O(chunk) to O(N), leading to heavy garbage collection pressure.
+**Action:** Move the processing/aggregation logic directly into the pagination loop to process the data chunk by chunk (`for (const row of chunk) { ... }`). This completely eliminates the large intermediate array and bounds memory usage strictly to the size of a single page.
