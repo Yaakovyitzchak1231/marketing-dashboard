@@ -43,6 +43,43 @@ browser ──login (Supabase email + password)──▶ middleware.ts (allow-li
   and notes for that old Supabase data model. Kept for reference only. The
   Supabase project itself is still needed for the login.
 
+## Lead platform
+
+Leads, research, verification, campaign events and teamwork between you and the agents
+now live in one Postgres schema (`lp`), with screens for each job: Overview, Leads,
+Find leads, Verification, Campaigns, Replies, Team, Agents, Activity.
+
+How the agents work together, in one paragraph: everyone (you, Tab, Hermes, Claude,
+Manus) uses the same Team board. An agent picks up a task and keeps checking in; if it
+goes quiet the task frees itself. Before changing a campaign or list it "checks it out"
+like a library book, so two agents never touch the same thing. `@tab` in a note lands in
+Tab's inbox. Anything outward or paid waits for your Approve click. Every action shows
+up in the Activity feed, and each agent's memory is readable and editable on its page.
+
+### How agents and people work together, step by step
+
+1. **One board.** Every job is a task on the Team board. The assignee can be you or an
+   agent (Tab, Hermes, Claude, Manus). Anyone can create, comment, hand off or close a task.
+2. **Claim and check in.** An agent claims a task before working on it and sends a
+   heartbeat every few minutes. If it goes quiet, its claim runs out and the task is free
+   for someone else. Nobody works on a task someone else holds.
+3. **Check out before changing.** Before touching a campaign, a lead list or a lead, an
+   agent takes a lock on it (like a library book). Others see who has it and wait.
+   Instantly's own AI can't take locks, so its campaigns count as checked out to it.
+4. **Your Approve click for anything outward or paid.** Sends, paid verification runs and
+   anything destructive wait in the Activity feed until you approve. Reading, research and
+   drafts don't need you.
+5. **One feed.** Every claim, lock, change, comment and approval is written to the
+   Activity feed in plain English, so you can always see who did what.
+6. **Memory per agent.** Each agent has its own notes on its Agents page; you can read and
+   edit them. Tab's page is where you assign Tab work and read its reports.
+7. **One source of truth.** All of it lives in one Postgres schema (`lp`). The Lead Master
+   Google Sheet is imported once and becomes a read-only export.
+
+Details, the ops API and the import: [docs/LEAD_PLATFORM.md](docs/LEAD_PLATFORM.md).
+How the lead engine (Find leads) works, how to run it on your server and its limits:
+[docs/lead-engine.md](docs/lead-engine.md).
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local` for local work. Never commit real values.
@@ -54,6 +91,15 @@ Copy `.env.example` to `.env.local` for local work. Never commit real values.
 | `ALLOWED_USER_EMAIL` | yes | The one email allowed to sign in. Unset = nobody gets in. |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL (login only). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anon (public) key (login only). |
+| `DATABASE_URL` | for the lead platform | Postgres connection string for the `lp` schema (Supabase: use the pooler URL; or the OVH server). Unset = the lead screens show "not connected" and the Instantly pages still work. |
+| `OPS_AGENT_TOKENS` | for agents | `tab:<token>,hermes:<token>,...` — one long random token per agent for the ops API. |
+| `INSTANTLY_WEBHOOK_SECRET` | for the reply desk | Shared secret Instantly sends on each webhook (`Authorization: Bearer <secret>`), 16+ characters. |
+| `MILLIONVERIFIER_API_KEY` | for paid verification | MillionVerifier API key. Used only after you approve a run's cost preview. |
+| `ZEROBOUNCE_API_KEY` | for paid verification | ZeroBounce API key. Used only for MillionVerifier catch-all/unknown results, after approval. |
+| `ENGINE_PROXIES` | runner only | On the server that runs the lead engine: comma-separated proxy URLs, used only when a job ticks "Rotate proxies". Not needed on Vercel. |
+| `SEARXNG_URL` | runner only, optional | Free self-hosted search used by the owner-name step. Without it (or `SERPER_API_KEY`) the search steps are skipped. |
+| `SERPER_API_KEY` | runner only, optional | Paid search alternative to SearXNG. Leave unset to stay free. |
+| `OPS_URL`, `OPS_TOKEN` | runner only | Where an agent runner reaches the ops API (the dashboard URL + `/api/ops`) and that agent's token from `OPS_AGENT_TOKENS`. |
 | `DASHBOARD_DEV_NO_AUTH` | no | Local development only: `1` skips the login so you can run the app without Supabase. Ignored in production builds and on every Vercel deployment. |
 
 ## Run it locally

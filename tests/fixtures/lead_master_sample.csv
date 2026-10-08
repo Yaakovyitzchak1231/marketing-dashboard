@@ -1,0 +1,8 @@
+email,status,first_name,suggested_first_name,last_name,company_name,website,phone,city,state,vertical,batches,email_source,name_source,name_confidence,name_evidence_url,mv_result,mv_date,campaign,sent_date,notes
+maria@brightgems.example,valid-ready,Maria,,Lopez,Bright Gems,https://www.brightgems.example/,(410) 555-0101,Baltimore,MD,jewelry,JW-1,website,about_page,high,https://www.brightgems.example/about,ok,"Oct 5, 3:51 PM",,,
+info@brightgems.example,catch-all-hold,,,,Bright Gems Jewelers,brightgems.example,,Baltimore,MD,jewelry,JW-2,website,,,,catch_all,"Oct 5, 3:52 PM",,,
+sam@oldtown.example,in-Instantly,Sam,,,"Old Town Jewelry, LLC",http://oldtown.example/contact,410-555-0102,Towson,MD,jewelry,JW-1,facebook,email_localpart,low,mailto:sam@oldtown.example,ok,"Oct 5, 3:51 PM",A Fees,"Oct 6, 9:00 AM",
+hello@ringhouse.example,guessed-hold,,Dana,,Ring House,,1 (212) 555-0103,New York,NY,bridal,BR-1,guessed,,,,,,,,
+,new,,,,No Email Store,https://noemail.example,,Austin,TX,jewelry,JW-3,,,,,,,,,
+not-an-email,new,,,,Broken Row,,,Austin,TX,jewelry,JW-3,,,,,,,,,
+lee@ringhouse-nyc.example,valid-ready,Lee,,,"Ring House",,(212) 555-0103,New York,NY,bridal,BR-2,website,,,,ok,"Oct 5, 4:10 PM",,,"same phone as Ring House"

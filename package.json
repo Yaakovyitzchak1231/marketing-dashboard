@@ -11,20 +11,26 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "lint:strict": "eslint . --ext .js,.jsx,.mjs,.ts,.tsx --max-warnings=0"
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "import:lead-master": "node --experimental-strip-types scripts/import-lead-master.ts",
+    "lint:strict": "eslint . --ext .js,.jsx,.mjs,.ts,.tsx --max-warnings=0",
+    "engine": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON engine/cli.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.43.0",
     "next": "15.5.26",
+    "pg": "^8.23.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "20.14.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "^4.3.4",

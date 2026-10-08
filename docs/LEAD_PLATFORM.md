@@ -1,0 +1,148 @@
+# Lead platform (Phase 1)
+
+One database for every lead, every check, every campaign event and every piece of
+teamwork between you and the agents. The Lead Master Sheet becomes a read-only copy.
+
+## How the agents work together (plain English)
+
+Think of it as a small office where some teammates are people and some are agents
+(Tab, Hermes, Claude, Manus). Everyone uses the same board, the same lead list and
+the same activity log, so there is one source of truth.
+
+- **Tasks.** You (or an agent) put a task on the Team board and assign it to someone,
+  or leave it for whoever picks it up first. When an agent picks a task up it holds it
+  for a few minutes at a time and keeps checking in ("40 of 200 done"). If it goes
+  quiet, the task frees itself and someone else can take it. Nobody works on the same
+  task twice.
+- **Checking out.** Before an agent changes a campaign, a lead list or a lead, it
+  "checks it out" like a library book. Anyone else who tries sees who has it and waits.
+  You can take a checkout back from the Activity screen at any time.
+- **Notes and @mentions.** Every task and every lead has a thread. Writing `@tab` or
+  `@hermes` in a note puts it in that teammate's inbox; agents read their inbox through
+  the same API. Handing a task to someone else always carries a note on where it stands.
+- **Your OK first.** Anything that leaves the building or costs money (loading leads into
+  a campaign, sending, a paid verification run) is asked for as an approval. Only a
+  person can approve, never the agent that asked. Pending requests sit at the top of the
+  Activity screen with Approve / Reject.
+- **Memory.** Each agent has its own notebook (what it learned, your preferences for it)
+  plus a shared team notebook. You can read and edit every note on the Agents screen.
+  Every change is logged.
+- **Activity.** Every action by every teammate lands in one feed, in plain sentences.
+  The log can't be edited or deleted.
+
+## Screens
+
+| Screen | What it's for |
+|---|---|
+| Overview `/` | Where leads stand: by stage, research and verification backlog, replies waiting, recent activity |
+| Leads `/leads` | Views: table, kanban by stage, by campaign, by state, needs research, needs verification. Filters, bulk actions, lead detail with sources, enrichment, verification history, campaign touches, status history and comments |
+| Find leads `/find` | The lead engine: pick segment, area and size, run it, watch progress |
+| Verification `/verify` | Free check, then MillionVerifier, then ZeroBounce only for catch-all/unknown, with a cost preview and an Approve click before anything paid |
+| Campaigns `/campaigns` | The Instantly dashboard (PR #35) |
+| Replies `/replies` | The reply desk, fed by the Instantly webhook |
+| Team `/team` | The shared board: humans and agents create, claim, comment, hand off |
+| Agents `/agents` | Who is working on what; each agent's page lets you assign it a task and edit its memory |
+| Activity `/activity` | The feed, pending approvals, and active checkouts |
+
+## The lead engine (Find leads)
+
+The same method that built the Lead Master, as code: Google Maps search by city and
+query -> drop chains, pawn shops, non-jewelers and stores without their own site ->
+read each store's own website (contact/about pages) for emails, owner names, phones and
+POS/surcharge hints -> owner search (when a search provider is set) -> write everything
+into the database with the page it came from. Every business is a checkpoint row, so a
+job that crashes or is cancelled picks up where it stopped. Proxies rotate from
+`ENGINE_PROXIES`; each store's site gets one request at a time with a gap, and a host
+that answers 429 is rested.
+
+Jobs are tasks assigned to Tab by default. You start one on the Find leads screen; a
+runner on the OVH server picks it up: `npm run engine -- worker --agent tab`. One-off:
+`npm run engine -- run --cities "Towson, MD" --max 50`. Details, every stage, the
+env vars and the honest terms-of-service notes: [docs/lead-engine.md](lead-engine.md).
+
+Any agent can also research a single lead: `POST /api/research/enqueue {company_ids}`
+(the "Research selected" button) creates `research_company` tasks; the built-in runner
+reads the store's site, or an agent claims the task and submits what it found as
+`complete_task {result: {research: <ResearchResult>}}` (evidence URL required per fact).
+
+## Verification
+
+Free check first (syntax, mail server, disposable domains; role and free-provider
+addresses are flagged), then MillionVerifier, then ZeroBounce only for what
+MillionVerifier calls catch-all or unknown. Leads whose Sheet result was already
+catch-all/unknown at MillionVerifier go straight to ZeroBounce. Nothing paid runs
+until you click Approve on a cost preview with a dollar ceiling; spend never passes
+the ceiling. Prices (Oct 8, 2026 list prices) are in `lib/verify/pricing.ts` and can be
+overridden with `MV_COST_PER_CHECK` / `ZB_COST_PER_CHECK`.
+
+## The database
+
+Plain PostgreSQL 13+ in its own schema, `lp` (`db/migrations/`). No Supabase-only
+features, so it can live in the existing Supabase project now and move to the OVH
+server later with `pg_dump -n lp`.
+
+- Leads: `companies` (one per store), `contacts` (one per email), `sources`,
+  `enrichment` (one fact per row, with evidence), `verification_runs`,
+  `verification_results`, `campaign_touches`, `status_history` (written by triggers).
+- Teamwork: `actors` (people and agents), `projects`, `tasks`, `locks`, `comments`,
+  `notifications`, `approvals`, `agent_memory`, `events` (append-only).
+- Dedupe rules: one company per website domain, per phone (E.164), per
+  name+address; one contact per email. Social/marketplace links (Facebook, Etsy, eBay…)
+  never count as a store's domain.
+
+Apply migrations: `DATABASE_URL=postgres://... npm run db:migrate` (`--status` to list).
+
+### Moving the Lead Master in
+
+```
+DATABASE_URL=postgres://... npm run import:lead-master -- --csv lead_master.csv
+# or straight from the Sheet's CSV export:
+DATABASE_URL=... LEAD_MASTER_CSV_URL='https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>' \
+  GOOGLE_ACCESS_TOKEN=<read-only token> npm run import:lead-master
+```
+
+Read-only on the Sheet. Safe to run again: matches existing rows, never duplicates,
+never overwrites a value already in the database; contacts keep the database's status
+after the first import. Measured on a local Postgres with the Oct 6 export: 24,316 rows
+-> 23,951 companies, 24,316 contacts, 14,898 MillionVerifier results, 495 campaign
+touches, in 47 seconds; a second run added nothing.
+
+## The ops API (for agents)
+
+Every agent gets its own token: `OPS_AGENT_TOKENS="tab:<token>,hermes:<token>,claude:<token>"`
+(24+ random characters each; the id must exist in `lp.actors`). Requests carry
+`Authorization: Bearer <token>` and act as that agent only.
+
+- `GET /api/ops` lists every op and its arguments.
+- `POST /api/ops` with `{"op": "...", ...args}` runs one.
+- REST aliases: `POST /api/ops/tasks/claim`, `POST /api/ops/tasks/:id/heartbeat|complete|fail|handoff|comment`,
+  `POST /api/ops/locks/acquire|release`, `POST /api/ops/events`, `POST /api/ops/approvals`,
+  `GET /api/ops/approvals/:id`, `GET|POST /api/ops/memory`, `GET /api/ops/inbox`, `POST /api/ops/presence`.
+
+Ops: `whoami`, `presence`, `create_task`, `list_tasks`, `get_task`, `claim_task`,
+`heartbeat`, `complete_task`, `fail_task`, `handoff_task`, `update_task`, `comment`,
+`acquire_lock`, `release_lock`, `list_locks`, `log_event`, `request_approval`,
+`get_approval`, `memory_get`, `memory_put`, `memory_search`, `memory_delete`, `inbox`,
+`mark_read`, `recent_events`.
+
+A typical agent loop:
+
+```
+claim_task {kinds:["research_company"]}          -> a task, or null
+heartbeat {task_id, progress:{done, of}}         -> every lease/2 (default lease 300 s)
+acquire_lock {resource:"campaign:<id>"}          -> before touching shared things
+request_approval {action:"send", summary, task_id} -> then poll get_approval
+complete_task {task_id, result, report}          -> report shows on the task and the agent's page
+```
+
+Instantly's own AI can't take locks, so treat campaigns it runs as checked out to
+`instantly-ai`.
+
+## Instantly webhook
+
+`POST /api/webhooks/instantly`, authenticated by `INSTANTLY_WEBHOOK_SECRET` sent as a
+custom header (`Authorization: Bearer <secret>`). Each event becomes a campaign touch
+(retries are ignored), moves the lead forward (sent -> contacted -> replied ->
+interested -> meeting; bounce marks the address invalid; unsubscribe marks
+do-not-contact), and replies open a task on the Reply desk. Unknown addresses are
+stored without inventing a lead.

@@ -1,0 +1,59 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { BUTTON_PRIMARY } from '@/components/app/PageShell'
+
+/** Add a comment as the owner. @tab, @hermes, @claude… notify that teammate. */
+export function CommentForm({ companyId, handles }: { companyId: number; handles: string[] }) {
+  const router = useRouter()
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!body.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/leads/${companyId}/comments`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body }),
+      })
+      const json = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) setError(json?.error ?? `Couldn’t post (${res.status}).`)
+      else {
+        setBody('')
+        router.refresh?.()
+      }
+    } catch {
+      setError('Couldn’t reach the server.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3">
+      <label htmlFor="comment-body" className="sr-only">
+        Comment
+      </label>
+      <textarea
+        id="comment-body"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={3}
+        placeholder={`Note or ask a teammate: ${handles.slice(0, 3).map((h) => `@${h}`).join(', ')}…`}
+        className="w-full resize-y rounded-card border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <button type="submit" className={BUTTON_PRIMARY} disabled={busy || !body.trim()}>
+          {busy ? 'Posting…' : 'Comment'}
+        </button>
+        {error ? <span role="alert" className="text-[12px] text-bad">{error}</span> : null}
+      </div>
+    </form>
+  )
+}
