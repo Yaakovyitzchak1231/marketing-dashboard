@@ -82,6 +82,8 @@ How the lead engine (Find leads) works, how to run it on your server and its lim
 Reports (lead runway, cost per meeting, weekly one-pager, the read-only Lead Master copy) and the
 Instantly action buttons (add leads, pause/resume, all behind your confirm click): [docs/phase2.md](docs/phase2.md).
 
+The SEO / AI visibility section (/seo: audits, AI-answer checks, fix list with WordPress buttons): [docs/seo.md](docs/seo.md).
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local` for local work. Never commit real values.
