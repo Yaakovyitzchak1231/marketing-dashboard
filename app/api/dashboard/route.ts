@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (err) {
     console.error('[dashboard] load failed', err)
-    return NextResponse.json({ error: 'Could not load the dashboard from Instantly.' }, { status: 502 })
+    return NextResponse.json(
+      { error: 'Could not load the dashboard from Instantly.' },
+      { status: 500 }
+    )
   }
 }
