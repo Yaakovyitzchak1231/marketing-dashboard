@@ -7,8 +7,13 @@ const STAGES = [
   { id: 'discover', label: 'Find businesses', hint: 'Map search by city, chain and pawn filter, dedupe against your leads' },
   { id: 'crawl', label: 'Read their websites', hint: 'Emails, owner lines, phone, Shopify/Square/Clover hints' },
   { id: 'owner', label: 'Owner search', hint: 'Web search for the owner and "@domain" emails (needs a search provider on the runner)' },
+  { id: 'reviews', label: 'Maps reviews', hint: 'Owner names in Google reviews ("Ken, the owner"); best extra name source. Serper only', extra: true },
+  { id: 'yelp', label: 'Yelp owner', hint: 'Yelp "Business Owner" replies, only when the listing is this store', extra: true },
+  { id: 'firstlast', label: 'Owner last name', hint: 'Searches "<first name> + store + city" for the last name', extra: true },
+  { id: 'facebook', label: 'Facebook page', hint: 'Email shown on the store\'s public Facebook page, for stores with none on their site', extra: true },
+  { id: 'pattern', label: 'Email pattern', hint: 'Owner address in the store\'s own pattern (sarah@ -> ken@). Held as a guess until verified', extra: true },
   { id: 'build', label: 'Add to Leads', hint: 'Companies, contacts and evidence go into Leads' },
-] as const
+] as const satisfies readonly { id: string; label: string; hint: string; extra?: boolean }[]
 
 /** "MD, VA" -> states; "Towson, MD; Columbia, MD" -> cities. */
 export function parseWhere(where: string): { states: string[]; cities: string[] } {
@@ -29,7 +34,7 @@ export function FindForm({ jewelerQueries, agencyQueries }: { jewelerQueries: st
   const [allUs, setAllUs] = useState(false)
   const [max, setMax] = useState('100')
   const [queries, setQueries] = useState(jewelerQueries.join(', '))
-  const [stages, setStages] = useState<string[]>(STAGES.map((s) => s.id))
+  const [stages, setStages] = useState<string[]>(STAGES.filter((s) => !('extra' in s && s.extra)).map((s) => s.id))
   const [proxies, setProxies] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null)
@@ -134,6 +139,7 @@ export function FindForm({ jewelerQueries, agencyQueries }: { jewelerQueries: st
               />
               <span>
                 <span className="text-ink">{s.label}</span>
+                {'extra' in s && s.extra ? <span className="ml-1.5 text-[11px] text-ink-faint">opt-in</span> : null}
                 <span className="block text-[11.5px] text-ink-faint">{s.hint}</span>
               </span>
             </label>

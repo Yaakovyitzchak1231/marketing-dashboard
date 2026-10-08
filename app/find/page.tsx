@@ -15,6 +15,7 @@ const STAGE_WORDS: Record<string, string> = {
   discover: 'Finding businesses',
   crawl: 'Reading websites',
   owner: 'Searching for owners',
+  extras: 'Checking extra owner sources',
   build: 'Adding to Leads',
   done: 'Finished',
 }
@@ -49,6 +50,14 @@ function JobRow({ job, now }: { job: FindJob; now: Date }) {
     ['Added to Leads', c.built, ''],
     ['New emails', c.emails_new, ''],
     ['Owner names', c.owners_found, ''],
+    // Extra owner sources: shown only on runs that had them (absent, not 0, otherwise)
+    ...(c.extras_checked != null
+      ? ([
+          ['Extra-source names', c.extra_names, n(c.extras_checked) != null ? `in ${n(c.extras_checked)!.toLocaleString('en-US')} checked` : ''],
+          ['Facebook emails', c.facebook_emails, ''],
+          ['Pattern guesses (held)', c.pattern_guesses, ''],
+        ] as [string, unknown, string][])
+      : []),
   ]
   return (
     <Card className="p-4">

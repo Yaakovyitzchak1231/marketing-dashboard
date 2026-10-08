@@ -127,11 +127,12 @@ export async function applyResearchResult(db: Db, result: ResearchResult, actor:
           nameConf = owner.confidence
         }
       }
+      const guessed = e.guessed === true
       const ins = await q.query<{ id: number }>(
-        `insert into lp.contacts (company_id, email, email_norm, first_name, last_name, title, is_role_address, email_source, name_source, name_confidence, name_evidence_url)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `insert into lp.contacts (company_id, email, email_norm, first_name, last_name, title, is_role_address, email_source, name_source, name_confidence, name_evidence_url, status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          on conflict (email_norm) where email_norm is not null do nothing returning id`,
-        [company.id, e.email.trim(), norm, first, last, e.title ?? null, isRoleAddress(norm), source, nameSource, nameConf, first ? (owner?.evidence_url ?? e.evidence_url) : null],
+        [company.id, e.email.trim(), norm, first, last, e.title ?? null, isRoleAddress(norm), guessed ? 'guessed' : e.how === 'facebook' ? 'facebook' : source, nameSource, nameConf, first ? (owner?.evidence_url ?? e.evidence_url) : null, guessed ? 'guessed-hold' : 'new'],
       )
       let contactId: number
       if (ins.rows.length) {
@@ -157,8 +158,8 @@ export async function applyResearchResult(db: Db, result: ResearchResult, actor:
           )
         }
       }
-      await addSource(q, company.id, contactId, kind, ref, e.evidence_url, { how: e.how, on_site: onSite })
-      if (await addEnrichment(q, { company_id: company.id, contact_id: contactId, field: 'email', value: norm, confidence: onSite ? 'high' : 'medium', evidence_url: e.evidence_url, method, actor, task_id: opts.task_id })) s.enrichment_added++
+      await addSource(q, company.id, contactId, kind, ref, e.evidence_url, { how: e.how, on_site: onSite, ...(guessed ? { guessed: true } : {}) })
+      if (await addEnrichment(q, { company_id: company.id, contact_id: contactId, field: guessed ? 'email_guess' : 'email', value: norm, confidence: onSite && !guessed ? 'high' : 'medium', evidence_url: e.evidence_url, method, actor, task_id: opts.task_id })) s.enrichment_added++
     }
 
     for (const ph of result.phones) {

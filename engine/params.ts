@@ -5,7 +5,12 @@
  */
 
 export type EngineSegment = 'jeweler' | 'ai_agency'
-export type EngineStage = 'discover' | 'crawl' | 'owner' | 'build'
+export type EngineStage = 'discover' | 'crawl' | 'owner' | 'reviews' | 'yelp' | 'firstlast' | 'facebook' | 'pattern' | 'build'
+/** Every stage, in the order a job runs them. */
+export const ALL_STAGES: EngineStage[] = ['discover', 'crawl', 'owner', 'reviews', 'yelp', 'firstlast', 'facebook', 'pattern', 'build']
+/** Extra owner-name / direct-email sources (engine/ownerStages.ts). Opt-in: off unless a job ticks them. */
+export const OWNER_EXTRA_STAGES: EngineStage[] = ['reviews', 'yelp', 'firstlast', 'facebook', 'pattern']
+/** What a job runs when it names no stages. */
 export const ENGINE_STAGES: EngineStage[] = ['discover', 'crawl', 'owner', 'build']
 
 /**
@@ -56,8 +61,8 @@ export function normalizeFindParams(raw: unknown): FindLeadsParams {
   if (!queries.length) queries = segment === 'jeweler' ? JEWELER_QUERIES : AI_AGENCY_QUERIES
   const max = Math.trunc(Number(o.max_businesses ?? o.max ?? 100))
   if (!Number.isFinite(max) || max < 1) throw new ParamsError('max businesses must be at least 1')
-  const stagesIn = list(o.stages).filter((s): s is EngineStage => (ENGINE_STAGES as string[]).includes(s))
-  const stages = stagesIn.length ? ENGINE_STAGES.filter((s) => stagesIn.includes(s)) : ENGINE_STAGES
+  const stagesIn = list(o.stages).filter((s): s is EngineStage => (ALL_STAGES as string[]).includes(s))
+  const stages = stagesIn.length ? ALL_STAGES.filter((s) => stagesIn.includes(s)) : ENGINE_STAGES
   if (!stages.includes('discover')) throw new ParamsError('the discover stage is required')
   const conc = (o.concurrency && typeof o.concurrency === 'object' ? o.concurrency : {}) as Record<string, unknown>
   const clamp = (v: unknown, d: number, hi: number) => Math.min(hi, Math.max(1, Math.trunc(Number(v ?? d)) || d))

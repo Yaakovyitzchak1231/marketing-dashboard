@@ -22,7 +22,9 @@ import { chooseOwner } from './parse/extract.ts'
 import { classifyPlace, DROP_REASON_WORDS } from './parse/filter.ts'
 import { isBlocked, mapsSearchUrl, parseMapsBody, parsePlaces, placeKey, type MapsPlace } from './parse/maps.ts'
 import { domainEmailsFromHits, ownerQuery, ownersFromHits } from './parse/search.ts'
-import { describeGeography, type FindLeadsParams } from './params.ts'
+import { describeGeography, OWNER_EXTRA_STAGES, type FindLeadsParams } from './params.ts'
+import { mergeOwner } from './parse/owners.ts'
+import { runOwnerExtras, type OwnerExtras } from './ownerStages.ts'
 import {
   addNote, computeCounters, finishRun, insertPlace, insertSearches, openRun, pendingItems, saveCounters, setStage, updateItem,
   type EngineItem, type RunCounters,
@@ -335,11 +337,22 @@ export async function runFindLeads(db: Db, taskId: number, params: FindLeadsPara
       await db.query(`update lp.engine_items set stage = 'owner' where run_id = $1 and kind = 'place' and stage = 'crawled' and status = 'pending'`, [run.id])
     }
 
+    // ---------------------------------------------------------------- extra owner sources (opt-in)
+    const extras = OWNER_EXTRA_STAGES.filter((s) => p.stages.includes(s))
+    if (extras.length) {
+      await runOwnerExtras(db, run.id, extras, { agent: deps.agent, search: deps.search, fetch: deps.fetch, beat: () => beat() }, firstNames)
+      c = await saveCounters(db, run.id)
+      await logEvent(db, { actor: deps.agent, kind: 'engine.owner_extras', summary: `${label}: extra owner sources (${extras.join(', ')}) checked for ${c.extras_checked ?? 0} stores: ${c.extra_names ?? 0} names, ${c.facebook_emails ?? 0} Facebook emails, ${c.pattern_guesses ?? 0} pattern guesses held for verification`, entity_type: 'task', entity_id: taskId, task_id: taskId })
+    } else {
+      await db.query(`update lp.engine_items set stage = 'extras' where run_id = $1 and kind = 'place' and stage = 'owner' and status = 'pending'`, [run.id])
+    }
+
     // ---------------------------------------------------------------- build
     if (p.stages.includes('build')) {
       await setStage(db, run.id, 'build')
       for (;;) {
-        const batch = await pendingItems(db, run.id, 'place', 'owner', 25, 3)
+        // extras failures share the attempts counter, so the build allows more when extra stages ran
+        const batch = await pendingItems(db, run.id, 'place', 'extras', 25, extras.length ? 6 : 3)
         if (!batch.length) break
         for (const it of batch) {
           try {
@@ -416,10 +429,19 @@ export function toResearchResult(
   ownerSearch: { search_names?: { name: string; how: string; url: string; ctx: string }[]; search_emails?: { email: string; url: string }[] } | null,
   domain: string,
   mx: string | null,
+  extras: OwnerExtras | null = null,
 ): ResearchResult {
   const names = [...(crawl?.names ?? []), ...(ownerSearch?.search_names ?? []).map((n) => ({ ...n, how: 'search_owner' }))]
   const emails = crawl?.emails ?? []
-  const owner = chooseOwner(names as Parameters<typeof chooseOwner>[0], emails.map((e) => e.email))
+  const chosen = chooseOwner(names as Parameters<typeof chooseOwner>[0], emails.map((e) => e.email))
+  const merged = extras ? mergeOwner(chosen, { review: extras.review ?? null, yelp: extras.yelp ?? [] }) : chosen
+  // The last name from the firstlast search rides as its own fact with its own evidence; the owner's name gains it.
+  const lastName = extras?.last && merged && !merged.name.includes(' ') ? extras.last : null
+  const owner = merged ? { ...merged, name: lastName ? `${merged.name} ${lastName.last}` : merged.name } : null
+  const ownerFirst = owner?.name.split(' ')[0] ?? null
+  const ownerLast = owner && owner.name.includes(' ') ? owner.name.split(' ').slice(-1)[0] : null
+  const fbEmails = (extras?.facebook?.page ? extras.facebook.emails : []).filter((e) => !emails.some((x) => x.email === e))
+  const guess = extras?.pattern && !emails.some((x) => x.email === extras.pattern!.email) ? extras.pattern : null
   const result: ResearchResult = {
     company_id: companyId,
     runner,
@@ -427,12 +449,28 @@ export function toResearchResult(
     emails: [
       ...emails.map((e) => ({ email: e.email, evidence_url: e.evidence_url, how: e.how })),
       ...(ownerSearch?.search_emails ?? []).filter((e) => !emails.some((x) => x.email === e.email)).map((e) => ({ email: e.email, evidence_url: e.url, how: 'search' })),
+      ...fbEmails.map((e) => ({ email: e, evidence_url: extras!.facebook!.page!, how: 'facebook' })),
+      // A pattern guess is never sendable before verification: guessed=true -> status 'guessed-hold', medium confidence.
+      ...(guess
+        ? [{
+            email: guess.email,
+            evidence_url: guess.evidence_url,
+            how: guess.same_person ? 'published' : `pattern:${guess.pattern}`,
+            first_name: ownerFirst,
+            last_name: ownerLast,
+            title: 'owner',
+            guessed: !guess.same_person,
+          }]
+        : []),
     ],
     people: owner ? [{ name: owner.name, role: 'owner', evidence_url: owner.evidence_url, confidence: owner.confidence, how: owner.how }] : [],
     phones: crawl?.phones ?? [],
     facts: [
       ...(crawl?.signals ?? []).map((s) => ({ field: 'tech', value: s.signal, evidence_url: s.evidence_url, confidence: 'medium' as const })),
       ...(mx ? [{ field: 'mx', value: mx, evidence_url: null, confidence: 'high' as const }] : []),
+      ...(lastName ? [{ field: 'owner_last_name', value: lastName.last, evidence_url: lastName.url, confidence: 'medium' as const }] : []),
+      ...(extras?.facebook?.page ? [{ field: 'facebook', value: extras.facebook.page, evidence_url: extras.facebook.page, confidence: 'medium' as const }] : []),
+      ...(guess && !guess.same_person ? [{ field: 'email_pattern', value: `${guess.pattern}@ (learned from ${guess.learned_from})`, evidence_url: guess.evidence_url, confidence: 'medium' as const }] : []),
     ],
     summary: '',
   }
@@ -476,7 +514,7 @@ async function buildOne(db: Db, taskId: number, it: EngineItem, p: FindLeadsPara
     return up
   }, deps.agent)
   const ownerSearch = (it.data.owner_search ?? null) as Parameters<typeof toResearchResult>[3]
-  const result = toResearchResult(companyId, 'engine', crawl, ownerSearch, domain, await mxWord(domain, deps))
+  const result = toResearchResult(companyId, 'engine', crawl, ownerSearch, domain, await mxWord(domain, deps), (it.data.extras ?? null) as OwnerExtras | null)
   const s = await applyResearchResult(db, result, deps.agent, { task_id: taskId, source_kind: 'engine', source_ref: ref })
   await updateItem(db, it.id, {
     stage: 'built', status: 'done', company_id: companyId, error: null,

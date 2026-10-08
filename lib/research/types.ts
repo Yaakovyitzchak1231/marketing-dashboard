@@ -16,6 +16,14 @@ export interface FoundEmail {
   first_name?: string | null
   last_name?: string | null
   title?: string | null
+  /**
+   * true = an address built from a pattern (e.g. the store's published
+   * sarah@ applied to the owner's name), not read anywhere. Saved with
+   * status 'guessed-hold', email_source 'guessed', medium confidence; never
+   * sendable until verification says otherwise. evidence_url is the page the
+   * pattern was learned from.
+   */
+  guessed?: boolean
 }
 
 export interface FoundPerson {

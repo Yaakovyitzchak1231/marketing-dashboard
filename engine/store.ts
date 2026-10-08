@@ -125,17 +125,29 @@ export interface RunCounters {
   companies_new: number
   emails_new: number
   owners_found: number
+  /** Extra owner stages (opt-in): stores checked, names they found, Facebook emails, pattern guesses (held). */
+  extras_checked?: number
+  extra_names?: number
+  facebook_emails?: number
+  pattern_guesses?: number
   stage_started_at?: string | null
 }
 
 /** Counters computed from the rows themselves (never incremented in memory). */
 export async function computeCounters(q: Queryable, runId: number): Promise<RunCounters> {
-  const { rows } = await q.query<{ kind: string; stage: string; status: string; n: number; site_ok: number; companies_new: number; emails_new: number; owners: number }>(
+  const { rows } = await q.query<{ kind: string; stage: string; status: string; n: number; site_ok: number; companies_new: number; emails_new: number; owners: number; extras_checked: number; extra_names: number; facebook_emails: number; pattern_guesses: number }>(
     `select kind, stage, status, count(*)::int as n,
             count(*) filter (where (data->'crawl'->>'site_ok')::boolean)::int as site_ok,
             count(*) filter (where (data->'applied'->>'company_created')::boolean)::int as companies_new,
             coalesce(sum((data->'applied'->>'contacts_created')::int), 0)::int as emails_new,
-            count(*) filter (where data->'applied'->>'owner' is not null)::int as owners
+            count(*) filter (where data->'applied'->>'owner' is not null)::int as owners,
+            count(*) filter (where data ? 'extras')::int as extras_checked,
+            count(*) filter (where jsonb_typeof(data->'extras'->'review') = 'object'
+                               or jsonb_array_length(coalesce(nullif(data->'extras'->'yelp', 'null'::jsonb), '[]'::jsonb)) > 0
+                               or jsonb_typeof(data->'extras'->'last') = 'object')::int as extra_names,
+            coalesce(sum(jsonb_array_length(coalesce(nullif(data->'extras'->'facebook'->'emails', 'null'::jsonb), '[]'::jsonb))), 0)::int as facebook_emails,
+            count(*) filter (where jsonb_typeof(data->'extras'->'pattern') = 'object'
+                               and not coalesce((data->'extras'->'pattern'->>'same_person')::boolean, false))::int as pattern_guesses
        from lp.engine_items where run_id = $1 group by kind, stage, status`,
     [runId],
   )
@@ -147,7 +159,9 @@ export async function computeCounters(q: Queryable, runId: number): Promise<RunC
     searches_total: 0, searches_done: 0, searches_failed: 0, places_seen: 0, kept: 0, dropped: {}, crawled: 0, sites_ok: 0,
     owner_checked: 0, built: 0, failed: 0, companies_new: 0, emails_new: 0, owners_found: 0,
   }
-  const placeStageOrder = ['kept', 'crawled', 'owner', 'built']
+  const placeStageOrder = ['kept', 'crawled', 'owner', 'extras', 'built']
+  const iOwner = placeStageOrder.indexOf('owner')
+  const iBuilt = placeStageOrder.indexOf('built')
   for (const r of rows) {
     if (r.kind === 'search') {
       c.searches_total += r.n
@@ -160,8 +174,14 @@ export async function computeCounters(q: Queryable, runId: number): Promise<RunC
     c.kept += r.n
     const idx = placeStageOrder.indexOf(r.stage)
     if (idx >= 1) c.crawled += r.n
-    if (idx >= 2) c.owner_checked += r.n
-    if (idx >= 3) c.built += r.n
+    if (idx >= iOwner) c.owner_checked += r.n
+    if (idx >= iBuilt) c.built += r.n
+    if (r.extras_checked) {
+      c.extras_checked = (c.extras_checked ?? 0) + r.extras_checked
+      c.extra_names = (c.extra_names ?? 0) + r.extra_names
+      c.facebook_emails = (c.facebook_emails ?? 0) + r.facebook_emails
+      c.pattern_guesses = (c.pattern_guesses ?? 0) + r.pattern_guesses
+    }
     if (r.status === 'failed') c.failed += r.n
     c.sites_ok += r.site_ok
     c.companies_new += r.companies_new
