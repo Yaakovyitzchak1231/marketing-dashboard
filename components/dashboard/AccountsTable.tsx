@@ -29,21 +29,17 @@ function StatusNote({ status }: { status: string }) {
   return <div className="mt-0.5 text-[12px] text-ink-muted">Instantly status: <span className="font-medium">{status}</span></div>
 }
 
-export function AccountsTable({ accounts }: { accounts: SenderAccount[] }) {
-  const rows = sortAccounts(accounts)
-  const flagged = accounts.filter((a) => a.health === 'at_risk' || a.health === 'watch').length
+/** The campaigns an inbox sends for, in one quiet line. */
+function CampaignNote({ a }: { a: SenderAccount }) {
+  if (!a.campaigns) return null
+  if (a.campaigns.length === 0) return <div className="mt-0.5 text-[12px] text-ink-faint">On no campaign</div>
+  const names = a.campaigns.map((c) => (c.status === 'active' ? c.name : `${c.name} (${c.status})`))
+  return <div className="mt-0.5 truncate text-[12px] text-ink-faint" title={names.join(', ')}>On: {names.join(', ')}</div>
+}
+
+function AccountList({ rows }: { rows: SenderAccount[] }) {
   return (
-    <section aria-labelledby="accounts-heading">
-      <SectionHeader
-        id="accounts-heading"
-        title="Sending accounts"
-        meta={accounts.length ? `${accounts.length} inbox${accounts.length === 1 ? '' : 'es'}${flagged ? ` · ${flagged} flagged` : ' · all clear'}` : undefined}
-      />
-      <Card>
-        {rows.length === 0 ? (
-          <EmptyNote>No sending accounts reported.</EmptyNote>
-        ) : (
-          <>
+    <>
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-[13px]" data-testid="accounts-table">
                 <thead>
@@ -63,6 +59,7 @@ export function AccountsTable({ accounts }: { accounts: SenderAccount[] }) {
                         <div className="truncate font-medium text-ink" title={a.email}>{a.email}</div>
                         <div className="mt-0.5 text-[12px] leading-snug text-ink-faint">{a.healthReason}</div>
                         <StatusNote status={a.status} />
+                        <CampaignNote a={a} />
                       </td>
                       <td className="px-2 py-2.5"><Health a={a} /></td>
                       <td className="px-2 py-2.5 text-right font-numeric"><Val value={a.warmupScore}>{formatCount(a.warmupScore)}</Val></td>
@@ -82,6 +79,7 @@ export function AccountsTable({ accounts }: { accounts: SenderAccount[] }) {
                       <div className="break-all text-[13px] font-medium text-ink">{a.email}</div>
                       <div className="mt-0.5 text-[12px] leading-snug text-ink-faint">{a.healthReason}</div>
                       <StatusNote status={a.status} />
+                        <CampaignNote a={a} />
                     </div>
                     <Health a={a} />
                   </div>
@@ -94,6 +92,37 @@ export function AccountsTable({ accounts }: { accounts: SenderAccount[] }) {
                 </li>
               ))}
             </ul>
+    </>
+  )
+}
+
+export function AccountsTable({ accounts }: { accounts: SenderAccount[] }) {
+  // Inboxes on an active campaign (or unknown) first; inboxes no active campaign uses fold away.
+  const current = sortAccounts(accounts.filter((a) => a.inActiveCampaign !== false))
+  const unused = sortAccounts(accounts.filter((a) => a.inActiveCampaign === false))
+  const unusedErrors = unused.filter((a) => a.health === 'at_risk').length
+  const flagged = current.filter((a) => a.health === 'at_risk' || a.health === 'watch').length
+  const meta = accounts.length
+    ? `${current.length} on active campaigns${flagged ? ` · ${flagged} flagged` : ' · all clear'}${unused.length ? ` · ${unused.length} unused` : ''}`
+    : undefined
+  return (
+    <section className="min-w-0" aria-labelledby="accounts-heading">
+      <SectionHeader id="accounts-heading" title="Sending accounts" meta={meta} />
+      <Card>
+        {accounts.length === 0 ? (
+          <EmptyNote>No sending accounts reported.</EmptyNote>
+        ) : (
+          <>
+            {current.length ? <AccountList rows={current} /> : <EmptyNote>No inbox is attached to an active campaign.</EmptyNote>}
+            {unused.length ? (
+              <details className="border-t border-line" data-testid="unused-accounts">
+                <summary className="cursor-pointer px-4 py-3 text-[13px] font-medium text-ink-muted hover:text-ink">
+                  Show {unused.length} inbox{unused.length === 1 ? '' : 'es'} not on any active campaign
+                  {unusedErrors ? ` (${unusedErrors} with errors)` : ''}
+                </summary>
+                <AccountList rows={unused} />
+              </details>
+            ) : null}
           </>
         )}
       </Card>

@@ -164,10 +164,31 @@ export function deliverabilityInsights(d: InsightInput): RankedInsight[] {
 
   const group = (code: FindingCode, level: 'watch' | 'at_risk') =>
     assessed
+      // Warmup / bounce / paused findings only matter for inboxes an active campaign uses (or unknown).
+      .filter(({ a }) => code === 'status_error' || a.inActiveCampaign !== false)
       .map(({ a, f }) => ({ a, hit: f.find((x) => x.code === code && x.level === level) }))
       .filter((x): x is { a: AccountInput & SenderAccount; hit: AccountFinding } => x.hit != null)
 
-  const errors = group('status_error', 'at_risk')
+  const allErrors = group('status_error', 'at_risk')
+  // Errored inboxes that no active campaign uses (old campaigns) are cleanup, not an emergency.
+  const unusedErrors = allErrors.filter(({ a }) => a.inActiveCampaign === false)
+  const errors = allErrors.filter(({ a }) => a.inActiveCampaign !== false)
+  if (unusedErrors.length) {
+    const one = unusedErrors.length === 1
+    out.push({
+      id: 'account-error-unused',
+      severity: 'opportunity',
+      title: one
+        ? `${unusedErrors[0].a.email} has an error, but no active campaign uses it`
+        : `${unusedErrors.length} inboxes have errors, but no active campaign uses them`,
+      detail:
+        listAccounts(unusedErrors.map(({ a }) => ({ email: a.email, why: `status "${a.status}"${a.campaigns && a.campaigns.length ? `, only on ${a.campaigns.map((c) => `${c.name} (${c.status})`).join(', ')}` : ', on no campaign'}` }))) +
+        '. Nothing you are sending right now depends on them.',
+      action: `Decide which to keep: reconnect the ones you will reuse in Instantly > Email Accounts and delete the rest so they stop cluttering health checks.`,
+      metric: { label: 'Unused inboxes in error', value: num(unusedErrors.length) },
+      impact: RULE_IMPACT.accountPaused + mag(unusedErrors.length),
+    })
+  }
   if (errors.length) {
     const one = errors.length === 1
     out.push({
@@ -280,7 +301,24 @@ export function deliverabilityInsights(d: InsightInput): RankedInsight[] {
   // 4. Active accounts that sent nothing while others did.
   if (sending.length > 0) {
     const idle = assessed.filter(({ a }) => a.sent === 0 && statusKind(a.status) === 'active')
-    if (idle.length) {
+    // Warmed-up inboxes attached to no active campaign: spare capacity, said separately.
+    const spare = idle.filter(({ a }) => a.inActiveCampaign === false && a.warmupScore != null && a.warmupScore >= WARMUP_WATCH)
+    if (spare.length) {
+      out.push({
+        id: 'accounts-spare',
+        severity: 'opportunity',
+        title: `${spare.length} warmed-up inbox${spare.length === 1 ? ' is' : 'es are'} not on any active campaign`,
+        detail: listAccounts(spare.map(({ a }) => ({ email: a.email, why: `warmup ${num(a.warmupScore ?? 0)}, 0 sent` }))) +
+          `. They are healthy and warmed, but nothing is sending from them.`,
+        action: 'Attach them to a live campaign that matches their domain (or launch one) to add sending capacity.',
+        metric: { label: 'Idle warmed inboxes', value: num(spare.length) },
+        impact: RULE_IMPACT.idleAccounts + 10 + mag(spare.length),
+      })
+    }
+    const spareSet = new Set(spare.map(({ a }) => a.email))
+    const idleRest = idle.filter(({ a }) => !spareSet.has(a.email))
+    if (idleRest.length) {
+      const idle = idleRest
       out.push({
         id: 'accounts-idle',
         severity: 'opportunity',

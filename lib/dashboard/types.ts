@@ -94,6 +94,10 @@ export interface SenderAccount {
   bounceRate: number | null
   health: AccountHealth
   healthReason: string       // plain words, e.g. "4.1% bounce over 30d (limit 2%)"
+  /** Campaigns this inbox is a sender on (campaign email_list). undefined/null = campaign list unavailable. */
+  campaigns?: { id: string; name: string; status: CampaignStatus }[] | null
+  /** true = sender on at least one active campaign; false = on none; null = unknown. */
+  inActiveCampaign?: boolean | null
 }
 
 export interface RepliedLead {

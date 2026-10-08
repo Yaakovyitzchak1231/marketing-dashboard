@@ -14,6 +14,8 @@ export interface ApiCampaign {
   open_tracking?: boolean | null
   link_tracking?: boolean | null
   timestamp_created?: string
+  /** Sending inboxes assigned to the campaign. */
+  email_list?: string[]
   sequences?: Array<{
     steps?: Array<{
       type?: string

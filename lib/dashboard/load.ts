@@ -9,7 +9,7 @@
  */
 import 'server-only'
 import type {
-  CampaignRow, Counts, DashboardData, DateRange, RangeKey, SenderAccount, SourceError,
+  CampaignRow, CampaignStatus, Counts, DashboardData, DateRange, RangeKey, SenderAccount, SourceError,
 } from '@/lib/dashboard/types'
 import { computeInsights, classifyAccountHealth } from '@/lib/insights'
 import { InstantlyClient, InstantlyError, clientFromEnv } from '@/lib/instantly/client'
@@ -279,12 +279,25 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
     errors.push({ source: 'accounts/analytics/daily', message: `Per-inbox numbers are missing for ${failedEmails.size} account(s): ${message(firstErr?.reason)}` })
   }
   const perAccount = sumAccountDaily(accountRows)
+  // Which campaigns each inbox sends for (campaign email_list), so old, unused inboxes can be told apart.
+  const campaignsByInbox = new Map<string, { id: string; name: string; status: CampaignStatus }[]>()
+  // Only trust membership when the campaign list loaded and actually carries sender lists.
+  const membershipKnown = Boolean(campaignsPage) && listed.some((c) => Array.isArray(c.email_list))
+  for (const c of listed) {
+    for (const e of c.email_list ?? []) {
+      const key = String(e).toLowerCase()
+      const arr = campaignsByInbox.get(key) ?? []
+      arr.push({ id: c.id, name: c.name ?? c.id, status: campaignStatus(c.status) })
+      campaignsByInbox.set(key, arr)
+    }
+  }
   const senderAccounts: SenderAccount[] = accounts.map((a) => {
     const k = a.email.toLowerCase()
     const known = !failedEmails.has(k)
     const tot = perAccount.get(k) ?? { sent: 0, bounced: 0, replied: 0 }
     const sent = known ? tot.sent : null
     const bounced = known ? tot.bounced : null
+    const onCampaigns = membershipKnown ? (campaignsByInbox.get(k) ?? []) : null
     const base = {
       email: a.email,
       status: accountStatusWord(a.status),
@@ -294,10 +307,13 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
       bounced,
       replied: known ? tot.replied : null,
       bounceRate: ratio(bounced, sent),
+      campaigns: onCampaigns,
+      inActiveCampaign: onCampaigns ? onCampaigns.some((c) => c.status === 'active') : null,
     }
     return { ...base, ...classifyAccountHealth(base) }
   })
-  senderAccounts.sort((x, y) => (y.sent ?? -1) - (x.sent ?? -1) || x.email.localeCompare(y.email))
+  // Inboxes on active campaigns first, then by volume.
+  senderAccounts.sort((x, y) => Number(y.inActiveCampaign === true) - Number(x.inActiveCampaign === true) || (y.sent ?? -1) - (x.sent ?? -1) || x.email.localeCompare(y.email))
 
   // Replied leads
   const leads = value(leadsR)

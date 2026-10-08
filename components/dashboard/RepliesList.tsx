@@ -40,7 +40,7 @@ function LeadItem({ l }: { l: RepliedLead }) {
   const w = waitingLabel(l.daysWaiting)
   const who = l.name || l.email
   return (
-    <li className="px-4 py-3 sm:px-5">
+    <li className="min-w-0 px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
           <span className="text-[14px] font-medium text-ink">{who}</span>
@@ -59,7 +59,7 @@ function LeadItem({ l }: { l: RepliedLead }) {
         {l.campaignName ? <span>{l.campaignName}</span> : null}
       </div>
       {l.lastReplySnippet ? (
-        <p className="mt-1.5 line-clamp-2 border-l-2 border-line pl-2.5 text-[13px] leading-relaxed text-ink-muted">{l.lastReplySnippet}</p>
+        <p className="mt-1.5 line-clamp-2 [overflow-wrap:anywhere] border-l-2 border-line pl-2.5 text-[13px] leading-relaxed text-ink-muted">{l.lastReplySnippet}</p>
       ) : null}
     </li>
   )
@@ -69,7 +69,7 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
   const waiting = sortWaiting(leads.filter((l) => l.awaitingOurReply))
   const others = [...leads.filter((l) => !l.awaitingOurReply)].sort((a, b) => (b.lastReplyAt ?? '').localeCompare(a.lastReplyAt ?? ''))
   return (
-    <section aria-labelledby="replies-heading">
+    <section className="min-w-0" aria-labelledby="replies-heading">
       <SectionHeader
         id="replies-heading"
         title="Replies waiting on you"
