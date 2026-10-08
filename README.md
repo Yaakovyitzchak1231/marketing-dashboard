@@ -79,6 +79,8 @@ up in the Activity feed, and each agent's memory is readable and editable on its
 Details, the ops API and the import: [docs/LEAD_PLATFORM.md](docs/LEAD_PLATFORM.md).
 How the lead engine (Find leads) works, how to run it on your server and its limits:
 [docs/lead-engine.md](docs/lead-engine.md).
+Reports (lead runway, cost per meeting, weekly one-pager, the read-only Lead Master copy) and the
+Instantly action buttons (add leads, pause/resume, all behind your confirm click): [docs/phase2.md](docs/phase2.md).
 
 ## Environment variables
 

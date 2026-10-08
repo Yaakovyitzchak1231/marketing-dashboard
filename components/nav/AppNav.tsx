@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 /**
- * The app's one navigation bar. Nine screens, one line: on a phone it scrolls
+ * The app's one navigation bar. Ten screens, one line: on a phone it scrolls
  * sideways (no hamburger), and the active screen keeps itself in view.
  */
 export const NAV_ITEMS = [
@@ -17,6 +17,7 @@ export const NAV_ITEMS = [
   { href: '/team', label: 'Team' },
   { href: '/agents', label: 'Agents' },
   { href: '/activity', label: 'Activity' },
+  { href: '/reports', label: 'Reports' },
 ] as const
 
 export function isActive(pathname: string, href: string): boolean {
@@ -28,7 +29,7 @@ export function AppNav() {
   const pathname = usePathname() ?? '/'
   if (pathname === '/login') return null
   return (
-    <div className="sticky top-0 z-30 border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85">
+    <div className="sticky top-0 z-30 print:hidden border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85">
       <div className="mx-auto flex max-w-shell items-center gap-4 px-4 sm:px-6">
         <Link href="/" prefetch={false} className="hidden shrink-0 text-[13px] font-semibold tracking-[-0.01em] text-ink md:block">
           TapDash

@@ -126,7 +126,9 @@ function JobRow({ job, now }: { job: FindJob; now: Date }) {
   )
 }
 
-export default async function FindPage() {
+export default async function FindPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = (await searchParams) ?? {}
+  const initialSegment = sp.segment === 'ai_agency' ? 'ai_agency' : 'jeweler'
   const db = getDb()
   if (!db) {
     return (
@@ -144,7 +146,7 @@ export default async function FindPage() {
       <section className="mb-6">
         <SectionHeader title="New job" />
         <Card>
-          <FindForm jewelerQueries={JEWELER_QUERIES} agencyQueries={AI_AGENCY_QUERIES} />
+          <FindForm jewelerQueries={JEWELER_QUERIES} agencyQueries={AI_AGENCY_QUERIES} initialSegment={initialSegment} />
         </Card>
       </section>
       <section className="mb-6">
