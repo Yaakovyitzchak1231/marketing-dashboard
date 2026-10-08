@@ -1,0 +1,50 @@
+[
+ {
+  "date": "2026-09-09",
+  "sent": 54,
+  "clicks": 0,
+  "opened": 0,
+  "replies": 1,
+  "contacted": 54,
+  "opportunities": 0,
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 1,
+  "replies_automatic": 0,
+  "new_leads_contacted": 54,
+  "unique_opportunities": 0,
+  "unique_replies_automatic": 0
+ },
+ {
+  "date": "2026-09-10",
+  "sent": 54,
+  "clicks": 0,
+  "opened": 0,
+  "replies": 0,
+  "contacted": 54,
+  "opportunities": 0,
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 0,
+  "replies_automatic": 0,
+  "new_leads_contacted": 0,
+  "unique_opportunities": 0,
+  "unique_replies_automatic": 0
+ },
+ {
+  "date": "2026-10-07",
+  "sent": 162,
+  "clicks": 0,
+  "opened": 0,
+  "replies": 2,
+  "contacted": 162,
+  "opportunities": 1,
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 2,
+  "replies_automatic": 0,
+  "new_leads_contacted": 162,
+  "unique_opportunities": 1,
+  "unique_replies_automatic": 0
+ }
+]

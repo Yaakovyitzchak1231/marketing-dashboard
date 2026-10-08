@@ -1,0 +1,85 @@
+{
+ "items": [
+  {
+   "id": "11111111-1111-4111-8111-111111111111",
+   "name": "Jewelers - Test 01",
+   "status": 1,
+   "open_tracking": false,
+   "link_tracking": false,
+   "timestamp_created": "2026-09-16T17:00:00.000Z",
+   "daily_limit": 30,
+   "stop_on_reply": true,
+   "sequences": [
+    {
+     "steps": [
+      {
+       "type": "email",
+       "delay": 2,
+       "delay_unit": "days",
+       "variants": [
+        {
+         "subject": "rewards cards at {{companyName}}",
+         "body": "<div>Hi {{firstName}}</div>"
+        },
+        {
+         "subject": "who pays for card rewards?",
+         "body": "<div>Hi {{firstName}}</div>"
+        }
+       ]
+      },
+      {
+       "type": "email",
+       "delay": 2,
+       "delay_unit": "days",
+       "variants": [
+        {
+         "subject": "Re: rewards",
+         "body": "<div>Hi {{firstName}}</div>"
+        }
+       ]
+      },
+      {
+       "type": "email",
+       "delay": 2,
+       "delay_unit": "days",
+       "variants": [
+        {
+         "subject": "quick follow up",
+         "body": "<div>Hi {{firstName}}</div>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "22222222-2222-4222-8222-222222222222",
+   "name": "Segment 3 Cashback",
+   "status": 1,
+   "open_tracking": false,
+   "link_tracking": false,
+   "timestamp_created": "2026-10-07T12:00:00.000Z",
+   "daily_limit": 30,
+   "stop_on_reply": true,
+   "sequences": [
+    {
+     "steps": [
+      {
+       "type": "email",
+       "delay": 2,
+       "delay_unit": "days",
+       "variants": [
+        {
+         "subject": "cashback for {{companyName}}",
+         "body": "<div>Hi {{firstName}}</div>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "next_starting_after": "22222222-2222-4222-8222-222222222222"
+}

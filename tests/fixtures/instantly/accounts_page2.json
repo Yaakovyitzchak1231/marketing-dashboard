@@ -1,0 +1,27 @@
+{
+ "items": [
+  {
+   "email": "sam@sender-three.example",
+   "status": 2,
+   "warmup": {
+    "limit": 20,
+    "increment": "1",
+    "reply_rate": 30
+   },
+   "added_by": "api",
+   "last_name": "Sender",
+   "first_name": "Sam",
+   "daily_limit": null,
+   "modified_by": "api",
+   "organization": "00000000-0000-4000-8000-000000000000",
+   "provider_code": 3,
+   "setup_pending": false,
+   "warmup_status": 1,
+   "stat_warmup_score": 88,
+   "timestamp_created": "2026-09-16T17:57:42.933Z",
+   "timestamp_updated": "2026-10-08T07:02:50.236Z",
+   "is_managed_account": false
+  }
+ ],
+ "next_starting_after": null
+}

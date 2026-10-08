@@ -1,0 +1,50 @@
+[
+ {
+  "date": "2026-10-07",
+  "sent": 30,
+  "clicks": 0,
+  "opened": 0,
+  "bounced": 1,
+  "replies": 1,
+  "contacted": 30,
+  "email_account": "sam@sender-one.example",
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 1,
+  "replies_automatic": 0,
+  "new_leads_contacted": 30,
+  "unique_replies_automatic": 0
+ },
+ {
+  "date": "2026-10-08",
+  "sent": 20,
+  "clicks": 0,
+  "opened": 0,
+  "bounced": 0,
+  "replies": 0,
+  "contacted": 20,
+  "email_account": "sam@sender-one.example",
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 0,
+  "replies_automatic": 0,
+  "new_leads_contacted": 20,
+  "unique_replies_automatic": 0
+ },
+ {
+  "date": "2026-10-07",
+  "sent": 25,
+  "clicks": 0,
+  "opened": 0,
+  "bounced": 2,
+  "replies": 0,
+  "contacted": 25,
+  "email_account": "sam@sender-two.example",
+  "unique_clicks": 0,
+  "unique_opened": 0,
+  "unique_replies": 0,
+  "replies_automatic": 0,
+  "new_leads_contacted": 25,
+  "unique_replies_automatic": 0
+ }
+]
