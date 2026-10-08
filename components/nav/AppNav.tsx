@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 /**
- * The app's one navigation bar. Nine screens, one line: on a phone it scrolls
+ * The app's one navigation bar. Ten screens, one line: on a phone it scrolls
  * sideways (no hamburger), and the active screen keeps itself in view.
  */
 export const NAV_ITEMS = [
@@ -14,6 +14,7 @@ export const NAV_ITEMS = [
   { href: '/verify', label: 'Verification' },
   { href: '/campaigns', label: 'Campaigns' },
   { href: '/replies', label: 'Replies' },
+  { href: '/seo', label: 'SEO / AI' },
   { href: '/team', label: 'Team' },
   { href: '/agents', label: 'Agents' },
   { href: '/activity', label: 'Activity' },

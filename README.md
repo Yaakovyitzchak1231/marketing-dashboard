@@ -79,6 +79,7 @@ up in the Activity feed, and each agent's memory is readable and editable on its
 Details, the ops API and the import: [docs/LEAD_PLATFORM.md](docs/LEAD_PLATFORM.md).
 How the lead engine (Find leads) works, how to run it on your server and its limits:
 [docs/lead-engine.md](docs/lead-engine.md).
+The SEO / AI visibility section (/seo: audits, AI-answer checks, fix list with WordPress buttons): [docs/seo.md](docs/seo.md).
 
 ## Environment variables
 
