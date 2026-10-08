@@ -1,0 +1,21 @@
+{
+ "items": [
+  {
+   "id": "e4",
+   "body": {},
+   "lead": "old@shop-d.example",
+   "step": "0_0_1",
+   "subject": "Re: rewards",
+   "ue_type": 2,
+   "eaccount": "sam@sender-one.example",
+   "is_unread": 0,
+   "thread_id": "t-e4",
+   "is_focused": 1,
+   "campaign_id": "33333333-3333-4333-8333-333333333333",
+   "content_preview": "Yes please send info",
+   "timestamp_email": "2026-06-12T20:55:58.000Z",
+   "timestamp_created": "2026-06-12T20:55:58.000Z"
+  }
+ ],
+ "next_starting_after": null
+}

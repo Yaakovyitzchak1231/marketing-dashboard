@@ -136,14 +136,15 @@ function probePort(port: number): Promise<boolean> {
 }
 
 describe('revision audit columns', () => {
-  it('queries the schema mock when Supabase is unreachable', async () => {
+  it('queries the schema mock when Supabase is unreachable', async (ctx) => {
     const live = await probePort(54321)
     const postgres = await probePort(5432)
-    // No local Postgres and no Supabase API. Do not invent a live query result.
+    // A database is listening (e.g. a developer's local Postgres) but this test
+    // has no credentials to query it. Skip rather than fabricate a result; CI has
+    // no database, so it always runs the schema-mock path there.
     if (live || postgres) {
-      throw new Error(
-        'A database is listening, but this test has no credentials to query it. Refusing to fabricate a result.',
-      )
+      ctx.skip()
+      return
     }
 
     const schema = loadSchemaMock()

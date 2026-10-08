@@ -1,0 +1,888 @@
+{
+  "generatedAt": "2026-10-08T16:10:00Z",
+  "range": {
+    "key": "30d",
+    "start": "2026-09-09",
+    "end": "2026-10-08",
+    "timezone": "America/New_York"
+  },
+  "configured": true,
+  "totals": {
+    "counts": {
+      "sent": 2618,
+      "contacted": 705,
+      "opened": null,
+      "clicked": null,
+      "replied": 10,
+      "autoReplies": 11,
+      "bounced": 6,
+      "unsubscribed": 4,
+      "positive": 0,
+      "meetingsBooked": 0,
+      "opportunityValue": 0
+    },
+    "rates": {
+      "replyRate": 0.014184397163120567,
+      "positiveRate": 0.0,
+      "positiveShareOfReplies": 0.0,
+      "bounceRate": 0.002291825821237586,
+      "openRate": null,
+      "clickRate": null,
+      "unsubscribeRate": 0.005673758865248227
+    }
+  },
+  "previous": {
+    "counts": {
+      "sent": 3140,
+      "contacted": 902,
+      "opened": null,
+      "clicked": null,
+      "replied": 19,
+      "autoReplies": 9,
+      "bounced": 11,
+      "unsubscribed": 7,
+      "positive": 2,
+      "meetingsBooked": 1,
+      "opportunityValue": 2000
+    },
+    "rates": {
+      "replyRate": 0.02106430155210643,
+      "positiveRate": 0.0022172949002217295,
+      "positiveShareOfReplies": 0.10526315789473684,
+      "bounceRate": 0.0035031847133757963,
+      "openRate": null,
+      "clickRate": null,
+      "unsubscribeRate": 0.007760532150776054
+    }
+  },
+  "daily": [
+    {
+      "date": "2026-09-09",
+      "sent": 121,
+      "contacted": 33,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-10",
+      "sent": 110,
+      "contacted": 30,
+      "replied": 2,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-11",
+      "sent": 126,
+      "contacted": 34,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-12",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-13",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-14",
+      "sent": 143,
+      "contacted": 39,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-15",
+      "sent": 103,
+      "contacted": 28,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-16",
+      "sent": 104,
+      "contacted": 28,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-17",
+      "sent": 136,
+      "contacted": 37,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-18",
+      "sent": 106,
+      "contacted": 29,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-19",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-20",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-21",
+      "sent": 124,
+      "contacted": 33,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-22",
+      "sent": 139,
+      "contacted": 37,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-23",
+      "sent": 103,
+      "contacted": 28,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-24",
+      "sent": 134,
+      "contacted": 36,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-25",
+      "sent": 114,
+      "contacted": 31,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-26",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-27",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-28",
+      "sent": 102,
+      "contacted": 27,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-29",
+      "sent": 105,
+      "contacted": 28,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-09-30",
+      "sent": 128,
+      "contacted": 34,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-01",
+      "sent": 127,
+      "contacted": 34,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-02",
+      "sent": 104,
+      "contacted": 28,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-03",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-04",
+      "sent": 0,
+      "contacted": 0,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-05",
+      "sent": 116,
+      "contacted": 31,
+      "replied": 2,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-06",
+      "sent": 105,
+      "contacted": 28,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-07",
+      "sent": 137,
+      "contacted": 37,
+      "replied": 0,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    },
+    {
+      "date": "2026-10-08",
+      "sent": 131,
+      "contacted": 35,
+      "replied": 1,
+      "positive": 0,
+      "bounced": null,
+      "opened": null
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "cmp-a",
+      "name": "Campaign A — Independent retailers, wave 3",
+      "status": "active",
+      "openTracking": false,
+      "counts": {
+        "sent": 2618,
+        "contacted": 705,
+        "opened": null,
+        "clicked": null,
+        "replied": 10,
+        "autoReplies": 11,
+        "bounced": 6,
+        "unsubscribed": 4,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": 0
+      },
+      "steps": [
+        {
+          "step": 1,
+          "variant": "A",
+          "subject": "Quick question about {{companyName}}'s online store",
+          "sent": 360,
+          "opened": null,
+          "replied": 4,
+          "positive": 0,
+          "replyRate": 0.011111111111111112
+        },
+        {
+          "step": 1,
+          "variant": "B",
+          "subject": "Idea for {{companyName}}",
+          "sent": 345,
+          "opened": null,
+          "replied": 1,
+          "positive": 0,
+          "replyRate": 0.002898550724637681
+        },
+        {
+          "step": 2,
+          "variant": "A",
+          "subject": null,
+          "sent": 1010,
+          "opened": null,
+          "replied": 3,
+          "positive": 0,
+          "replyRate": 0.0029702970297029703
+        },
+        {
+          "step": 3,
+          "variant": "A",
+          "subject": null,
+          "sent": 903,
+          "opened": null,
+          "replied": 2,
+          "positive": 0,
+          "replyRate": 0.0022148394241417496
+        }
+      ],
+      "leadsTotal": 1500,
+      "leadsRemaining": 610,
+      "rates": {
+        "replyRate": 0.014184397163120567,
+        "positiveRate": 0.0,
+        "positiveShareOfReplies": 0.0,
+        "bounceRate": 0.002291825821237586,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": 0.005673758865248227
+      }
+    },
+    {
+      "id": "cmp-b",
+      "name": "Campaign B — Signup follow-up",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 11746,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-c",
+      "name": "Campaign C — Agencies, wave 1",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 2210,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-d",
+      "name": "Campaign D — Agencies, wave 2",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 1980,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-e",
+      "name": "Campaign E — Retailers, wave 1",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 3400,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-f",
+      "name": "Campaign F — Retailers, wave 2",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 2950,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-g",
+      "name": "Campaign G — Partners",
+      "status": "paused",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 640,
+      "leadsRemaining": 412,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-h",
+      "name": "Campaign H — Re-engagement",
+      "status": "completed",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": 820,
+      "leadsRemaining": 0,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    },
+    {
+      "id": "cmp-i",
+      "name": "Campaign I — New angle (draft)",
+      "status": "draft",
+      "openTracking": false,
+      "counts": {
+        "sent": 0,
+        "contacted": 0,
+        "opened": null,
+        "clicked": null,
+        "replied": 0,
+        "autoReplies": 0,
+        "bounced": 0,
+        "unsubscribed": 0,
+        "positive": 0,
+        "meetingsBooked": 0,
+        "opportunityValue": null
+      },
+      "steps": [],
+      "leadsTotal": null,
+      "leadsRemaining": null,
+      "rates": {
+        "replyRate": null,
+        "positiveRate": null,
+        "positiveShareOfReplies": null,
+        "bounceRate": null,
+        "openRate": null,
+        "clickRate": null,
+        "unsubscribeRate": null
+      }
+    }
+  ],
+  "accounts": [
+    {
+      "email": "alex@outreach-sample.com",
+      "status": "active",
+      "warmupScore": 98,
+      "dailyLimit": 30,
+      "sent": 540,
+      "bounced": 1,
+      "replied": 3,
+      "bounceRate": 0.001851851851851852,
+      "health": "healthy",
+      "healthReason": "0.2% bounce over 30 days, warmup 98"
+    },
+    {
+      "email": "jordan@outreach-sample.com",
+      "status": "active",
+      "warmupScore": 97,
+      "dailyLimit": 30,
+      "sent": 536,
+      "bounced": 0,
+      "replied": 2,
+      "bounceRate": 0.0,
+      "health": "healthy",
+      "healthReason": "0.0% bounce over 30 days, warmup 97"
+    },
+    {
+      "email": "casey@outreach-sample.co",
+      "status": "active",
+      "warmupScore": 95,
+      "dailyLimit": 30,
+      "sent": 531,
+      "bounced": 1,
+      "replied": 2,
+      "bounceRate": 0.0018832391713747645,
+      "health": "healthy",
+      "healthReason": "0.2% bounce over 30 days, warmup 95"
+    },
+    {
+      "email": "riley@outreach-sample.co",
+      "status": "active",
+      "warmupScore": 88,
+      "dailyLimit": 30,
+      "sent": 523,
+      "bounced": 4,
+      "replied": 2,
+      "bounceRate": 0.0076481835564053535,
+      "health": "watch",
+      "healthReason": "0.8% bounce over 30 days, warmup dropped to 88"
+    },
+    {
+      "email": "sam@outreach-sample.net",
+      "status": "paused",
+      "warmupScore": 61,
+      "dailyLimit": 30,
+      "sent": 488,
+      "bounced": 0,
+      "replied": 1,
+      "bounceRate": 0.0,
+      "health": "at_risk",
+      "healthReason": "Paused by Instantly with a connection error; warmup 61"
+    },
+    {
+      "email": "taylor@outreach-sample.net",
+      "status": "active",
+      "warmupScore": null,
+      "dailyLimit": 30,
+      "sent": null,
+      "bounced": null,
+      "replied": null,
+      "bounceRate": null,
+      "health": "unknown",
+      "healthReason": "Instantly did not report sends for this inbox"
+    }
+  ],
+  "repliedLeads": [
+    {
+      "email": "dana@shop-four.example",
+      "name": "Dana R.",
+      "company": "Shop Four",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "unlabeled",
+      "lastReplyAt": "2026-10-05T06:34:00Z",
+      "lastReplySnippet": "What does this cost for a store our size? We're on Shopify.",
+      "awaitingOurReply": true,
+      "daysWaiting": 3.4
+    },
+    {
+      "email": "m.ortiz@lumen-goods.example",
+      "name": "Marco Ortiz",
+      "company": "Lumen Goods",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "unlabeled",
+      "lastReplyAt": "2026-10-07T11:22:00Z",
+      "lastReplySnippet": "Can you send me a couple of examples first?",
+      "awaitingOurReply": true,
+      "daysWaiting": 1.2
+    },
+    {
+      "email": "pat@brightline.example",
+      "name": null,
+      "company": "Brightline",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "unlabeled",
+      "lastReplyAt": "2026-10-08T08:58:00Z",
+      "lastReplySnippet": "Who else in our area is using this?",
+      "awaitingOurReply": true,
+      "daysWaiting": 0.3
+    },
+    {
+      "email": "lee@northfold.example",
+      "name": "Lee Park",
+      "company": "Northfold",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "not_interested",
+      "lastReplyAt": "2026-10-02T16:10:00Z",
+      "lastReplySnippet": "Not for us right now, thanks.",
+      "awaitingOurReply": false,
+      "daysWaiting": null
+    },
+    {
+      "email": "kim@arc-studio.example",
+      "name": "Kim A.",
+      "company": "Arc Studio",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "wrong_person",
+      "lastReplyAt": "2026-09-29T16:10:00Z",
+      "lastReplySnippet": "I'm not the right person, try our ops lead.",
+      "awaitingOurReply": false,
+      "daysWaiting": null
+    },
+    {
+      "email": "j.wu@harbor-co.example",
+      "name": "J. Wu",
+      "company": "Harbor Co",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "not_interested",
+      "lastReplyAt": "2026-09-26T16:10:00Z",
+      "lastReplySnippet": "Please remove me from your list.",
+      "awaitingOurReply": false,
+      "daysWaiting": null
+    },
+    {
+      "email": "owner@fieldhouse.example",
+      "name": null,
+      "company": "Fieldhouse",
+      "campaignId": "cmp-a",
+      "campaignName": "Campaign A — Independent retailers, wave 3",
+      "interest": "not_interested",
+      "lastReplyAt": "2026-09-23T16:10:00Z",
+      "lastReplySnippet": "No thanks.",
+      "awaitingOurReply": false,
+      "daysWaiting": null
+    }
+  ],
+  "insights": [
+    {
+      "id": "awaiting-replies",
+      "severity": "critical",
+      "title": "3 people replied and are waiting on you",
+      "detail": "Dana R. (Shop Four) has waited 3 days and asked about pricing. Marco Ortiz (Lumen Goods) wants examples. Brightline asked who else uses it.",
+      "action": "Answer Dana first: she asked a buying question. Then send Marco two examples today.",
+      "metric": {
+        "label": "oldest wait",
+        "value": "3 days"
+      }
+    },
+    {
+      "id": "no-positive",
+      "severity": "warning",
+      "title": "No positive replies in the last 30 days",
+      "detail": "705 leads contacted, 10 replied (1.4%), none marked interested. The 30 days before: 2 interested out of 902 (0.2%).",
+      "action": "Rewrite the step 1 offer, or mark the pricing and examples replies as interested in Instantly if they are.",
+      "metric": {
+        "label": "positive reply rate",
+        "value": "0.0%"
+      }
+    },
+    {
+      "id": "variant-winner:cmp-a:1",
+      "severity": "opportunity",
+      "title": "Step 1 subject A gets more replies than B",
+      "detail": "\"Quick question about {{companyName}}'s online store\": 4 replies from 360 sends (1.1%). \"Idea for {{companyName}}\": 1 from 345 (0.3%). Small numbers, so treat it as a lean, not proof.",
+      "action": "Keep A running and test a new B against it instead of the current one.",
+      "metric": {
+        "label": "reply rate, A vs B",
+        "value": "1.1% vs 0.3%"
+      },
+      "entity": {
+        "kind": "step",
+        "id": "cmp-a:1",
+        "name": "Campaign A — Independent retailers, wave 3"
+      }
+    },
+    {
+      "id": "account-at-risk:sam@outreach-sample.net",
+      "severity": "warning",
+      "title": "One inbox is paused with a connection error",
+      "detail": "sam@outreach-sample.net was paused by Instantly and its warmup score fell to 61. It sent 488 emails in this range before stopping.",
+      "action": "Reconnect the inbox in Instantly (Email accounts → sam@) and let warmup recover before it sends again.",
+      "entity": {
+        "kind": "account",
+        "id": "sam@outreach-sample.net",
+        "name": "sam@outreach-sample.net"
+      }
+    },
+    {
+      "id": "leads-running-out:cmp-a",
+      "severity": "opportunity",
+      "title": "Campaign A has about 610 new leads left",
+      "detail": "It contacts roughly 32 new leads per sending day, so new step 1 sends stop in about 4 weeks.",
+      "action": "Line up the next lead list now so sending does not pause.",
+      "entity": {
+        "kind": "campaign",
+        "id": "cmp-a",
+        "name": "Campaign A — Independent retailers, wave 3"
+      }
+    },
+    {
+      "id": "bounce-ok",
+      "severity": "win",
+      "title": "Bounce rate is healthy at 0.2%",
+      "detail": "6 bounces from 2,618 emails, well under the 2% danger line. Down from 0.4% the 30 days before.",
+      "action": "Nothing to do. Keep verifying lists before upload.",
+      "metric": {
+        "label": "bounce rate",
+        "value": "0.2%"
+      }
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,50 @@
+{
+ "items": [
+  {
+   "id": "l1",
+   "email": "ann@shop-a.example",
+   "first_name": "Ann",
+   "last_name": "Able",
+   "company_name": "Shop A",
+   "campaign": "11111111-1111-4111-8111-111111111111",
+   "lt_interest_status": 1,
+   "email_reply_count": 1,
+   "timestamp_last_reply": "2026-10-07T17:23:30.000Z",
+   "timestamp_last_contact": "2026-10-07T17:23:45.000Z"
+  },
+  {
+   "id": "l2",
+   "email": "bob@shop-b.example",
+   "first_name": "Bob",
+   "last_name": null,
+   "company_name": "Shop B",
+   "campaign": "11111111-1111-4111-8111-111111111111",
+   "lt_interest_status": null,
+   "email_reply_count": 1,
+   "timestamp_last_reply": "2026-09-30T23:01:38.721Z"
+  },
+  {
+   "id": "l3",
+   "email": "bounce@shop-c.example",
+   "first_name": null,
+   "last_name": null,
+   "company_name": null,
+   "campaign": "22222222-2222-4222-8222-222222222222",
+   "lt_interest_status": null,
+   "email_reply_count": 0,
+   "timestamp_last_reply": null
+  },
+  {
+   "id": "l4",
+   "email": "old@shop-d.example",
+   "first_name": "Old",
+   "last_name": "Lead",
+   "company_name": "",
+   "campaign": "33333333-3333-4333-8333-333333333333",
+   "lt_interest_status": -4,
+   "email_reply_count": 1,
+   "timestamp_last_reply": "2026-06-12T20:55:58.000Z"
+  }
+ ],
+ "next_starting_after": null
+}

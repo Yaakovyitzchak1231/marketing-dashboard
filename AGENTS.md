@@ -28,20 +28,18 @@ Every figure on screen must be traceable. Before you claim a change works, prove
 ## Stack (do not invent alternatives)
 
 - **Front end:** Next.js 15, App Router, TypeScript strict, Tailwind. Deployed on Vercel.
-- **Backend:** Supabase (Postgres). Schema in `supabase/migrations/`.
-- **Data source:** Instantly analytics via Composio. Account `instantly_moline-parsec`.
-- **Collector:** Python, runs on the OVH VM, upserts into Supabase.
-
-This is **greenfield**. There is no legacy code to preserve and no data to migrate.
-The old prototype at `mkt-data/workspace/marketing-dashboard/` is a reference for what
-the bugs *were* — it is not this project and is not being modified.
+- **Data source:** Instantly API v2, called directly from the Next.js server
+  (`INSTANTLY_API_KEY`, server-only, read-only, ~5 min cache). Contract: `lib/dashboard/types.ts`.
+- **Supabase:** login only (Supabase Auth + `ALLOWED_USER_EMAIL` gate in `middleware.ts`).
+- **Legacy, not in the data path:** the Python collector (`collector/`, Composio → Supabase)
+  and the old schema in `supabase/migrations/`. Kept for reference.
 
 ## Git
 
-- One shared clone at `/home/hermes/projects/marketing-dashboard`. Work here.
-- Branch per task: `task/<n>-<slug>`. Never commit directly to `main`.
-- Push with `scripts/git-push.sh push <branch>`. **Never** put a token in a remote URL,
-  a file, or a commit message. The helper injects it and strips it from output.
+- Branch per task. Never commit directly to `main`; changes land through pull requests.
+- **Never** put a token in a remote URL, a file, or a commit message.
+- Before opening a PR, `npm run check` (typecheck + lint + test) and `npm run build` pass.
+  CI runs the same on every PR.
 - Commit format: `type: short description` — e.g. `feat: add campaign table`,
   `fix: null-safe rate formatting`, `test: cover empty-history state`.
 

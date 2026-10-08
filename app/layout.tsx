@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { AppNav } from '@/components/nav/AppNav'
 
 /**
  * Document metadata. Deliberately plain -- no OpenGraph image, no theme-color
@@ -8,7 +9,7 @@ import './globals.css'
  */
 export const metadata: Metadata = {
   title: 'Marketing dashboard',
-  description: 'Campaign and sender-health metrics from Instantly.',
+  description: 'Leads, verification, campaigns and replies in one place.',
 }
 
 // No `viewport` export. The default initial scale is exactly what this page
@@ -19,7 +20,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppNav />
+        {children}
+      </body>
     </html>
   )
 }

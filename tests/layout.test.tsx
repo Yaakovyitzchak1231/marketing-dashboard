@@ -1,15 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import RootLayout, { metadata } from '../app/layout'
-import { render } from '@testing-library/react'
-import React from 'react'
+import { AppNav } from '@/components/nav/AppNav'
 
 describe('RootLayout', () => {
   it('exports correct metadata', () => {
     expect(metadata.title).toBe('Marketing dashboard')
-    expect(metadata.description).toBe('Campaign and sender-health metrics from Instantly.')
+    expect(metadata.description).toBe('Leads, verification, campaigns and replies in one place.')
   })
 
-  it('renders children within html and body tags', () => {
+  it('renders the app nav, then children, within html and body tags', () => {
     // Calling the component as a function allows us to inspect the element tree directly
     // This avoids jsdom stripping html/body tags when wrapped in render's default container
     const element = RootLayout({ children: { type: 'div', props: { 'data-testid': 'child', children: 'Hello World' } } as any })
@@ -20,7 +19,8 @@ describe('RootLayout', () => {
     const body = element.props.children
     expect(body.type).toBe('body')
 
-    const child = body.props.children
+    const [nav, child] = body.props.children
+    expect(nav.type).toBe(AppNav)
     expect(child.props['data-testid']).toBe('child')
     expect(child.props.children).toBe('Hello World')
   })

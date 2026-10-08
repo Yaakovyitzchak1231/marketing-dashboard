@@ -1,0 +1,32 @@
+{
+ "items": [
+  {
+   "id": "33333333-3333-4333-8333-333333333333",
+   "name": "Old Signups",
+   "status": 3,
+   "open_tracking": true,
+   "link_tracking": false,
+   "timestamp_created": "2026-05-19T18:43:21.620Z",
+   "daily_limit": 30,
+   "stop_on_reply": true,
+   "sequences": [
+    {
+     "steps": [
+      {
+       "type": "email",
+       "delay": 2,
+       "delay_unit": "days",
+       "variants": [
+        {
+         "subject": "welcome back",
+         "body": "<div>Hi {{firstName}}</div>"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "next_starting_after": null
+}

@@ -1,118 +1,152 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Jacob only. Read ALLOWED_USER_EMAIL per request rather than capturing it at
-// module scope: a module-scope read freezes whatever the env held at import,
-// which makes the gate impossible to test and hides a misconfigured deploy
-// behind a value nobody can inspect. The placeholder is a fail-closed default
-// so an unset env var can never widen access.
+/**
+ * The login gate. Every page and every API route (including /api/dashboard,
+ * which carries the Instantly numbers) requires a Supabase session whose email
+ * matches ALLOWED_USER_EMAIL. Anything unexpected -- missing env, auth outage,
+ * wrong account -- denies access. It never widens it.
+ */
+
+// Read ALLOWED_USER_EMAIL per request rather than capturing it at module scope:
+// a module-scope read freezes whatever the env held at import, which makes the
+// gate impossible to test and hides a misconfigured deploy behind a value
+// nobody can inspect. The placeholder is a fail-closed default so an unset env
+// var can never widen access.
 function allowedEmail(): string {
   return process.env.ALLOWED_USER_EMAIL || 'unset@invalid.local'
 }
 
 /**
- * Read the signed-in session from the request cookies.
+ * Local-development escape hatch: DASHBOARD_DEV_NO_AUTH=1 skips the login so
+ * the dashboard can be run and screenshotted without a Supabase project.
+ *
+ * It is honoured ONLY outside production. `process.env.NODE_ENV` is written as
+ * a literal so Next inlines it at build time: in a production build (which is
+ * what Vercel runs, for previews too) this function compiles to `false` and the
+ * variable is never read. The Vercel check is a second, runtime lock.
+ */
+export function devAuthBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return false
+  if (process.env.VERCEL) return false
+  return process.env.DASHBOARD_DEV_NO_AUTH === '1'
+}
+
+function isPublicPath(pathname: string): boolean {
+  return pathname === '/login' || pathname.startsWith('/api/auth/')
+}
+
+/**
+ * Machine routes that authenticate themselves instead of using the login:
+ *  - /api/ops/*      agents, each with its own bearer token (OPS_AGENT_TOKENS)
+ *  - /api/webhooks/* Instantly, with a shared secret (INSTANTLY_WEBHOOK_SECRET)
+ * Each route rejects any request without its credential (fail closed).
+ */
+export function isSelfAuthenticatingApi(pathname: string): boolean {
+  return (
+    pathname === '/api/ops' ||
+    pathname.startsWith('/api/ops/') ||
+    pathname.startsWith('/api/webhooks/')
+  )
+}
+
+/**
+ * Validate the signed-in session from the request cookies.
  *
  * Returns null on any failure rather than throwing: auth trouble must redirect
- * to /login, never surface as a 500. Never returns a session when the allow-list
- * env var is missing, because an unset allow-list cannot authorise anyone.
+ * to /login, never surface as a 500. Never returns a session when Supabase is
+ * not configured, so a missing env var can't be mistaken for a valid login.
+ *
+ * Supabase may refresh the access token while validating it. The refreshed
+ * cookies are written onto `response` (the standard @supabase/ssr middleware
+ * pattern); before, they were only written onto the incoming request and then
+ * dropped, so the browser kept a stale token and was eventually logged out.
  */
-async function getSessionSafeInternal(request: NextRequest) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return null
-  }
-  // A plain @supabase/supabase-js client has no access to the request cookies,
-  // so getUser() had no token to validate and every protected route redirected
-  // to /login forever. @supabase/ssr wires the cookie jar in explicitly.
+async function getSession(request: NextRequest) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  let response = NextResponse.next({ request })
+  if (!url || !anonKey) return { user: null, response }
+
+  // Auth verification does NOT need the service-role key -- that key bypasses
+  // RLS and must not be required just to read a session cookie. The anon key
+  // validates the JWT against Supabase Auth.
   const { createServerClient } = await import('@supabase/ssr')
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value)
-          })
-        },
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
       },
-    }
-  )
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+        response = NextResponse.next({ request })
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set(name, value, options),
+        )
+      },
+    },
+  })
   const { data, error } = await supabase.auth.getUser()
-  if (error || !data.user) return null
-  return { user: data.user }
+  if (error || !data.user) return { user: null, response }
+  return { user: data.user, response }
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const isApi = pathname.startsWith('/api/')
 
-  // Public paths - no auth required
-  if (pathname === '/login' || pathname.startsWith('/api/auth/')) {
+  if (isPublicPath(pathname) || isSelfAuthenticatingApi(pathname)) {
     return NextResponse.next()
   }
 
-  // Verify the session. Auth verification does NOT need the service-role key --
-  // that key bypasses RLS entirely and must not be required just to read a
-  // session cookie. The anon key validates the JWT against Supabase Auth. Using
-  // the service key here also meant a missing service key threw inside the
-  // middleware and turned every protected route into a 500 instead of a
-  // redirect to /login.
-  let session: Awaited<ReturnType<typeof getSessionSafeInternal>> = null
+  if (devAuthBypassEnabled()) {
+    const response = NextResponse.next()
+    response.headers.set('x-dashboard-auth', 'dev-bypass')
+    return response
+  }
+
+  let user: { email?: string | null } | null = null
+  let response: NextResponse | null = null
   try {
-    session = await getSessionSafeInternal(request)
+    const session = await getSession(request)
+    user = session.user
+    response = session.response
   } catch {
-    session = null
+    user = null
   }
 
-  // No session - redirect pages, 401 APIs
-  if (!session) {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+  // No session: redirect pages, 401 APIs. Nothing else leaves the request.
+  if (!user || !response) {
+    if (isApi) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Check allow-list
-  const userEmail = session.user.email?.toLowerCase()
-  const allowed = allowedEmail().toLowerCase()
-
-  if (userEmail !== allowed) {
-    // Clear the session cookie by redirecting to logout. Calling auth.signOut()
-    // here would need a server client, and the cookie can be dropped on the
-    // next response without one.
-    if (pathname.startsWith('/api/')) {
+  // Signed in, but is it the allowed account?
+  const userEmail = user.email?.toLowerCase()
+  if (!userEmail || userEmail !== allowedEmail().toLowerCase()) {
+    if (isApi) {
       return NextResponse.json(
         { error: 'Forbidden: Account not authorized' },
-        { status: 403 }
+        { status: 403 },
       )
     }
-    
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('error', 'unauthorized_account')
     return NextResponse.redirect(loginUrl)
   }
 
-  // Authorized - continue
-  return NextResponse.next()
+  // Authorized: continue, carrying any refreshed session cookies.
+  return response
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
+     * Every request path except Next's own static assets and the favicon.
+     * API routes are included on purpose: /api/dashboard is gated like a page.
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 }

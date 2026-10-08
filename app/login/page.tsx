@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
@@ -8,6 +8,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // The middleware sends a signed-in but not-allowed account here with
+  // ?error=unauthorized_account. Say so instead of showing a blank form.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('error') === 'unauthorized_account') {
+      setError('That account is not allowed to view this dashboard.')
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,72 +41,67 @@ export default function LoginPage() {
     window.location.href = '/'
   }
 
+  const input =
+    'block w-full rounded-card border border-line bg-surface px-3 py-2.5 text-[14px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60'
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div>
-          <h2 className="text-center text-3xl font-semibold text-gray-900">
-            Marketing Dashboard
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to access your dashboard
-          </p>
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-[380px]">
+        <div className="mb-6">
+          <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Cold email dashboard</h1>
+          <p className="mt-1 text-[13px] text-ink-muted">Sign in to see your campaigns, live from Instantly.</p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="sr-only">
-                Email address
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                disabled={loading}
-              />
-            </div>
+        <form className="space-y-4 rounded-card border border-line bg-surface p-5 shadow-card" onSubmit={handleSubmit}>
+          <div>
+            <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium text-ink-muted">
+              Email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={input}
+              placeholder="you@company.com"
+              disabled={loading}
+            />
+          </div>
 
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                disabled={loading}
-              />
-            </div>
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-[12px] font-medium text-ink-muted">
+              Password
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={input}
+              placeholder="Password"
+              disabled={loading}
+            />
           </div>
 
           {error && (
-            <div className="text-red-600 text-sm text-center">
+            <p role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">
               {error}
-            </div>
+            </p>
           )}
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-card bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
         </form>
       </div>
     </div>
