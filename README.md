@@ -58,7 +58,7 @@ Copy `.env.example` to `.env.local` for local work. Never commit real values.
 
 ## Run it locally
 
-Requires Node 20+ and npm.
+Requires Node 22+ and npm (Supabase's client needs Node 22's built-in WebSocket).
 
 ```bash
 npm ci
