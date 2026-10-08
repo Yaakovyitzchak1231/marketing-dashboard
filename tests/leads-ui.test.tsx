@@ -28,7 +28,7 @@ function row(id: number, over: Partial<LeadListRow> = {}): LeadListRow {
 const q = (s = '') => parseLeadQuery(Object.fromEntries(new URLSearchParams(s)))
 
 describe('AppNav', () => {
-  it('lists the nine screens and marks the active one (sub-pages included)', () => {
+  it('lists every screen and marks the active one (sub-pages included)', () => {
     pathname.value = '/leads/12'
     render(<AppNav />)
     const nav = screen.getByRole('navigation', { name: 'Screens' })
