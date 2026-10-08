@@ -37,6 +37,20 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
+ * Machine routes that authenticate themselves instead of using the login:
+ *  - /api/ops/*      agents, each with its own bearer token (OPS_AGENT_TOKENS)
+ *  - /api/webhooks/* Instantly, with a shared secret (INSTANTLY_WEBHOOK_SECRET)
+ * Each route rejects any request without its credential (fail closed).
+ */
+export function isSelfAuthenticatingApi(pathname: string): boolean {
+  return (
+    pathname === '/api/ops' ||
+    pathname.startsWith('/api/ops/') ||
+    pathname.startsWith('/api/webhooks/')
+  )
+}
+
+/**
  * Validate the signed-in session from the request cookies.
  *
  * Returns null on any failure rather than throwing: auth trouble must redirect
@@ -81,7 +95,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isApi = pathname.startsWith('/api/')
 
-  if (isPublicPath(pathname)) {
+  if (isPublicPath(pathname) || isSelfAuthenticatingApi(pathname)) {
     return NextResponse.next()
   }
 

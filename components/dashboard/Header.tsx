@@ -17,10 +17,10 @@ export function Header({
 }) {
   const active = range.key
   return (
-    <header className="border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/80 sm:sticky sm:top-0 sm:z-20">
-      <div className="mx-auto flex max-w-shell flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <header>
+      <div className="mx-auto flex max-w-shell flex-col gap-3 px-4 pt-5 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pt-6">
         <div className="min-w-0">
-          <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Cold email</h1>
+          <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Campaigns</h1>
           <p className="mt-0.5 text-[12px] leading-snug text-ink-faint sm:truncate" data-testid="freshness">
             {live && generatedAt ? (
               <>
@@ -39,7 +39,7 @@ export function Header({
               return (
                 <Link
                   key={k}
-                  href={`/?range=${k}`}
+                  href={`/campaigns?range=${k}`}
                   aria-current={selected ? 'page' : undefined}
                   prefetch={false}
                   className={`min-w-[40px] rounded-[3px] px-2.5 py-1.5 text-center text-[12px] font-medium tabular-nums transition-colors ${
@@ -52,7 +52,7 @@ export function Header({
             })}
           </nav>
           <a
-            href={`/?range=${active === 'custom' ? '30d' : active}`}
+            href={`/campaigns?range=${active === 'custom' ? '30d' : active}`}
             className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-muted hover:text-ink"
             title="Reload from Instantly (data is cached for up to 5 minutes)"
           >
