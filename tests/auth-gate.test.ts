@@ -104,6 +104,13 @@ describe('Auth Gate - no session', () => {
     expect(response.headers.get('location')).toContain('/login')
   })
 
+  it('returns 401 for /api/dashboard (the Instantly numbers) without a session', async () => {
+    sessionFor(null)
+    const response = await middleware(req('/api/dashboard?range=30d'))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ error: 'Unauthorized' })
+  })
+
   it('returns 401 for an API request and leaks nothing', async () => {
     sessionFor(null)
     const response = await middleware(req('/api/overview'))
@@ -140,6 +147,28 @@ describe('Auth Gate - session present', () => {
     expect(response.headers.get('location')).toContain(
       '/login?error=unauthorized_account',
     )
+  })
+
+  it('passes the allow-listed user through to /api/dashboard', async () => {
+    sessionFor(ALLOWED)
+    const response = await middleware(req('/api/dashboard?range=7d'))
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 403 for a non-allow-listed user on /api/dashboard', async () => {
+    sessionFor('other@example.com')
+    const response = await middleware(req('/api/dashboard'))
+    expect(response.status).toBe(403)
+  })
+
+  it('rejects a session whose user has no email', async () => {
+    mockSsrClient.auth.getUser.mockResolvedValue({
+      data: { user: { email: null } },
+      error: null,
+    })
+    const response = await middleware(req('/'))
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toContain('/login')
   })
 
   it('returns 403 for a non-allow-listed user on API routes', async () => {
@@ -194,6 +223,51 @@ describe('Auth Gate - fail closed', () => {
     const response = await middleware(req('/'))
     expect(response.status).toBe(200)
     if (savedKey !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = savedKey
+  })
+})
+
+describe('Auth Gate - missing Supabase config', () => {
+  it('denies everyone when the Supabase URL/anon key are unset', async () => {
+    process.env.ALLOWED_USER_EMAIL = ALLOWED
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '')
+    sessionFor(ALLOWED)
+    const page = await middleware(req('/'))
+    expect(page.status).toBe(307)
+    expect(page.headers.get('location')).toContain('/login')
+    const api = await middleware(req('/api/dashboard'))
+    expect(api.status).toBe(401)
+  })
+})
+
+describe('Auth Gate - session refresh cookies', () => {
+  /**
+   * When Supabase refreshes an expiring token while validating it, the new
+   * cookies must reach the browser on the response. If they are dropped the
+   * browser keeps a stale token and the user is logged out.
+   */
+  it('writes refreshed session cookies onto the response', async () => {
+    process.env.ALLOWED_USER_EMAIL = ALLOWED
+    const { createServerClient } = await import('@supabase/ssr')
+    vi.mocked(createServerClient).mockImplementationOnce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((_url: string, _key: string, opts: any) => ({
+        ...mockSsrClient,
+        auth: {
+          ...mockSsrClient.auth,
+          getUser: async () => {
+            opts.cookies.setAll([
+              { name: 'sb-test-auth-token', value: 'refreshed', options: { path: '/' } },
+            ])
+            return { data: { user: { email: ALLOWED } }, error: null }
+          },
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      })) as any,
+    )
+    const response = await middleware(req('/'))
+    expect(response.status).toBe(200)
+    expect(response.cookies.get('sb-test-auth-token')?.value).toBe('refreshed')
   })
 })
 

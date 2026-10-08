@@ -43,6 +43,13 @@ const config: Config = {
         unavailable: '#a8a29a',
         // Caution. Used only for a genuinely degraded value.
         warn: '#8a5a20',
+        'warn-soft': '#fbf4ea',
+        // Status tones for pills and severity bars only -- muted, never a fill
+        // behind a whole section. Good = working / healthy; bad = fix now.
+        good: '#2f6b4a',
+        'good-soft': '#eef5f0',
+        bad: '#a23b2c',
+        'bad-soft': '#fbefec',
       },
       fontFamily: {
         // System stack -- no webfont, no FOUT, no layout shift.
@@ -56,14 +63,18 @@ const config: Config = {
           'Arial',
           'sans-serif',
         ],
-        // Every figure uses this so columns align digit-for-digit.
+        // Figures use the same system face with tabular digits (set globally
+        // in globals.css), so columns align digit-for-digit without the
+        // code-editor look of a monospace face.
         numeric: [
-          'ui-monospace',
-          'SFMono-Regular',
-          'SF Mono',
-          'Menlo',
-          'Consolas',
-          'monospace',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
         ],
       },
       fontSize: {

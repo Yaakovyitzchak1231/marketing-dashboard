@@ -1,7 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import RootLayout, { metadata } from '../app/layout'
-import { render } from '@testing-library/react'
-import React from 'react'
 
 describe('RootLayout', () => {
   it('exports correct metadata', () => {

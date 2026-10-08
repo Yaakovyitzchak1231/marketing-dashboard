@@ -1,9 +1,0 @@
-🧪 [testing improvement] Add tests for `collect()` exception handling
-
-🎯 **What:** The `collect()` function in `collector/collect_instantly.py` had a untested error path where exceptions thrown from `api.overview()`, `api.campaign_ids()`, `api.campaign()`, and `api.senders()` were caught and appended to an `errors` list.
-
-📊 **Coverage:**
-- Added a test to verify that if `api.overview()`, `api.campaign_ids()`, and `api.senders()` all fail, `collect()` doesn't crash but instead catches the exceptions, appends the correct error structures to the returned `errors` list, and returns empty structures for the failed operations.
-- Added a test to verify that if an individual campaign API call inside the `for` loop fails, the loop continues and the exception is correctly appended to the `errors` list, without crashing the entire `collect()` run.
-
-✨ **Result:** Improved test coverage over the `collect()` orchestrator function, specifically its ability to correctly handle and report upstream API failures in an expected way instead of failing the entire sync job.
