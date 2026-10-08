@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
   try {
     const data = await getDashboardData(raw)
     return NextResponse.json(data, { headers: { 'Cache-Control': 'private, no-store' } })
-  } catch {
+  } catch (err) {
+    // Keep the real cause in the server logs (Vercel function logs); the client gets plain words.
+    console.error('[dashboard] load failed', err)
     return NextResponse.json({ error: 'Could not load the dashboard from Instantly.' }, { status: 502 })
   }
 }
