@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  campaignStatus, accountStatusWord, combinedTracking, countsFromApi, dailySeries, interestFrom, num, ratesFrom,
+  campaignStatus, accountStatusWord, combinedTracking, countsFromApi, dailySeries, interestFrom, num, openTrackingOff, ratesFrom,
   ratio, repliedLeadsFrom, stepStats, sumAccountDaily, sumCounts, zeroCounts, EMPTY_COUNTS,
 } from '@/lib/dashboard/metrics'
 import { addDays, chunkRange, dateInZone, daysBetweenInclusive, previousRange, rangeFor, resolveTimezone } from '@/lib/dashboard/dates'
@@ -88,6 +88,13 @@ describe('helpers', () => {
     expect(combinedTracking([false, false])).toBe(false)
     expect(combinedTracking([true, false])).toBeNull()
     expect(combinedTracking([])).toBeNull()
+  })
+  it('openTrackingOff: off only when every campaign that reports it says off', () => {
+    expect(openTrackingOff([false, false])).toBe(true)
+    expect(openTrackingOff([false, null])).toBe(true) // unknown is ignored, not guessed
+    expect(openTrackingOff([true, false])).toBe(false)
+    expect(openTrackingOff([null, null])).toBe(false) // nothing reported: not "off"
+    expect(openTrackingOff([])).toBe(false)
   })
   it('zeroCounts: measured zeros, tracking-gated fields null when off', () => {
     const z = zeroCounts(OFF)

@@ -1,4 +1,8 @@
-/** Skeleton while the server fetches from Instantly. Same shape as the real page. */
+/**
+ * Shown while the fast first round of calls (totals, deltas, the campaign list)
+ * is in flight. Once that answers, this whole skeleton is replaced by the real
+ * page and each remaining section streams into its own placeholder.
+ */
 function Block({ className }: { className: string }) {
   return <div className={`animate-pulse rounded-card bg-line-soft ${className}`} />
 }
@@ -16,14 +20,14 @@ export default function Loading() {
         </div>
       </div>
       <div className="mx-auto flex max-w-shell flex-col gap-8 px-4 pt-6 sm:px-6">
-        <div className="space-y-3">
-          <Block className="h-3 w-32" />
-          <Block className="h-[220px] w-full" />
-        </div>
         <div className="grid grid-cols-2 gap-px md:grid-cols-3 xl:grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <Block key={i} className="h-[92px]" />
           ))}
+        </div>
+        <div className="space-y-3">
+          <Block className="h-3 w-32" />
+          <Block className="h-[220px] w-full" />
         </div>
         <Block className="h-[260px] w-full" />
         <Block className="h-[300px] w-full" />

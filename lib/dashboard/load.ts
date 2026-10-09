@@ -6,10 +6,19 @@
  * - Independent calls run in parallel (Promise.allSettled); a failed source
  *   becomes an entry in errors[] and its numbers stay null — never 0.
  * - Server-only; responses are cached ~5 minutes by the client.
+ *
+ * The load is split into stages so the page can stream (see loadStages):
+ *   loadSummary  — phase 1, the calls everything else needs: totals, deltas,
+ *                  the campaign list, the sending inboxes. Fast.
+ *   loadDaily / loadCampaigns / loadAccounts / loadReplies — phase 2, one
+ *                  stage per section; started together, awaited on their own.
+ * getDashboardData composes them in that order, so /api/dashboard still returns
+ * one JSON body and every number is identical to the streamed page.
  */
 import 'server-only'
 import type {
-  CampaignRow, CampaignStatus, Counts, DashboardData, DateRange, RangeKey, SenderAccount, SourceError,
+  CampaignRow, CampaignStatus, Counts, DailyPoint, DashboardData, DateRange, Insight, RangeKey, Rates,
+  RepliedLead, SenderAccount, SourceError,
 } from '@/lib/dashboard/types'
 import { computeInsights, classifyAccountHealth } from '@/lib/insights'
 import { InstantlyClient, InstantlyError, clientFromEnv } from '@/lib/instantly/client'
@@ -17,11 +26,14 @@ import {
   getAccountDaily, getAnalyticsOverview, getCampaignAnalytics, getDailyAnalytics, getStepAnalytics,
   listAccounts, listCampaigns, listLatestThreadEmails, listLeadsByEmail,
 } from '@/lib/instantly/endpoints'
-import type { ApiAccountDailyRow, ApiCampaign, ApiCampaignAnalytics } from '@/lib/instantly/types'
+import type {
+  ApiAccount, ApiAccountDailyRow, ApiCampaign, ApiCampaignAnalytics, ApiDailyRow, ApiEmail, ApiLead,
+} from '@/lib/instantly/types'
 import { addDays, chunkRange, dateInZone, previousRange, rangeFor, resolveTimezone } from '@/lib/dashboard/dates'
 import {
   EMPTY_COUNTS, accountStatusWord, campaignStatus, combinedTracking, countsFromApi, dailySeries, num,
-  ratesFrom, ratio, repliedLeadsFrom, stepStats, sumAccountDaily, zeroCounts,
+  openTrackingOff, ratesFrom, ratio, repliedLeadsFrom, stepStats, sumAccountDaily, zeroCounts,
+  type Tracking,
 } from '@/lib/dashboard/metrics'
 
 /** Instantly allows at most 31 days per /accounts/analytics/daily call. */
@@ -41,6 +53,72 @@ export interface LoadOptions {
   client?: InstantlyClient | null
   now?: Date
   timeZone?: string
+}
+
+/** One section's slice: its data, plus the sources that failed for it. */
+export interface Stage<T> {
+  data: T
+  errors: SourceError[]
+}
+
+/** Everything phase 2 needs, built once by loadSummary. Server-only; never sent to the browser. */
+export interface DashboardContext {
+  client: InstantlyClient
+  now: Date
+  timeZone: string
+  range: DateRange
+  /** The window the analytics endpoints take: null = all time. */
+  apiWindow: { start: string; end: string } | null
+  /** First day of the daily chart (the range start, or the oldest campaign). */
+  dailyStart: string
+  /** Workspace tracking for the campaigns that sent in the range. */
+  tracking: Tracking
+  ids: string[]
+  listed: ApiCampaign[]
+  listedById: Map<string, ApiCampaign>
+  /** false when the campaign list call failed; inbox membership is then unknown. */
+  campaignsOk: boolean
+  /** Open/link tracking for one campaign (null = the list did not report it). */
+  trackingOf: (id: string) => Tracking
+  rangeRows: ApiCampaignAnalytics[] | null
+  rangeById: Map<string, ApiCampaignAnalytics>
+  lifetimeById: Map<string, ApiCampaignAnalytics>
+  perCampaignIds: string[]
+  nameOf: (id: string) => string
+  campaignNames: Map<string, string>
+  threads: ApiEmail[]
+  /** false when the /emails call failed, so replies cannot be read. */
+  threadsOk: boolean
+  accounts: ApiAccount[]
+  accountJobs: Array<{ emails: string[]; w: { start: string; end: string } }>
+}
+
+/** Phase 1: what the page can show before any per-campaign or per-inbox call. */
+export interface DashboardSummary {
+  generatedAt: string
+  range: DateRange
+  configured: boolean
+  totals: { counts: Counts; rates: Rates }
+  previous: { counts: Counts; rates: Rates } | null
+  /** true when the campaign list reports tracking for at least one campaign and every one is off. */
+  trackingOff: boolean
+  errors: SourceError[]
+  /** null when not configured: there is nothing to load. */
+  ctx: DashboardContext | null
+}
+
+export interface StageResults {
+  daily: Stage<DailyPoint[]>
+  campaigns: Stage<CampaignRow[]>
+  accounts: Stage<SenderAccount[]>
+  replies: Stage<RepliedLead[]>
+}
+
+export interface Stages {
+  daily: Promise<Stage<DailyPoint[]>>
+  campaigns: Promise<Stage<CampaignRow[]>>
+  accounts: Promise<Stage<SenderAccount[]>>
+  replies: Promise<Stage<RepliedLead[]>>
 }
 
 function message(err: unknown): string {
@@ -69,40 +147,36 @@ function value<T>(r: PromiseSettledResult<T>): T | null {
   return r.status === 'fulfilled' ? r.value : null
 }
 
-function emptyData(range: DateRange, configured: boolean, now: Date, errors: SourceError[] = []): DashboardData {
-  return {
-    generatedAt: now.toISOString(),
-    range,
-    configured,
-    totals: { counts: { ...EMPTY_COUNTS }, rates: ratesFrom(EMPTY_COUNTS) },
-    previous: null,
-    daily: [],
-    campaigns: [],
-    accounts: [],
-    repliedLeads: [],
-    insights: [],
-    errors,
-  }
-}
+// ---- Phase 1 --------------------------------------------------------------------
 
-export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOptions = {}): Promise<DashboardData> {
+export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions = {}): Promise<DashboardSummary> {
   const now = opts.now ?? new Date()
   const timeZone = resolveTimezone(opts.timeZone ?? process.env.DASHBOARD_TZ)
   const range = rangeFor(rangeKey, now, timeZone)
   const prev = previousRange(range)
   const client = opts.client === undefined ? clientFromEnv() : opts.client
-  if (!client) return emptyData(range, false, now)
+  const empty: DashboardSummary = {
+    generatedAt: now.toISOString(),
+    range,
+    configured: false,
+    totals: { counts: { ...EMPTY_COUNTS }, rates: ratesFrom(EMPTY_COUNTS) },
+    previous: null,
+    trackingOff: false,
+    errors: [],
+    ctx: null,
+  }
+  if (!client) return empty
 
   const errors: SourceError[] = []
   const fail = (source: string, err: unknown) => errors.push({ source, message: message(err) })
 
   // ---- Phase 1: independent calls -------------------------------------------------
-  const window = range.start === null ? null : { start: range.start, end: range.end }
+  const apiWindow = range.start === null ? null : { start: range.start, end: range.end }
   const [campaignsR, rangeAnaR, lifetimeAnaR, overviewR, prevOverviewR, accountsR, threadsR] = await Promise.allSettled([
     listCampaigns(client),
-    getCampaignAnalytics(client, window),
+    getCampaignAnalytics(client, apiWindow),
     getCampaignAnalytics(client, null),
-    getAnalyticsOverview(client, window),
+    getAnalyticsOverview(client, apiWindow),
     prev ? getAnalyticsOverview(client, { start: prev.start, end: prev.end }) : Promise.resolve(null),
     listAccounts(client),
     listLatestThreadEmails(client),
@@ -124,7 +198,7 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
   // Every campaign: the list, plus any campaign only the analytics know about.
   const ids: string[] = [...listed.map((c) => c.id)]
   for (const r of [...(lifetimeRows ?? []), ...(rangeRows ?? [])]) if (r.campaign_id && !ids.includes(r.campaign_id)) ids.push(r.campaign_id)
-  const tracking = (id: string) => {
+  const trackingOf = (id: string): Tracking => {
     const c = listedById.get(id)
     return {
       open: typeof c?.open_tracking === 'boolean' ? c.open_tracking : null,
@@ -136,14 +210,14 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
   const sentIds = (rangeRows ?? []).filter((r) => (num(r.emails_sent_count) ?? 0) > 0).map((r) => r.campaign_id)
   const basis = sentIds.length ? sentIds : ids
   const totalTracking = {
-    open: combinedTracking(basis.map((id) => tracking(id).open)),
-    link: combinedTracking(basis.map((id) => tracking(id).link)),
+    open: combinedTracking(basis.map((id) => trackingOf(id).open)),
+    link: combinedTracking(basis.map((id) => trackingOf(id).link)),
   }
 
   const overview = value(overviewR)
   if (!overview) fail('campaigns/analytics/overview', (overviewR as PromiseRejectedResult).reason)
   const totalsCounts: Counts = countsFromApi(overview, totalTracking)
-  let previous: DashboardData['previous'] = null
+  let previous: DashboardSummary['previous'] = null
   if (prev) {
     const p = value(prevOverviewR)
     if (p) {
@@ -160,7 +234,7 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
     })
   }
 
-  // ---- Phase 2: calls that depend on phase 1 --------------------------------------
+  // ---- Phase 1.5: the shape of phase 2, from what phase 1 already returned ---------
   const earliestCreated = listed
     .map((c) => (c.timestamp_created ? Date.parse(c.timestamp_created) : NaN))
     .filter((t) => Number.isFinite(t))
@@ -190,64 +264,97 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
 
   const threadsPage = value(threadsR)
   if (!threadsPage) fail('emails', (threadsR as PromiseRejectedResult).reason)
-  const threads = threadsPage?.items ?? []
-  const threadContacts = [...new Set(threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
 
-  const [dailyR, stepsRs, campaignOverviewRs, accountRs, leadsR] = await Promise.all([
-    getDailyAnalytics(client, { start: dailyStart, end: range.end }).then(
-      (v) => ({ status: 'fulfilled', value: v }) as PromiseSettledResult<Awaited<ReturnType<typeof getDailyAnalytics>>>,
-      (reason) => ({ status: 'rejected', reason }) as PromiseSettledResult<never>,
-    ),
-    mapLimit(perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getStepAnalytics(client, id, window)),
-    mapLimit(perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getAnalyticsOverview(client, window, id)),
-    mapLimit(accountJobs, CAMPAIGN_CONCURRENCY, (j) => getAccountDaily(client, j.emails, j.w)),
-    threadContacts.length
-      ? listLeadsByEmail(client, threadContacts).then(
-          (v) => ({ status: 'fulfilled', value: v }) as PromiseSettledResult<Awaited<ReturnType<typeof listLeadsByEmail>>>,
-          (reason) => ({ status: 'rejected', reason }) as PromiseSettledResult<never>,
-        )
-      : Promise.resolve({ status: 'fulfilled', value: [] } as PromiseSettledResult<Awaited<ReturnType<typeof listLeadsByEmail>>>),
-  ])
-
-  // Daily
-  const dailyRows = value(dailyR)
-  if (!dailyRows) fail('campaigns/analytics/daily', (dailyR as PromiseRejectedResult).reason)
-  const daily = dailySeries(dailyRows, dailyStart, range.end, totalTracking)
-
-  // Campaign rows
-  const stepsById = new Map<string, PromiseSettledResult<unknown>>()
-  const ovById = new Map<string, PromiseSettledResult<unknown>>()
-  perCampaignIds.forEach((id, i) => {
-    stepsById.set(id, stepsRs[i])
-    ovById.set(id, campaignOverviewRs[i])
-  })
   const nameOf = (id: string) =>
     listedById.get(id)?.name ?? rangeById.get(id)?.campaign_name ?? lifetimeById.get(id)?.campaign_name ?? 'Untitled campaign'
+
+  return {
+    generatedAt: now.toISOString(),
+    range,
+    configured: true,
+    totals: { counts: totalsCounts, rates: ratesFrom(totalsCounts) },
+    previous,
+    trackingOff: openTrackingOff(ids.map((id) => trackingOf(id).open)),
+    errors,
+    ctx: {
+      client,
+      now,
+      timeZone,
+      range,
+      apiWindow,
+      dailyStart,
+      tracking: totalTracking,
+      ids,
+      listed,
+      listedById,
+      campaignsOk: Boolean(campaignsPage),
+      trackingOf,
+      rangeRows,
+      rangeById,
+      lifetimeById,
+      perCampaignIds,
+      nameOf,
+      campaignNames: new Map(ids.map((id) => [id, nameOf(id)])),
+      threads: threadsPage?.items ?? [],
+      threadsOk: Boolean(threadsPage),
+      accounts,
+      accountJobs,
+    },
+  }
+}
+
+// ---- Phase 2: one stage per section ---------------------------------------------
+
+/** The daily chart: one point per calendar day, days the API omits are real zeros. */
+export async function loadDaily(ctx: DashboardContext): Promise<Stage<DailyPoint[]>> {
+  const errors: SourceError[] = []
+  let rows: ApiDailyRow[] | null = null
+  try {
+    rows = await getDailyAnalytics(ctx.client, { start: ctx.dailyStart, end: ctx.range.end })
+  } catch (err) {
+    errors.push({ source: 'campaigns/analytics/daily', message: message(err) })
+  }
+  return { data: dailySeries(rows, ctx.dailyStart, ctx.range.end, ctx.tracking), errors }
+}
+
+/** One row per campaign, with per-step results and all-time totals. */
+export async function loadCampaigns(ctx: DashboardContext): Promise<Stage<CampaignRow[]>> {
+  const errors: SourceError[] = []
+  const [stepsRs, ovRs] = await Promise.all([
+    mapLimit(ctx.perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getStepAnalytics(ctx.client, id, ctx.apiWindow)),
+    mapLimit(ctx.perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getAnalyticsOverview(ctx.client, ctx.apiWindow, id)),
+  ])
+  const stepsById = new Map<string, PromiseSettledResult<unknown>>()
+  const ovById = new Map<string, PromiseSettledResult<unknown>>()
+  ctx.perCampaignIds.forEach((id, i) => {
+    stepsById.set(id, stepsRs[i])
+    ovById.set(id, ovRs[i])
+  })
   let stepFailures = 0
-  const campaigns: CampaignRow[] = ids.map((id) => {
-    const t = tracking(id)
-    const listedC = listedById.get(id)
-    const rangeRow: ApiCampaignAnalytics | undefined = rangeById.get(id)
+  const campaigns: CampaignRow[] = ctx.ids.map((id) => {
+    const t = ctx.trackingOf(id)
+    const listedC = ctx.listedById.get(id)
+    const rangeRow: ApiCampaignAnalytics | undefined = ctx.rangeById.get(id)
     let counts: Counts
     if (rangeRow) counts = countsFromApi(rangeRow, t)
-    else if (rangeRows) counts = zeroCounts(t) // the range call succeeded and listed no activity
+    else if (ctx.rangeRows) counts = zeroCounts(t) // the range call succeeded and listed no activity
     else counts = { ...EMPTY_COUNTS }
     // Meetings: per-campaign overview (only the overview reports them).
     const ov = ovById.get(id)
     if (ov?.status === 'fulfilled') counts.meetingsBooked = num((ov.value as { total_meeting_booked?: unknown }).total_meeting_booked)
-    else if (!ov && rangeRows) counts.meetingsBooked = 0
+    else if (!ov && ctx.rangeRows) counts.meetingsBooked = 0
     const st = stepsById.get(id)
     let steps: CampaignRow['steps'] = []
     if (st?.status === 'fulfilled') steps = stepStats(st.value as Parameters<typeof stepStats>[0], listedC, t.open)
     else if (st?.status === 'rejected') stepFailures++
-    const life = lifetimeById.get(id)
+    const life = ctx.lifetimeById.get(id)
     const leadsTotal = life ? num(life.leads_count) : rangeRow ? num(rangeRow.leads_count) : null
     const lifeContacted = life ? num(life.new_leads_contacted_count) : null
     const remaining = leadsTotal !== null && lifeContacted !== null ? leadsTotal - lifeContacted : null
     const lifeCounts = life ? countsFromApi(life, t) : null
     return {
       id,
-      name: nameOf(id),
+      name: ctx.nameOf(id),
       status: campaignStatus(listedC?.status ?? rangeRow?.campaign_status ?? life?.campaign_status),
       openTracking: t.open,
       counts,
@@ -262,17 +369,22 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
     const firstErr = stepsRs.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
     errors.push({ source: 'campaigns/analytics/steps', message: `Step results are missing for ${stepFailures} campaign(s): ${message(firstErr?.reason)}` })
   }
-  const ovFailures = campaignOverviewRs.filter((r) => r.status === 'rejected').length
+  const ovFailures = ovRs.filter((r) => r.status === 'rejected').length
   if (ovFailures) errors.push({ source: 'campaigns/analytics/overview (per campaign)', message: `Meetings booked are missing for ${ovFailures} campaign(s).` })
   // Most activity first; ties by name.
   campaigns.sort((a, b) => (b.counts.sent ?? -1) - (a.counts.sent ?? -1) || a.name.localeCompare(b.name))
+  return { data: campaigns, errors }
+}
 
-  // Sending accounts
+/** One row per sending inbox, with its in-range sent / bounce / reply counts. */
+export async function loadAccounts(ctx: DashboardContext): Promise<Stage<SenderAccount[]>> {
+  const errors: SourceError[] = []
+  const accountRs = await mapLimit(ctx.accountJobs, CAMPAIGN_CONCURRENCY, (j) => getAccountDaily(ctx.client, j.emails, j.w))
   const failedEmails = new Set<string>()
   const accountRows: ApiAccountDailyRow[] = []
   accountRs.forEach((r, i) => {
     if (r.status === 'fulfilled') accountRows.push(...r.value)
-    else accountJobs[i].emails.forEach((e) => failedEmails.add(e.toLowerCase()))
+    else ctx.accountJobs[i].emails.forEach((e) => failedEmails.add(e.toLowerCase()))
   })
   if (failedEmails.size) {
     const firstErr = accountRs.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
@@ -282,8 +394,8 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
   // Which campaigns each inbox sends for (campaign email_list), so old, unused inboxes can be told apart.
   const campaignsByInbox = new Map<string, { id: string; name: string; status: CampaignStatus }[]>()
   // Only trust membership when the campaign list loaded and actually carries sender lists.
-  const membershipKnown = Boolean(campaignsPage) && listed.some((c) => Array.isArray(c.email_list))
-  for (const c of listed) {
+  const membershipKnown = ctx.campaignsOk && ctx.listed.some((c) => Array.isArray(c.email_list))
+  for (const c of ctx.listed) {
     for (const e of c.email_list ?? []) {
       const key = String(e).toLowerCase()
       const arr = campaignsByInbox.get(key) ?? []
@@ -291,7 +403,7 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
       campaignsByInbox.set(key, arr)
     }
   }
-  const senderAccounts: SenderAccount[] = accounts.map((a) => {
+  const senderAccounts: SenderAccount[] = ctx.accounts.map((a) => {
     const k = a.email.toLowerCase()
     const known = !failedEmails.has(k)
     const tot = perAccount.get(k) ?? { sent: 0, bounced: 0, replied: 0 }
@@ -314,35 +426,93 @@ export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOpt
   })
   // Inboxes on active campaigns first, then by volume.
   senderAccounts.sort((x, y) => Number(y.inActiveCampaign === true) - Number(x.inActiveCampaign === true) || (y.sent ?? -1) - (x.sent ?? -1) || x.email.localeCompare(y.email))
+  return { data: senderAccounts, errors }
+}
 
-  // Replied leads
-  const leads = value(leadsR)
-  if (!leads) fail('leads/list', (leadsR as PromiseRejectedResult).reason)
-  const repliedLeads = threadsPage && leads
+/** Replied leads still waiting on you, newest reply first. */
+export async function loadReplies(ctx: DashboardContext): Promise<Stage<RepliedLead[]>> {
+  const errors: SourceError[] = []
+  const threadContacts = [...new Set(ctx.threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
+  let leads: ApiLead[] | null = []
+  if (threadContacts.length) {
+    try {
+      leads = await listLeadsByEmail(ctx.client, threadContacts)
+    } catch (err) {
+      leads = null
+      errors.push({ source: 'leads/list', message: message(err) })
+    }
+  }
+  const repliedLeads = ctx.threadsOk && leads
     ? repliedLeadsFrom({
-        threads, leads,
-        campaignNames: new Map(ids.map((id) => [id, nameOf(id)])),
-        start: range.start, end: range.end, timeZone, now, limit: REPLIED_LEADS_LIMIT,
+        threads: ctx.threads, leads,
+        campaignNames: ctx.campaignNames,
+        start: ctx.range.start, end: ctx.range.end, timeZone: ctx.timeZone, now: ctx.now, limit: REPLIED_LEADS_LIMIT,
       })
     : []
+  return { data: repliedLeads, errors }
+}
 
-  const withoutInsights: Omit<DashboardData, 'insights'> = {
-    generatedAt: now.toISOString(),
-    range,
-    configured: true,
-    totals: { counts: totalsCounts, rates: ratesFrom(totalsCounts) },
-    previous,
-    daily,
-    campaigns,
-    accounts: senderAccounts,
-    repliedLeads,
-    errors,
+/** Start every phase-2 stage at once. The caller awaits each one where it renders. */
+export function loadStages(ctx: DashboardContext): Stages {
+  return {
+    daily: loadDaily(ctx),
+    campaigns: loadCampaigns(ctx),
+    accounts: loadAccounts(ctx),
+    replies: loadReplies(ctx),
   }
-  let insights: DashboardData['insights'] = []
+}
+
+// ---- Assembly -------------------------------------------------------------------
+
+/** Everything except insights, from the summary and the four stages. */
+export function combineStages(summary: DashboardSummary, r: StageResults): Omit<DashboardData, 'insights'> {
+  return {
+    generatedAt: summary.generatedAt,
+    range: summary.range,
+    configured: summary.configured,
+    totals: summary.totals,
+    previous: summary.previous,
+    daily: r.daily.data,
+    campaigns: r.campaigns.data,
+    accounts: r.accounts.data,
+    repliedLeads: r.replies.data,
+    errors: [...summary.errors, ...r.daily.errors, ...r.campaigns.errors, ...r.accounts.errors, ...r.replies.errors],
+  }
+}
+
+/** The recommendations. A bug in the rules must not take the numbers down with it. */
+export function insightsFor(data: Omit<DashboardData, 'insights'>): Stage<Insight[]> {
   try {
-    insights = computeInsights(withoutInsights)
+    return { data: computeInsights(data), errors: [] }
   } catch {
-    errors.push({ source: 'insights', message: 'The recommendations could not be computed from this data.' })
+    return { data: [], errors: [{ source: 'insights', message: 'The recommendations could not be computed from this data.' }] }
   }
-  return { ...withoutInsights, insights }
+}
+
+/** The DashboardData shape when there are no stages to load (not configured): the page's setup card. */
+export function emptyFromSummary(summary: DashboardSummary): DashboardData {
+  return {
+    generatedAt: summary.generatedAt,
+    range: summary.range,
+    configured: summary.configured,
+    totals: summary.totals,
+    previous: summary.previous,
+    daily: [],
+    campaigns: [],
+    accounts: [],
+    repliedLeads: [],
+    insights: [],
+    errors: summary.errors,
+  }
+}
+
+/** One DashboardData for a range, all stages in parallel. The /api/dashboard contract. */
+export async function getDashboardData(rangeKey: RangeKey = '30d', opts: LoadOptions = {}): Promise<DashboardData> {
+  const summary = await loadSummary(rangeKey, opts)
+  if (!summary.ctx) return emptyFromSummary(summary)
+  const stages = loadStages(summary.ctx)
+  const [daily, campaigns, accounts, replies] = await Promise.all([stages.daily, stages.campaigns, stages.accounts, stages.replies])
+  const withoutInsights = combineStages(summary, { daily, campaigns, accounts, replies })
+  const insights = insightsFor(withoutInsights)
+  return { ...withoutInsights, insights: insights.data, errors: [...withoutInsights.errors, ...insights.errors] }
 }

@@ -1,5 +1,6 @@
-import { getDashboardData } from '@/lib/dashboard/load'
+import { emptyFromSummary, loadStages, loadSummary } from '@/lib/dashboard/load'
 import { Dashboard } from '@/components/dashboard/Dashboard'
+import { PerformanceView } from '@/components/dashboard/PerformanceView'
 import { loadSampleData } from '@/components/dashboard/sample'
 import { parseRange } from '@/components/dashboard/range'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
@@ -20,11 +21,14 @@ export default async function Page({
     return <Dashboard data={{ ...sample, range: { ...sample.range, key: range } }} sample />
   }
 
-  const data = await getDashboardData(range)
+  // Phase 1 only: totals, deltas and the campaign list. The rest streams in.
+  const summary = await loadSummary(range)
+  if (!summary.ctx) return <Dashboard data={emptyFromSummary(summary)} />
+
   return (
     <>
-      <Dashboard data={data} />
-      {data.configured ? <AutoRefresh on="reply" poll="always" seconds={CACHE_SECONDS} /> : null}
+      <PerformanceView summary={summary} stages={loadStages(summary.ctx)} />
+      <AutoRefresh on="reply" poll="always" seconds={CACHE_SECONDS} />
     </>
   )
 }
