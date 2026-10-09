@@ -1,8 +1,9 @@
 /**
  * Outbound notification mail over a provider's HTTPS API (no SMTP, no new dependency).
  * MAIL_PROVIDER = resend | brevo, MAIL_API_KEY, MAIL_FROM ("Dashboard <alerts@example.com>").
- * Both have free tiers (Resend 3,000/month; Brevo 300/day). Unset = "mail is not configured",
- * which the delivery row shows as its error so nothing fails silently.
+ * Both have free tiers (Resend 3,000/month; Brevo 300/day). Unset = the email is HELD
+ * (status 'held', "waiting for mail settings" on the row, no attempt spent) and goes out
+ * within minutes of the settings being added.
  */
 export interface MailInput {
   to: string
@@ -21,8 +22,16 @@ function parseFrom(from: string): { email: string; name?: string } {
   return m ? { name: m[1].replace(/^"|"$/g, '') || undefined, email: m[2] } : { email: from.trim() }
 }
 
-export async function sendMail(m: MailInput, fetchImpl: FetchLike = fetch, env = process.env): Promise<{ ok: true; id?: string } | { ok: false; error: string; retry: boolean }> {
-  if (!mailConfigured(env)) return { ok: false, error: 'mail is not configured (MAIL_PROVIDER, MAIL_API_KEY, MAIL_FROM)', retry: false }
+export const MAIL_NOT_CONFIGURED = 'waiting for mail settings (MAIL_PROVIDER, MAIL_API_KEY, MAIL_FROM)'
+
+export type MailResult = { ok: true; id?: string } | { ok: false; error: string; retry: boolean; unconfigured?: true }
+
+/**
+ * "Not configured" is NOT a failure: the caller holds the email (no attempt spent) and
+ * sends it once the settings exist, so nothing queued before setup is lost.
+ */
+export async function sendMail(m: MailInput, fetchImpl: FetchLike = fetch, env = process.env): Promise<MailResult> {
+  if (!mailConfigured(env)) return { ok: false, error: MAIL_NOT_CONFIGURED, retry: true, unconfigured: true }
   const provider = String(env.MAIL_PROVIDER).toLowerCase()
   const key = String(env.MAIL_API_KEY)
   const from = String(env.MAIL_FROM)

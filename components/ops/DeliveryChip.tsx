@@ -11,7 +11,12 @@ const LABEL: Record<DeliveryStatus, { text: string; cls: string; title: string }
 }
 
 export function DeliveryChip({ status, error, human }: { status: DeliveryStatus; error?: string | null; human?: boolean }) {
-  const l = status === 'no_channel' && human ? { text: 'on the dashboard', cls: 'text-ink-muted', title: 'Shows live in the dashboard inbox' } : LABEL[status]
+  const l =
+    status === 'no_channel' && human
+      ? { text: 'on the dashboard', cls: 'text-ink-muted', title: 'Shows live in the dashboard inbox' }
+      : status === 'held' && error?.startsWith('waiting for mail settings')
+        ? { text: 'waiting for mail setup', cls: 'text-warn', title: 'Goes out once MAIL_PROVIDER, MAIL_API_KEY and MAIL_FROM are set in Vercel' }
+        : LABEL[status]
   return (
     <span className={`whitespace-nowrap text-[11px] font-medium ${l.cls}`} title={error ? `${l.title}: ${error}` : l.title}>
       {l.text}

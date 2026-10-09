@@ -17,7 +17,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Db, Queryable } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { sendMail, type FetchLike } from './mail.ts'
+import { mailConfigured, sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
 import { shabbosEndsAt } from './shabbos.ts'
 
 export const CHANNEL_KINDS = ['webhook', 'ntfy', 'email', 'stream', 'pull', 'mcp', 'relay'] as const
@@ -27,6 +27,8 @@ const FETCH_KINDS: ChannelKind[] = ['ntfy', 'stream', 'pull', 'mcp']
 export const MAX_ATTEMPTS = 8
 const BACKOFF_S = [10, 30, 120, 600, 1800, 3600, 7200, 14400]
 const REPING_S = 300
+/** How often an email held for missing mail settings is looked at again (no attempt spent). */
+export const MAIL_HOLD_RECHECK_S = 300
 
 export function backoffSeconds(attempts: number): number {
   return BACKOFF_S[Math.min(Math.max(attempts - 1, 0), BACKOFF_S.length - 1)]
@@ -274,6 +276,16 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       continue
     }
     if (r.kind === 'email') {
+      if (!mailConfigured(opts.env)) {
+        // Not a failure: hold it without spending an attempt; it goes out once MAIL_* exist.
+        await db.query(
+          `update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), last_error = $3,
+                  next_attempt_at = $2::timestamptz + ($4 || ' seconds')::interval, updated_at = now() where id = $1`,
+          [r.id, now, MAIL_NOT_CONFIGURED, String(MAIL_HOLD_RECHECK_S)],
+        )
+        out.held++
+        continue
+      }
       const to = String(r.config.to ?? '')
       const m = await sendMail({ to, subject: `[Dashboard] ${ev.summary}`, text: mailText(ev) }, fetchImpl, opts.env)
       if (m.ok) {

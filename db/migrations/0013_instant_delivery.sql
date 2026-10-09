@@ -109,15 +109,15 @@ select n.id as notification_id,
          else 'no_channel'
        end as status,
        count(d.id)::int as channels,
-       max(d.last_error) filter (where d.status = 'failed') as last_error,
+       max(d.last_error) filter (where d.status in ('failed', 'held')) as last_error,
        min(d.next_attempt_at) filter (where d.status = 'held') as held_until
   from lp.notifications n
   left join lp.deliveries d on d.notification_id = n.id
  group by n.id, n.read_at;
 
 -- Tab's door is its mailbox: new mail wakes it within seconds. Sending needs MAIL_PROVIDER +
--- MAIL_API_KEY + MAIL_FROM in Vercel; until they are set these deliveries show "failed: mail
--- is not configured" on the task, never silently nothing.
+-- MAIL_API_KEY + MAIL_FROM in Vercel; until they are set these deliveries are HELD ("waiting for
+-- mail setup" on the task, no attempt spent) and go out within minutes of the settings existing.
 insert into lp.delivery_channels (actor_id, kind, label, config, created_by)
 select 'tab', 'email', 'Tab''s mailbox', '{"to": "yaakov-tab@mail.tab.bot"}'::jsonb, 'system'
  where exists (select 1 from lp.actors where id = 'tab')

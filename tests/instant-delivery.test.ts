@@ -115,10 +115,35 @@ describe('webhook channel', () => {
 })
 
 describe('email channel (Tab)', () => {
-  it('says plainly when mail is not configured, instead of failing silently', async () => {
+  it('says plainly when mail is not configured, as a retryable (not permanent) state', async () => {
     const r = await sendMail({ to: 'a@b.co', subject: 's', text: 't' }, async () => new Response('x'), {} as NodeJS.ProcessEnv)
-    expect(r).toMatchObject({ ok: false, retry: false })
-    expect((r as { error: string }).error).toMatch(/not configured/)
+    expect(r).toMatchObject({ ok: false, retry: true, unconfigured: true })
+    expect((r as { error: string }).error).toMatch(/waiting for mail settings/)
+  })
+
+  it('holds emails while MAIL_* are missing (no attempts burned), then sends them once the settings exist', async () => {
+    const t = await createTask(db, 'owner', { title: 'Find 100 jewelers (held mail)', assigned_to: 'tab' })
+    const n = await db.query<{ id: number }>("select id from lp.notifications where task_id = $1 and recipient = 'tab' order by id limit 1", [t.id])
+    const nid = n.rows[0].id
+    const noMail = { DASHBOARD_URL: 'https://dash.example' } as unknown as NodeJS.ProcessEnv
+    const { f, calls } = fakeFetch(() => Response.json({ id: 'msg_held' }))
+    // Many dispatches over hours (the live page dispatches every 10 s): it stays held, never failed.
+    for (let i = 0; i < MAX_ATTEMPTS + 4; i++) {
+      await dispatchDue(db, { fetchImpl: f, now: new Date(WEEKDAY.getTime() + i * 10 * 60_000), env: noMail, limit: 500 })
+    }
+    let d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'held', attempts: 0 })
+    expect(d.last_error).toMatch(/waiting for mail settings/)
+    expect(calls.filter((c) => c.url.includes('resend') || c.url.includes('brevo'))).toHaveLength(0)
+    const st = (await taskDeliveryStates(db, t.id)).find((s) => s.notification_id === nid)!
+    expect(st.status).toBe('held')
+    expect(st.last_error).toMatch(/waiting for mail settings/)
+    // Yaakov adds the three settings: the next dispatch after the recheck sends it.
+    const later = new Date(WEEKDAY.getTime() + (MAX_ATTEMPTS + 6) * 10 * 60_000)
+    await dispatchDue(db, { fetchImpl: f, now: later, env: MAIL_ENV, limit: 500 })
+    d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'sent', attempts: 1, last_error: null })
+    expect(calls.some((c) => c.url === 'https://api.resend.com/emails' && String(c.init.body).includes('Find 100 jewelers (held mail)'))).toBe(true)
   })
 
   it("mails Tab's mailbox through the provider's HTTPS API with the task and how to act on it", async () => {
