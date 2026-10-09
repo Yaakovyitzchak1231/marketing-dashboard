@@ -34,7 +34,7 @@ import {
   updateTask,
 } from './core.ts'
 import { logEvent } from './events.ts'
-import { ackDeliveries, dispatchDue, feed } from '../notify/deliver.ts'
+import { ackDeliveries, feed } from '../notify/deliver.ts'
 
 // The Instantly gate and its read-only lookups are server-only modules; they
 // load on first use so this table stays importable anywhere.
@@ -362,10 +362,9 @@ export const OPS: Record<string, Op> = {
     args: '{after_id?, limit?}  -- your new events (assignments, handoffs, mentions, messages, relay jobs). Ack each with feed_ack; unacked ones come back after 2 min',
     run: async (db, actor, a) => {
       await touchActor(db, actor)
-      const items = await feed(db, actor, { after_id: a.after_id == null ? null : Number(a.after_id), limit: a.limit == null ? undefined : Number(a.limit) })
-      // Reading the feed also pushes anything due (retries need no cron).
-      await dispatchDue(db).catch(() => undefined)
-      return items
+      // HTTP/MCP callers schedule push work after the response. A slow mail provider
+      // must not block an agent from receiving the events already stored for it.
+      return feed(db, actor, { after_id: a.after_id == null ? null : Number(a.after_id), limit: a.limit == null ? undefined : Number(a.limit) })
     },
   },
   feed_ack: {

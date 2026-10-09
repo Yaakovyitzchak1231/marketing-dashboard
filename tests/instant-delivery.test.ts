@@ -58,16 +58,16 @@ async function lastNotification(recipient: string) {
 }
 
 describe('migration 0013', () => {
-  it("seeds Tab's mailbox as Tab's channel", async () => {
+  it("keeps Tab's mailbox and adds legacy feed access",  async () => {
     const { rows } = await db.query<{ kind: string; config: { to: string } }>("select kind, config from lp.delivery_channels where actor_id = 'tab'")
-    expect(rows).toEqual([{ kind: 'email', config: { to: 'yaakov-tab@mail.tab.bot' } }])
+    expect(rows).toEqual([{ kind: 'email', config: { to: 'yaakov-tab@mail.tab.bot' } }, { kind: 'pull', config: {} }])
   })
 
   it('every notification fans out to each enabled channel of its recipient, in the same transaction', async () => {
     await createTask(db, 'owner', { title: 'Find 100 jewelers', kind: 'find_leads', assigned_to: 'tab' })
     const n = await lastNotification('tab')
     const d = await deliveriesOf(n.id)
-    expect(d.map((x) => [x.kind, x.status])).toEqual([['email', 'pending']])
+    expect(d.map((x) => [x.kind, x.status])).toEqual([['email', 'pending'], ['pull', 'pending']])
   })
 })
 
@@ -211,7 +211,7 @@ describe('ntfy wake-up + feed + ack (Hermes-style relay, no public port)', () =>
     expect(mine).toMatchObject({ kind: 'assigned', summary: expect.stringContaining('SEO fix') })
     // Not handed out twice within 2 minutes.
     expect((await feed(db, 'hermes')).find((e) => e.task?.id === t.id)).toBeUndefined()
-    expect(await ackDeliveries(db, 'hermes', [mine.delivery_id])).toEqual({ acked: 1 })
+    expect(await ackDeliveries(db, 'hermes', [mine.delivery_id])).toEqual({ acked: 2 })
     expect((await taskDeliveryStates(db, t.id))[0].status).toBe('delivered')
     // Another agent cannot ack it.
     expect(await ackDeliveries(db, 'tab', [mine.delivery_id])).toEqual({ acked: 0 })
@@ -271,9 +271,11 @@ describe('agent -> agent', () => {
     expect(rows.every((x) => x.status === 'pending')).toBe(true)
   })
 
-  it('an agent with no channel shows "not connected" instead of silently waiting', async () => {
-    await createTask(db, 'owner', { title: 'For Manus', assigned_to: 'manus' })
-    const n = await lastNotification('manus')
+  it('an agent with no enabled channel shows "not connected" instead of silently waiting', async () => {
+    await addActor(db, 'owner', { id: 'disconnected', display_name: 'Disconnected' })
+    await db.query("update lp.delivery_channels set enabled = false where actor_id = 'disconnected'")
+    await createTask(db, 'owner', { title: 'No channel', assigned_to: 'disconnected' })
+    const n = await lastNotification('disconnected')
     const s = await db.query<{ status: string }>('select status from lp.notification_delivery where notification_id = $1', [n.id])
     expect(s.rows[0].status).toBe('no_channel')
   })

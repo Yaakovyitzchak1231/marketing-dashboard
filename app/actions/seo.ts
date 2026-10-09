@@ -11,6 +11,7 @@ import { OpsError, updateTask } from '@/lib/ops/core'
 import { addCompetitor, addPrompt, addSite, getFixTask, listSites, parsePaths, removeCompetitor, runSiteAudit, runVisibility, setPromptActive, setSiteActive } from '@/lib/seo/store'
 import { applyChange, undoChange, type ApplyInput } from '@/lib/seo/changes'
 import type { ProviderId } from '@/lib/seo/visibility'
+import { kickDelivery } from '@/lib/notify/kick'
 
 const ME = 'owner'
 
@@ -48,6 +49,7 @@ async function attempt(f: FormData, fallback: string, fn: () => Promise<string>)
     if (e && typeof e === 'object' && 'digest' in e) throw e // a redirect from inside fn
     backTo(f, fallback, { err: (e as Error).message.slice(0, 300) })
   }
+  kickDelivery(getDb())
   backTo(f, fallback, { ok: msg })
 }
 
