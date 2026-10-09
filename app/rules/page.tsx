@@ -80,7 +80,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
                     <td className={TD}>
                       {SCOPE_WORDS[r.scope]}
                       {r.scope === 'pool' && r.segment ? `: ${SEGMENT_WORDS[r.segment] ?? r.segment}` : ''}
-                      {r.scope === 'campaign' ? `: ${r.campaign_name ?? r.campaign_id}` : ''}
+                      {r.scope === 'campaign' ? `: ${r.campaign_name ?? r.campaign_id ?? 'a dashboard campaign'}` : ''}
                     </td>
                     <td className={TDN}>{r.scope === 'template' ? '—' : n(c?.ready_personalized)}</td>
                     <td className={TDN}>{r.scope === 'template' ? '—' : n(c?.ready_generic)}</td>

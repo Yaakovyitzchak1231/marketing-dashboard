@@ -52,21 +52,37 @@ export async function getRuleSet(q: Queryable, id: number): Promise<RuleSetRow |
   return rows[0] ? row(rows[0]) : null
 }
 
-/** The rule set a campaign uses right now (own > pool > default). */
-export async function ruleSetForCampaign(q: Queryable, campaignId: string | null, segmentHint?: string | null): Promise<RuleSetRow> {
+/**
+ * The rule set that applies, most specific first:
+ *   ruleSetId (a dashboard campaign's lp.campaigns.rule_set_id, if set and not archived)
+ *   > the set whose campaign_id = campaignKey (an Instantly campaign's own rules)
+ *   > the pool's set (segment, else lp.campaign_meta.segment for campaignKey)
+ *   > the default.
+ */
+export async function effectiveRuleSet(
+  q: Queryable,
+  opts: { ruleSetId?: number | null; campaignKey?: string | null; segment?: string | null },
+): Promise<RuleSetRow> {
   const { rows } = await q.query<RuleSetRow>(
-    `with meta as (select segment from lp.campaign_meta where campaign_id = $1)
+    `with meta as (select segment from lp.campaign_meta where campaign_id = $2)
      select ${COLS} from lp.rule_sets r
       where not r.archived and (
-            (r.scope = 'campaign' and r.campaign_id = $1)
-         or (r.scope = 'pool' and r.segment = coalesce((select segment from meta), $2))
+            r.id = $1
+         or (r.scope = 'campaign' and r.campaign_id = $2)
+         or (r.scope = 'pool' and r.segment = coalesce($3, (select segment from meta)))
          or r.scope = 'default')
-      order by case r.scope when 'campaign' then 0 when 'pool' then 1 else 2 end
+      order by case when r.id = $1 then 0 when r.scope = 'campaign' and r.campaign_id = $2 then 1 when r.scope = 'pool' then 2 else 3 end
       limit 1`,
-    [campaignId ?? '', segmentHint ?? null],
+    [opts.ruleSetId ?? null, opts.campaignKey ?? '', opts.segment ?? null],
   )
   if (!rows[0]) throw new RulesError('No lead rules exist yet. Run the database migrations (0010).', 503)
   return row(rows[0])
+}
+
+/** The rule set an Instantly campaign uses right now (own > pool > default). */
+export async function ruleSetForCampaign(q: Queryable, campaignId: string | null, segmentHint?: string | null): Promise<RuleSetRow> {
+  const { rows } = await q.query<{ segment: string | null }>('select segment from lp.campaign_meta where campaign_id = $1', [campaignId ?? ''])
+  return effectiveRuleSet(q, { campaignKey: campaignId, segment: rows[0]?.segment ?? segmentHint ?? null })
 }
 
 /** The rule sets that score a lead in this pool: the pool's own, and campaigns with their own rules in that pool. */
@@ -184,22 +200,27 @@ export async function createRuleSet(
 ): Promise<RuleSetRow> {
   const scope = String(input.scope ?? '')
   if (scope !== 'campaign' && scope !== 'template') throw new RulesError('scope must be campaign or template (the default and the pools always exist).')
+  const hasFrom = input.from_id != null && input.from_id !== ''
   const fromId = Number(input.from_id)
-  if (!Number.isInteger(fromId) || fromId <= 0) throw new RulesError('Pick a template or a rule set to start from (from_id).')
-  const campaignId = scope === 'campaign' ? String(input.campaign_id ?? '').trim() : null
-  if (scope === 'campaign' && !/^[A-Za-z0-9_:.-]{1,80}$/.test(campaignId ?? '')) throw new RulesError('campaign_id is required: the Instantly campaign id, or a workspace campaign key like c:12 (letters, digits, _ - : .).')
+  if (hasFrom && (!Number.isInteger(fromId) || fromId <= 0)) throw new RulesError('from_id must be a rule set id.')
+  if (!hasFrom && scope === 'template') throw new RulesError('Pick a rule set to copy (from_id).')
+  // campaign_id is optional: without it the set belongs to a dashboard campaign (lp.campaigns.rule_set_id).
+  const rawCampaign = scope === 'campaign' ? String(input.campaign_id ?? '').trim() : ''
+  const campaignId = rawCampaign || null
+  if (campaignId && !/^[A-Za-z0-9_:.-]{1,80}$/.test(campaignId)) throw new RulesError('campaign_id must be an Instantly campaign id (letters, digits, _ - : .).')
   const segment = input.segment == null || input.segment === '' ? null : String(input.segment)
   if (segment && !(SEGMENTS as readonly string[]).includes(segment)) throw new RulesError(`segment must be one of ${SEGMENTS.join(', ')}.`)
   return db.tx(async (q) => {
     const who = await requireHuman(q, actor)
-    const from = await getRuleSet(q, fromId)
+    // No from_id: start from the pool's rules (or the default).
+    const from = hasFrom ? await getRuleSet(q, fromId) : await effectiveRuleSet(q, { segment })
     if (!from) throw new RulesError('The rule set to start from does not exist.', 404)
-    if (scope === 'campaign') {
+    if (scope === 'campaign' && campaignId) {
       const dup = await q.query('select 1 from lp.rule_sets where scope = $1 and campaign_id = $2 and not archived', ['campaign', campaignId])
       if (dup.rows.length) throw new RulesError('That campaign already has its own rules. Edit them instead.', 409)
     }
     const cname = input.campaign_name == null ? null : String(input.campaign_name).trim().slice(0, 200) || null
-    const name = String(input.name ?? '').trim().slice(0, 120) || (scope === 'campaign' ? `Campaign: ${cname ?? campaignId}` : `Template: copy of ${from.name}`)
+    const name = String(input.name ?? '').trim().slice(0, 120) || (scope === 'campaign' ? `Campaign: ${cname ?? campaignId ?? `copy of ${from.name}`}` : `Template: copy of ${from.name}`)
     const { rows } = await q.query<RuleSetRow>(
       `insert into lp.rule_sets (name, scope, segment, campaign_id, campaign_name, requirements, fields, based_on, created_by, updated_by)
        values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $9) returning ${COLS}`,

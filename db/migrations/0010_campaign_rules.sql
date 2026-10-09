@@ -64,7 +64,8 @@ create table if not exists lp.rule_sets (
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
   check (scope <> 'pool' or segment is not null),
-  check (scope <> 'campaign' or campaign_id is not null),
+  -- campaign_id: an Instantly campaign id (or other text key). Optional: a dashboard
+  -- campaign (lp.campaigns, 0011) owns its set through lp.campaigns.rule_set_id instead.
   check (scope = 'campaign' or campaign_id is null)
 );
 create unique index if not exists rule_sets_default_uq  on lp.rule_sets (scope) where scope = 'default';

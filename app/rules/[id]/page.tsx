@@ -146,7 +146,9 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
       : rs.scope === 'pool'
         ? `Every campaign in this pool without its own rules, now and later`
         : rs.scope === 'campaign'
-          ? `Instantly campaign ${rs.campaign_name ? `"${rs.campaign_name}" ` : ''}(${rs.campaign_id})`
+          ? rs.campaign_id
+            ? `Instantly campaign ${rs.campaign_name ? `"${rs.campaign_name}" ` : ''}(${rs.campaign_id})`
+            : `A dashboard campaign${rs.campaign_name ? ` ("${rs.campaign_name}")` : ''}`
           : 'Nothing directly; campaigns start from it'
   return (
     <PageFrame

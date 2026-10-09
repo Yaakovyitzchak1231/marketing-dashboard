@@ -7,6 +7,7 @@ import { ruleDocFromForm } from '@/lib/rules/form'
 import {
   applyProposal,
   createRuleSet,
+  effectiveRuleSet,
   getRuleSet,
   listProposals,
   listRuleSets,
@@ -188,6 +189,13 @@ describe('lead rules in the database (real Postgres via PGlite)', () => {
     const own = await createRuleSet(db, 'owner', { scope: 'campaign', campaign_id: 'camp-j', campaign_name: 'Jewelers test', from_id: jewel.id })
     expect((await ruleSetForCampaign(db, 'camp-j')).id).toBe(own.id)
     await expect(createRuleSet(db, 'owner', { scope: 'campaign', campaign_id: 'camp-j', from_id: jewel.id })).rejects.toThrow(/already has/)
+    // A dashboard campaign's own set: no campaign_id, copied from its pool; it points here via lp.campaigns.rule_set_id.
+    const dash = await createRuleSet(db, 'owner', { scope: 'campaign', segment: 'ai_builder', campaign_name: 'Builders Oct' })
+    expect(dash).toMatchObject({ scope: 'campaign', campaign_id: null })
+    expect(dash.based_on).toBe((await listRuleSets(db)).find((s) => s.segment === 'ai_builder')!.id)
+    expect((await effectiveRuleSet(db, { ruleSetId: dash.id, segment: 'ai_builder' })).id).toBe(dash.id)
+    expect((await effectiveRuleSet(db, { ruleSetId: null, segment: 'ai_builder' })).scope).toBe('pool')
+    expect((await effectiveRuleSet(db, {})).scope).toBe('default')
   })
 
   it('scores every lead in batches; overview, lead page and stored counts agree', async () => {

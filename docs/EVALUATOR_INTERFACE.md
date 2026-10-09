@@ -70,10 +70,15 @@ runRecompute(db: Db, opts?: { budgetMs?: number; batch?: number }): Promise<{ ba
 tierCounts(q): Promise<Map<ruleSetId, {ready_personalized, ready_generic, parked, stale, scored}>>
 
 // store.ts
-ruleSetForCampaign(q: Queryable, campaignKey: string | null, segmentHint?: string | null): Promise<RuleSetRow>
-   // own (scope 'campaign', campaign_id = campaignKey) > pool (campaign_meta.segment ?? segmentHint) > default
+effectiveRuleSet(q: Queryable, opts: { ruleSetId?: number|null; campaignKey?: string|null; segment?: string|null }): Promise<RuleSetRow>
+   // ruleSetId (if set and not archived) > set with campaign_id = campaignKey > pool (segment ?? campaign_meta.segment) > default
+   // Dashboard campaigns (0011): effectiveRuleSet(q, { ruleSetId: campaign.rule_set_id, segment: campaign.pool })
+ruleSetForCampaign(q: Queryable, instantlyCampaignId: string | null, segmentHint?: string | null): Promise<RuleSetRow>
+   // Instantly campaigns: own set (campaign_id = id) > pool (campaign_meta.segment ?? segmentHint) > default
 getRuleSet(q, id): Promise<RuleSetRow | null>;  listRuleSets(q): Promise<RuleSetRow[]>
-createRuleSet(db, humanActor, { scope: 'campaign'|'template', from_id, campaign_id?, campaign_name?, segment?, name? }): Promise<RuleSetRow>
+createRuleSet(db, humanActor, { scope: 'campaign'|'template', from_id?, campaign_id?, campaign_name?, segment?, name? }): Promise<RuleSetRow>
+   // scope 'campaign' with NO campaign_id = a set owned by a dashboard campaign (store its id in lp.campaigns.rule_set_id).
+   // No from_id: copies the pool's set for `segment` (else the default). Templates need from_id.
 saveRuleSet(db, humanActor, id, doc: RuleDoc, { base_version? }): Promise<{ ruleSet, changes }>  // logs old->new, queues re-score
 archiveRuleSet(db, humanActor, id)
 proposeRuleChange(db, agentActor, { rule_set_id, name, requirements, fields, note? })        // -> Needs your OK
@@ -97,14 +102,22 @@ setOwnerResearchExhausted(db, actor, companyId, exhausted: boolean, note: string
 
 ## How a campaign points at a rule set
 
-By key, not by FK: `lp.rule_sets.scope = 'campaign' and campaign_id = <key>`.
-- Instantly campaigns: key = the Instantly campaign id.
-- Workspace campaigns (0011): use key `c:<lp.campaigns.id>` and pass the campaign's pool as `segmentHint`
-  to `ruleSetForCampaign(q, 'c:12', 'jeweler')`. To give a campaign its own rules:
-  `createRuleSet(db, human, { scope: 'campaign', campaign_id: 'c:12', campaign_name, segment, from_id })`
-  (from a template or another set). No own set → the pool's rules apply automatically (also for future campaigns).
-- If 0011 links a workspace campaign to an Instantly id, pick ONE key per campaign (recommend keeping `c:<id>`
-  and resolving via that key everywhere, including the Instantly push).
+Two kinds of campaign, one resolver (`effectiveRuleSet`):
+
+- **Dashboard campaigns (lp.campaigns, 0011, BIGINT id):** point at their own set through
+  `lp.campaigns.rule_set_id` (nullable). Effective set = `campaigns.rule_set_id` ?? the pool set for `campaigns.pool`
+  ?? the default → `effectiveRuleSet(q, { ruleSetId: c.rule_set_id, segment: c.pool })`.
+  To give one its own rules: `createRuleSet(db, human, { scope: 'campaign', segment: c.pool, campaign_name: c.name, from_id? })`
+  (no campaign_id), then store the returned id in `lp.campaigns.rule_set_id`.
+- **Instantly campaigns:** `lp.rule_sets.campaign_id` = the Instantly campaign id (TEXT, optional column);
+  pool from `lp.campaign_meta.segment` → `ruleSetForCampaign(q, instantlyId)`.
+- No own set → the pool's rules apply automatically, including for campaigns created later.
+
+## Keys for personalization
+
+Personalization values, per-lead overrides and `{{placeholders}}` key on the field **name**
+(`PersonalizationField.name`, e.g. `firstName`), never on the field id. `LeadVerdict.merge` is `{ [name]: value }`;
+Instantly custom variables use the same names (plus `tab_batch: 'role-inbox'` on role-inbox batches).
 
 ## Standing rules (cannot be edited away)
 
