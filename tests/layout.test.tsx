@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The layout mounts the comment layer, whose server actions import server-only modules.
+vi.mock('server-only', () => ({}))
 import RootLayout, { metadata } from '../app/layout'
 import { AppNav } from '@/components/nav/AppNav'
 
