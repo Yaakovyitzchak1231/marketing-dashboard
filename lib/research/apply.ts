@@ -54,10 +54,12 @@ async function addEnrichment(
   const r = await q.query(
     `insert into lp.enrichment (company_id, contact_id, field, value, confidence, evidence_url, method, actor_id, task_id)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     on conflict (company_id, field, lower(value)) do nothing returning id`,
+     on conflict (company_id, field, lower(value)) do update set last_checked_at = now(), last_checked_by = excluded.actor_id
+     returning id, (xmax = 0) as inserted`,
     [row.company_id, row.contact_id ?? null, row.field, row.value.slice(0, 2000), row.confidence ?? null, row.evidence_url ?? null, row.method, row.actor, row.task_id ?? null],
   )
-  return r.rows.length > 0
+  // A fact found again is re-confirmed (last_checked_at), not added twice.
+  return Boolean((r.rows[0] as { inserted?: boolean } | undefined)?.inserted)
 }
 
 async function addSource(q: Queryable, company_id: number, contact_id: number | null, kind: string, ref: string, url: string | null, payload: unknown) {
