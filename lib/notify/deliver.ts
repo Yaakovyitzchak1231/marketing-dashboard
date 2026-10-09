@@ -50,6 +50,8 @@ export interface DeliveryEvent {
   recipient_name: string
   from: string | null
   from_name: string | null
+  /** 'human' | 'agent' (null when the sender is unknown). Agents use it to never auto-reply to an agent. */
+  from_kind: string | null
   summary: string
   body: string | null
   task: { id: number; title: string; kind: string; status: string; url: string } | null
@@ -82,6 +84,7 @@ interface DeliveryJoin {
   recipient_kind: string
   quiet_shabbos: boolean
   from_name: string | null
+  from_kind: string | null
   task_title: string | null
   task_kind: string | null
   task_status: string | null
@@ -92,7 +95,7 @@ const JOIN = `
          c.kind, c.config, c.secret,
          n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.created_by, n.created_at as n_created_at,
          r.display_name as recipient_name, r.kind as recipient_kind, r.quiet_shabbos,
-         f.display_name as from_name,
+         f.display_name as from_name, f.kind as from_kind,
          t.title as task_title, t.kind as task_kind, t.status as task_status
     from lp.deliveries d
     join lp.delivery_channels c on c.id = d.channel_id
@@ -119,6 +122,7 @@ export function toEvent(r: DeliveryJoin, base = dashboardUrl()): DeliveryEvent {
     recipient_name: r.recipient_name,
     from: r.created_by,
     from_name: r.from_name,
+    from_kind: r.from_kind ?? null,
     summary: r.summary,
     body: r.body,
     task: r.task_id
