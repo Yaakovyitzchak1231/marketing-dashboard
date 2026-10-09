@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createTestDb } from './helpers/pglite-db'
 import { createTask, handoffTask, sendMessage, comment, markRead } from '@/lib/ops/core'
 import { runOp, routeToOp } from '@/lib/ops/dispatch'
@@ -163,6 +165,16 @@ describe('email channel (Tab)', () => {
     const st = (await taskDeliveryStates(db, t.id)).find((s) => s.notification_id === nid)!
     expect(st.status).toBe('held')
     expect(st.last_error).toMatch(/waiting for mail settings/)
+    // 0014 puts deliveries that the old code failed for good ("mail is not configured") back on hold.
+    await db.query(
+      "update lp.deliveries set status = 'failed', failed_at = now(), attempts = 1, last_error = 'mail is not configured (MAIL_PROVIDER, MAIL_API_KEY, MAIL_FROM)' where id = $1",
+      [d.id],
+    )
+    const sql = readFileSync(join(__dirname, '..', 'db', 'migrations', '0014_mail_hold.sql'), 'utf8')
+    for (const stmt of sql.split(/;\s*\n/).map((s) => s.trim()).filter((s) => s.replace(/--.*$/gm, '').trim())) await db.query(stmt)
+    d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'held', attempts: 0 })
+    expect(d.last_error).toMatch(/waiting for mail settings/)
     // Yaakov adds the three settings: the next dispatch after the recheck sends it.
     const later = new Date(WEEKDAY.getTime() + (MAX_ATTEMPTS + 6) * 10 * 60_000)
     await dispatchDue(db, { fetchImpl: f, now: later, env: MAIL_ENV, limit: 500 })
