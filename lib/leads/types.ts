@@ -9,7 +9,8 @@ export const RESEARCH_STATUSES = ['needs_research', 'queued', 'researching', 're
 export type ResearchStatus = (typeof RESEARCH_STATUSES)[number]
 
 export const CONTACT_STATUSES = [
-  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
+  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'role-based-hold', 'needs-check',
+  'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
 ] as const
 export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 
