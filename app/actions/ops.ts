@@ -9,8 +9,9 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import {
-  claimTask, comment, createTask, decideApproval, handoffTask, markRead, memoryDelete, memoryPut, releaseLock, updateTask,
+  claimTask, comment, createTask, decideApproval, handoffTask, markRead, memoryDelete, memoryPut, releaseLock, sendMessage, updateTask,
 } from '@/lib/ops/core'
+import { kickDelivery } from '@/lib/notify/kick'
 
 const ME = 'owner'
 
@@ -38,6 +39,8 @@ export async function createTaskAction(f: FormData) {
     priority: s(f, 'priority') ? Number(s(f, 'priority')) : undefined,
     kind: s(f, 'kind') || 'general',
   })
+  // The assignee hears about it now (webhook / email / ping), not when it next checks the board.
+  kickDelivery(db())
   revalidatePath('/team')
   revalidatePath('/agents', 'layout')
   const back = s(f, 'return_to')
@@ -47,12 +50,14 @@ export async function createTaskAction(f: FormData) {
 export async function commentAction(f: FormData) {
   const taskId = n(f, 'task_id')
   await comment(db(), ME, { task_id: taskId, company_id: n(f, 'company_id'), body: s(f, 'body') })
+  kickDelivery(db())
   if (taskId) revalidatePath(`/team/${taskId}`)
 }
 
 export async function handoffAction(f: FormData) {
   const id = n(f, 'task_id')!
   await handoffTask(db(), ME, id, { to: s(f, 'to'), note: s(f, 'note') })
+  kickDelivery(db())
   revalidatePath(`/team/${id}`)
   revalidatePath('/team')
 }
@@ -64,6 +69,7 @@ export async function updateTaskAction(f: FormData) {
   if (status) patch.status = status as 'queued'
   if (f.has('assigned_to')) patch.assigned_to = s(f, 'assigned_to') || null
   await updateTask(db(), ME, id, patch)
+  kickDelivery(db())
   revalidatePath(`/team/${id}`)
   revalidatePath('/team')
 }
@@ -78,6 +84,7 @@ export async function decideApprovalAction(f: FormData) {
   const id = n(f, 'approval_id')!
   const decision = s(f, 'decision') === 'approved' ? 'approved' : 'rejected'
   await decideApproval(db(), ME, id, decision, s(f, 'note') || undefined)
+  kickDelivery(db())
   revalidatePath('/activity')
   revalidatePath('/team')
 }
@@ -103,4 +110,14 @@ export async function markReadAction() {
   await markRead(db(), ME)
   revalidatePath('/agents/owner')
   revalidatePath('/team')
+}
+
+/** Yaakov writes to an agent (or a person) directly; it goes out on their channels at once. */
+export async function sendMessageAction(f: FormData) {
+  const to = s(f, 'to')
+  const taskId = n(f, 'task_id')
+  await sendMessage(db(), ME, { to, body: s(f, 'body'), task_id: taskId })
+  kickDelivery(db())
+  if (taskId) revalidatePath(`/team/${taskId}`)
+  revalidatePath(`/agents/${to}`)
 }

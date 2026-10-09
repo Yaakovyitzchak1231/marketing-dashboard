@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LiveBell } from '@/components/ops/LiveBell'
 
 /**
  * The app's one navigation bar. Twelve screens, one line: on a phone it scrolls
@@ -60,6 +61,7 @@ export function AppNav() {
             })}
           </ul>
         </nav>
+        <LiveBell />
       </div>
     </div>
   )

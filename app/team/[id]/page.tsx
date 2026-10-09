@@ -6,6 +6,8 @@ import { claimMyselfAction, commentAction, handoffAction, updateTaskAction } fro
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { ActorLink, Ago, DbNotConnected, PageFrame, TaskStatus, btnCls, inputCls, kindLabel, primaryBtnCls } from '@/components/ops/bits'
 import { Card, SectionHeader } from '@/components/dashboard/primitives'
+import { DeliveryChip } from '@/components/ops/DeliveryChip'
+import { taskDeliveryStates } from '@/lib/notify/deliver'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +33,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   }
   const id = Number((await params).id)
   if (!Number.isInteger(id) || id <= 0) notFound()
-  const [d, actors] = await Promise.all([getTaskDetail(db, id), listActors(db)])
+  const [d, actors, told] = await Promise.all([getTaskDetail(db, id), listActors(db), taskDeliveryStates(db, id).catch(() => [])])
   if (!d) notFound()
   const { task: t, comments, events, approvals } = d
   const now = new Date()
@@ -158,6 +160,22 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   <form action={updateTaskAction}><input type="hidden" name="task_id" value={t.id} /><input type="hidden" name="status" value="done" /><button className={btnCls} type="submit">Mark done</button></form>
                   <form action={updateTaskAction}><input type="hidden" name="task_id" value={t.id} /><input type="hidden" name="status" value="cancelled" /><button className={`${btnCls} text-bad`} type="submit">Cancel</button></form>
                 </div>
+              </Card>
+            </section>
+          ) : null}
+          {told.length ? (
+            <section>
+              <SectionHeader title="Who was told" />
+              <Card className="divide-y divide-line-soft">
+                {told.map((n) => (
+                  <div key={n.notification_id} className="px-3 py-2 text-[12px] leading-snug">
+                    <p className="flex items-baseline gap-2">
+                      <span className="font-medium text-ink">{n.recipient_name}</span>
+                      <span className="ml-auto"><DeliveryChip status={n.status} error={n.last_error} human={n.recipient_kind === 'human'} /></span>
+                    </p>
+                    <p className="mt-0.5 line-clamp-2 text-ink-muted">{n.summary} <span className="text-ink-faint">· <Ago at={n.created_at} now={now} /></span></p>
+                  </div>
+                ))}
               </Card>
             </section>
           ) : null}

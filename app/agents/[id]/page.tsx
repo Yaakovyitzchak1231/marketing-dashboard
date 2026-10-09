@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getDb } from '@/lib/db'
-import { actorDetail, listProjects, sharedMemory } from '@/lib/ops/queries'
+import { actorDetail, listActors, listProjects, sharedMemory } from '@/lib/ops/queries'
 import { createTaskAction, markReadAction, memoryDeleteAction, memoryPutAction } from '@/app/actions/ops'
 import { pauseAgentAction, resumeAgentAction } from '@/app/actions/agents'
 import { pauseAllState } from '@/lib/ops/pause'
@@ -9,6 +9,9 @@ import { PauseControl } from '@/components/ops/PauseControl'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { Ago, DbNotConnected, PageFrame, Presence, btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
 import { TaskCard } from '@/components/ops/TaskCard'
+import { ConnectPanel } from '@/components/ops/ConnectPanel'
+import { DeliveryChip } from '@/components/ops/DeliveryChip'
+import type { DeliveryStatus } from '@/lib/notify/deliver'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +26,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
     )
   }
   const id = (await params).id
-  const [d, projects, shared, all] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db)])
+  const [d, projects, shared, all, actors] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db), listActors(db)])
   if (!d) notFound()
   const { actor: a } = d
   const now = new Date()
@@ -135,6 +138,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <aside className="space-y-5">
+          <ConnectPanel db={db} actor={a} agents={actors.filter((x) => x.kind === 'agent')} now={now} />
           <section>
             <SectionHeader title={`Give ${a.display_name} a task`} />
             <Card className="p-3">
@@ -149,16 +153,20 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
                 </select>
                 <button type="submit" className={`${primaryBtnCls} w-full`}>Assign to {a.display_name}</button>
               </form>
-              {isAgent ? <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">{a.display_name} picks this up the next time it checks the board (claim_task). Nothing goes out to anyone without your OK.</p> : null}
+              {isAgent ? <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">{a.display_name} is told right away on its channels above (the Inbox below shows sent / delivered / read). Nothing goes out to anyone without your OK.</p> : null}
             </Card>
           </section>
           <section>
             <SectionHeader title="Inbox" meta={d.notifications.some((n) => !n.read_at) && a.id === 'owner' ? <form action={markReadAction}><button className="text-accent" type="submit">Mark all read</button></form> : null} />
             <Card className="divide-y divide-line-soft">
               {d.notifications.length ? d.notifications.map((n) => (
-                <p key={n.id} className={`px-3 py-2 text-[12px] leading-snug ${n.read_at ? 'text-ink-faint' : 'text-ink'}`}>
-                  {n.task_id ? <Link className="hover:text-accent" href={`/team/${n.task_id}`}>{n.summary}</Link> : n.summary} <span className="text-ink-faint">· <Ago at={n.created_at} now={now} /></span>
-                </p>
+                <div key={n.id} className={`px-3 py-2 text-[12px] leading-snug ${n.read_at ? 'text-ink-faint' : 'text-ink'}`}>
+                  <p>
+                    {n.task_id ? <Link className="hover:text-accent" href={`/team/${n.task_id}`}>{n.summary}</Link> : n.summary} <span className="text-ink-faint">· <Ago at={n.created_at} now={now} /></span>
+                  </p>
+                  {n.kind === 'message' && n.body && n.body.length > 160 ? <p className="mt-1 whitespace-pre-wrap text-ink-muted">{n.body.slice(0, 2000)}</p> : null}
+                  <p className="mt-0.5"><DeliveryChip status={n.delivery as DeliveryStatus} error={n.delivery_error} human={!isAgent} /></p>
+                </div>
               )) : <EmptyNote>Nothing for them.</EmptyNote>}
             </Card>
           </section>

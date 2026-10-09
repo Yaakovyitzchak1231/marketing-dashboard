@@ -5,7 +5,9 @@ import { pauseAllState } from '@/lib/ops/pause'
 import { pauseAgentAction, pauseAllAction, resumeAgentAction, resumeAllAction } from '@/app/actions/agents'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { PauseControl } from '@/components/ops/PauseControl'
-import { Ago, DbNotConnected, PageFrame, Presence } from '@/components/ops/bits'
+import { OnceForm } from '@/components/ops/OnceForm'
+import { addAgentAction } from '@/app/actions/connect'
+import { Ago, DbNotConnected, PageFrame, Presence, btnCls, inputCls } from '@/components/ops/bits'
 import { Card, Pill, SectionHeader } from '@/components/dashboard/primitives'
 
 export const dynamic = 'force-dynamic'
@@ -94,6 +96,7 @@ export default async function AgentsPage() {
                       ))}
                     </dl>
                     {a.unread ? <p className="mt-2 text-[11.5px] text-accent">{a.unread} unread</p> : null}
+                    {isAgent && !a.channels ? <p className="mt-1 text-[11.5px] text-warn">Not connected: it only hears about new work when it checks in. Open to add a channel.</p> : null}
                   </Link>
                   {isAgent ? (
                     <div className="mt-3 border-t border-line-soft pt-3">
@@ -121,8 +124,19 @@ export default async function AgentsPage() {
           </div>
         </section>
       ))}
+      <section className="mb-6">
+        <SectionHeader title="Add an agent" />
+        <Card className="max-w-md p-3">
+          <OnceForm action={addAgentAction} submitLabel="Add agent" buttonClassName={`${btnCls} w-full`}>
+            <input name="display_name" required maxLength={80} className={inputCls} placeholder="Name, e.g. Claude Code" />
+            <input name="id" required maxLength={63} pattern="[a-z0-9][a-z0-9_.\-]*" className={inputCls} placeholder="Short id, e.g. claude-code (used in @mentions)" />
+            <input name="harness" maxLength={40} className={inputCls} placeholder="What runs it (optional), e.g. claude-code, hermes, n8n" />
+          </OnceForm>
+          <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">Then, on its page: create its API key and choose how it hears about new work (webhook, wake-up ping, email, MCP…). docs/AGENTS_API.md has the details for whoever sets the agent up.</p>
+        </Card>
+      </section>
       <p className="text-[12px] leading-relaxed text-ink-faint">
-        An agent shows as active when it has called the ops API in the last 10 minutes. A paused agent keeps its token, tasks, claims and memory; its requests get “agent paused by …” until you resume it. Pauses and resumes are in the activity log. Add a new agent by inserting a row in lp.actors and giving it its own token in OPS_AGENT_TOKENS.
+        An agent shows as active when it has called the ops API in the last 10 minutes. A paused agent keeps its keys, tasks, claims and memory; its requests get “agent paused by …” until you resume it. Pauses, resumes, new agents, keys and channels are in the activity log.
       </p>
     </PageFrame>
   )
