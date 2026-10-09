@@ -4,7 +4,7 @@
  * Preview (no write anywhere outside our DB): for the chosen leads, pick each
  * company's best contact and sort them into
  *   ready        verified valid, not do-not-contact, not in Instantly yet
- *   excluded     with the reason (not verified, invalid, do-not-contact,
+ *   excluded     with the reason (not verified, invalid, do-not-contact, on hold,
  *                already in Instantly per a read-only lookup, already touched
  *                by a campaign in our records, no email)
  * The preview is stored as an lp.instantly_actions row (status 'preview').
@@ -16,6 +16,7 @@
  * status 'in-Instantly', and the activity log says what happened.
  */
 import type { Db, Queryable } from '@/lib/db/types'
+import { HELD_STATUSES } from '@/lib/leads/types'
 import { logEvent } from '@/lib/ops/events'
 import type { AddLead, AddLeadsResult, InstantlyWriter } from '@/lib/instantly/writer'
 import { InstantlyWriteError } from '@/lib/instantly/writer'
@@ -25,6 +26,7 @@ export type ExcludeReason =
   | 'not_verified'
   | 'invalid'
   | 'do_not_contact'
+  | 'on_hold'
   | 'in_instantly'
   | 'already_in_campaign'
 
@@ -33,6 +35,7 @@ export const EXCLUDE_WORDS: Record<ExcludeReason, string> = {
   not_verified: 'Email not verified yet',
   invalid: 'Email failed verification',
   do_not_contact: 'Marked do-not-contact',
+  on_hold: 'On hold (role inbox until an owner email is found, or needs a check)',
   in_instantly: 'Already in Instantly',
   already_in_campaign: 'Already in a campaign (our records)',
 }
@@ -95,6 +98,7 @@ type Row = {
 export function reasonFor(r: Row, inInstantly: Set<string>): ExcludeReason | null {
   if (!r.email_norm) return 'no_email'
   if (r.do_not_contact || r.status === 'do-not-contact') return 'do_not_contact'
+  if (HELD_STATUSES.includes(r.status)) return 'on_hold'
   if (r.verification_status === 'invalid') return 'invalid'
   if (r.verification_status !== 'valid') return 'not_verified'
   if (inInstantly.has(r.email_norm)) return 'in_instantly'

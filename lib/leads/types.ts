@@ -9,9 +9,21 @@ export const RESEARCH_STATUSES = ['needs_research', 'queued', 'researching', 're
 export type ResearchStatus = (typeof RESEARCH_STATUSES)[number]
 
 export const CONTACT_STATUSES = [
-  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
+  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'role-based-hold', 'needs-check',
+  'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
 ] as const
 export type ContactStatus = (typeof CONTACT_STATUSES)[number]
+
+/**
+ * Held leads that are KEPT (never rejected, excluded from the list or hidden), but
+ * not sent until a person or agent clears them:
+ *   role-based-hold  a role inbox (info@, sales@...): find the owner's direct email;
+ *                    the role inbox stays on the company as the fallback contact
+ *   needs-check      a person has to look before anything is sent
+ * A verification verdict never moves these (see PRE_SEND_STATUSES), and
+ * "Add to Instantly" lists them as excluded: on hold.
+ */
+export const HELD_STATUSES: readonly string[] = ['role-based-hold', 'needs-check']
 
 export const VERIFICATION_STATUSES = ['unverified', 'valid', 'invalid', 'catch_all', 'unknown', 'risky'] as const
 export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number]

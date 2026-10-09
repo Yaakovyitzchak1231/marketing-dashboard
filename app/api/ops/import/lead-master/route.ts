@@ -3,6 +3,10 @@
  *
  *   POST /api/ops/import/lead-master            body: CSV (text/csv) or {"rows": [...]} (JSON), optionally gzip
  *   POST /api/ops/import/lead-master?dry_run=1  same, counts only: runs inside a transaction and rolls back
+ *   POST /api/ops/import/lead-master?mode=sync_status[&dry_run=1]
+ *        one-way status catch-up: for contacts already in the database whose Sheet status
+ *        differs, the Sheet's status is written (nothing else; no contacts created). Each
+ *        change lands in status_history (changed_by = the agent) and one 'import.status_sync' event.
  *   GET  /api/ops/import/lead-master            how many contacts/companies are in the database now
  *
  * Auth: an agent token from OPS_AGENT_TOKENS ("Authorization: Bearer <token>").
@@ -15,6 +19,9 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { agentForToken } from '@/lib/ops/auth'
 import { ImportRequestError, MAX_ROWS_PER_REQUEST, importRowsOverHttp, parseImportBody } from '@/lib/leads/import-request'
+import { syncContactStatuses } from '@/lib/leads/sync-status'
+
+const MODES = ['import', 'sync_status'] as const
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -51,6 +58,8 @@ export async function POST(req: Request) {
   if (!db) return fail(503, 'The lead database is not connected (DATABASE_URL is not set).')
 
   const url = new URL(req.url)
+  const mode = (url.searchParams.get('mode')?.trim() || 'import') as (typeof MODES)[number]
+  if (!MODES.includes(mode)) return fail(400, `Unknown mode "${mode}". Use one of: ${MODES.join(', ')}.`)
   let parsed: ReturnType<typeof parseImportBody>
   try {
     const body = new Uint8Array(await req.arrayBuffer())
@@ -66,6 +75,17 @@ export async function POST(req: Request) {
   const label = url.searchParams.get('label')?.slice(0, 80) || undefined
 
   const t0 = Date.now()
+  if (mode === 'sync_status') {
+    try {
+      const stats = await syncContactStatuses(db, parsed.rows, { actor: agent, dryRun, label })
+      return NextResponse.json(
+        { ok: true, mode, dry_run: dryRun, actor: agent, stats, seconds: Math.round((Date.now() - t0) / 100) / 10 },
+        { headers: NO_STORE },
+      )
+    } catch (e) {
+      return fail(500, `Status sync stopped: ${(e as Error).message}. Nothing from this request was written (it runs in one transaction); re-sending it is safe.`)
+    }
+  }
   try {
     const stats = await importRowsOverHttp(db, parsed.rows, { actor: agent, dryRun, label })
     return NextResponse.json(

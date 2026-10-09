@@ -13,6 +13,8 @@
  *    Matching fills empty fields only; it never overwrites a value already in the DB.
  *  - A contact is matched by email. New contacts take the Sheet's status; existing
  *    contacts keep the DB's status (after the move, the DB is the source of truth).
+ *    To deliberately catch the DB up with Sheet status changes, see sync-status.ts
+ *    (POST /api/ops/import/lead-master?mode=sync_status).
  *  - mv_result becomes a verification_results row (provider 'sheet_import') once.
  *  - campaign becomes one campaign_touches row (source 'sheet_import') once.
  *
@@ -22,9 +24,20 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { isRoleAddress, nameAddressKey, normalizeDomain, normalizeEmail, normalizePhone } from './normalize.ts'
 
-const CONTACT_STATUSES = new Set([
-  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
+export const CONTACT_STATUSES = new Set([
+  'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'role-based-hold', 'needs-check',
+  'rejected', 'in-Instantly', 'sent', 'replied', 'bounced', 'do-not-contact',
 ])
+
+/** The Sheet's status word as the database spells it ("needs check" -> "needs-check"), or null if unknown. */
+export function sheetStatus(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim().replace(/\s+/g, '-')
+  if (!s) return null
+  if (CONTACT_STATUSES.has(s)) return s
+  const lower = s.toLowerCase()
+  for (const known of CONTACT_STATUSES) if (known.toLowerCase() === lower) return known
+  return null
+}
 
 /** Company stage implied by a contact's Sheet status. */
 const STAGE_FOR_STATUS: Record<string, string> = {
@@ -32,6 +45,8 @@ const STAGE_FOR_STATUS: Record<string, string> = {
   verifying: 'researched',
   'guessed-hold': 'researched',
   'catch-all-hold': 'researched',
+  'role-based-hold': 'researched',
+  'needs-check': 'researched',
   rejected: 'new',
   'valid-ready': 'ready',
   'in-Instantly': 'in_campaign',
@@ -192,8 +207,7 @@ export async function importLeadRows(
           continue
         }
         const companyId = await upsertCompany(q, keys, row, actor, stats)
-        const sheetStatus = clean(row.status)
-        const status = sheetStatus && CONTACT_STATUSES.has(sheetStatus) ? sheetStatus : 'new'
+        const status = sheetStatus(row.status) ?? 'new'
         const mv = clean(row.mv_result)?.toLowerCase() ?? null
         const verdict = mv ? MV_VERDICT[mv] ?? null : null
         const verifiedAt = verdict ? parseSheetDate(clean(row.mv_date), opts.year) : null

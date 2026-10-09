@@ -191,7 +191,11 @@ async function zbTier(
   }
 }
 
-/** Statuses that mean "not yet in a campaign": the only ones verification may move. */
+/**
+ * Statuses that mean "not yet in a campaign": the only ones verification may move.
+ * role-based-hold and needs-check are deliberately absent: a valid verdict on a role
+ * inbox must not release the hold (HELD_STATUSES in lib/leads/types.ts).
+ */
 export const PRE_SEND_STATUSES = new Set(['new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold'])
 
 /**
