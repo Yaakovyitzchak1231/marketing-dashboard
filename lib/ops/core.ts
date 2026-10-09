@@ -503,6 +503,8 @@ export interface ApprovalRow {
   created_at: Date
   decided_at: Date | null
   expires_at: Date | null
+  /** Set when the approval holds a queued Instantly change (migration 0009). */
+  instantly_action_id?: number | null
 }
 
 export async function requestApproval(
@@ -538,6 +540,9 @@ export async function decideApproval(db: Db, actor: string, id: number, decision
     if (!a) throw new OpsError(`approval ${id} not found`, 404)
     if (a.requested_by === actor) throw new OpsError('you cannot decide your own request', 403)
     if (a.status !== 'pending') throw new OpsError(`approval ${id} is already ${a.status}`, 409)
+    if (a.instantly_action_id) {
+      throw new OpsError('This is an Instantly change: decide it with its own Approve / Reject (lib/instantly/gate.ts), which runs or records it.', 409)
+    }
     if (a.expires_at && a.expires_at.getTime() < Date.now()) {
       await q.query("update lp.approvals set status = 'expired' where id = $1", [id])
       throw new OpsError(`approval ${id} expired`, 409)
