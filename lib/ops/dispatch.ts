@@ -50,6 +50,7 @@ import { FIELD_CATALOG, OPS as RULE_OPS } from '../rules/schema.ts'
 import { STANDING_RULES } from '../rules/standing.ts'
 import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
+import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -431,6 +432,26 @@ export const OPS: Record<string, Op> = {
         kind_prefix: str(a.kind_prefix) ?? null,
       }),
   },
+  // Comments Yaakov pinned to a spot on a dashboard page (lib/page-comments, migration 0015).
+  page_comments: {
+    args: '{include_resolved?, limit?}  -- comments pinned to dashboard pages that were sent to you (page, element, his text, thread, status)',
+    run: async (db, actor, a) => {
+      await touchActor(db, actor)
+      return listPageCommentsFor(db, actor, { include_resolved: a.include_resolved === true || a.include_resolved === 'true', limit: a.limit == null ? undefined : Number(a.limit) })
+    },
+  },
+  page_comment_get: {
+    args: '{comment_id}  -- one pinned comment with its thread; opening it marks it seen',
+    run: (db, actor, a) => readPageCommentAs(db, actor, id(a.comment_id, 'comment_id')),
+  },
+  page_comment_reply: {
+    args: '{comment_id, body}  -- answer on the pin; he sees it in the thread on that page and gets notified',
+    run: (db, actor, a) => replyToPageComment(db, actor, id(a.comment_id, 'comment_id'), a.body),
+  },
+  page_comment_resolve: {
+    args: '{comment_id, resolved? (default true)}  -- mark a pinned comment resolved (or reopen it)',
+    run: (db, actor, a) => setPageCommentResolved(db, actor, id(a.comment_id, 'comment_id'), !(a.resolved === false || a.resolved === 'false')),
+  },
   // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
   ...CAMPAIGN_OPS,
 }
@@ -481,6 +502,14 @@ export function routeToOp(method: string, path: string[]): { op: string; args: A
   if (method === 'POST' && a === 'inbox' && b === 'read') return { op: 'mark_read', args: {} }
   if (method === 'POST' && a === 'presence') return { op: 'presence', args: {} }
   if (method === 'GET' && a === 'whoami') return { op: 'whoami', args: {} }
+  if (a === 'page-comments') {
+    if (method === 'GET' && !b) return { op: 'page_comments', args: {} }
+    if (b && /^\d+$/.test(b)) {
+      if (method === 'GET' && !c) return { op: 'page_comment_get', args: { comment_id: Number(b) } }
+      if (method === 'POST' && c === 'reply') return { op: 'page_comment_reply', args: { comment_id: Number(b) } }
+      if (method === 'POST' && c === 'resolve') return { op: 'page_comment_resolve', args: { comment_id: Number(b) } }
+    }
+  }
   if (a === 'campaigns') return campaignRoute(method, path)
   if (a === 'rules') {
     if (method === 'GET' && !b) return { op: 'list_rule_sets', args: {} }
