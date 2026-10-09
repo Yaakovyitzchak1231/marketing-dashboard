@@ -26,7 +26,7 @@ const NTFY = (cfg.NTFY_SERVER || 'https://ntfy.sh').replace(/\/+$/, '')
 const STATE_DIR = cfg.STATE_DIR || join(HOME, '.local/state/dashboard-relay')
 mkdirSync(STATE_DIR, { recursive: true })
 const STATE_FILE = join(STATE_DIR, 'state.json')
-const FALLBACK_MS = Math.max(5, Number(cfg.FALLBACK_POLL_MINUTES || 30)) * 60_000
+const FALLBACK_MS = Math.max(5, Number(cfg.FALLBACK_POLL_MINUTES || 60)) * 60_000
 
 const log = (m) => console.log(`${new Date().toISOString()} ${m}`)
 let state = { runs: {}, ntfy_since: null }

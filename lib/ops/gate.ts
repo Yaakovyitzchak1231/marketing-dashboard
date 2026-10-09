@@ -27,7 +27,8 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 export async function opsGate(req: Request, opts: { allowCron?: boolean; unauthorizedMessage?: string } = {}): Promise<OpsGate> {
   const authorization = req.headers.get('authorization')
   let agent = agentForToken(authorization)
-  if (!agent && authorization) {
+  // Only keys minted on /agents (mdk_…) are looked up in the database; anything else never costs a query.
+  if (!agent && authorization && /^Bearer\s+mdk_/i.test(authorization.trim())) {
     const kdb = getDb()
     if (kdb) {
       try {

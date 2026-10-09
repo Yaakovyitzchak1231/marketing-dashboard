@@ -17,7 +17,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Db, Queryable } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { sendMail, type FetchLike } from './mail.ts'
+import { mailConfigured, sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
 import { shabbosEndsAt } from './shabbos.ts'
 
 export const CHANNEL_KINDS = ['webhook', 'ntfy', 'email', 'stream', 'pull', 'mcp', 'relay'] as const
@@ -27,6 +27,8 @@ const FETCH_KINDS: ChannelKind[] = ['ntfy', 'stream', 'pull', 'mcp']
 export const MAX_ATTEMPTS = 8
 const BACKOFF_S = [10, 30, 120, 600, 1800, 3600, 7200, 14400]
 const REPING_S = 300
+/** How often an email held for missing mail settings is looked at again (no attempt spent). */
+export const MAIL_HOLD_RECHECK_S = 300
 
 export function backoffSeconds(attempts: number): number {
   return BACKOFF_S[Math.min(Math.max(attempts - 1, 0), BACKOFF_S.length - 1)]
@@ -48,6 +50,8 @@ export interface DeliveryEvent {
   recipient_name: string
   from: string | null
   from_name: string | null
+  /** 'human' | 'agent' (null when the sender is unknown). Agents use it to never auto-reply to an agent. */
+  from_kind: string | null
   summary: string
   body: string | null
   task: { id: number; title: string; kind: string; status: string; url: string } | null
@@ -80,6 +84,7 @@ interface DeliveryJoin {
   recipient_kind: string
   quiet_shabbos: boolean
   from_name: string | null
+  from_kind: string | null
   task_title: string | null
   task_kind: string | null
   task_status: string | null
@@ -90,7 +95,7 @@ const JOIN = `
          c.kind, c.config, c.secret,
          n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.created_by, n.created_at as n_created_at,
          r.display_name as recipient_name, r.kind as recipient_kind, r.quiet_shabbos,
-         f.display_name as from_name,
+         f.display_name as from_name, f.kind as from_kind,
          t.title as task_title, t.kind as task_kind, t.status as task_status
     from lp.deliveries d
     join lp.delivery_channels c on c.id = d.channel_id
@@ -117,6 +122,7 @@ export function toEvent(r: DeliveryJoin, base = dashboardUrl()): DeliveryEvent {
     recipient_name: r.recipient_name,
     from: r.created_by,
     from_name: r.from_name,
+    from_kind: r.from_kind ?? null,
     summary: r.summary,
     body: r.body,
     task: r.task_id
@@ -257,7 +263,7 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       let res: Response | null = null
       let err = ''
       try {
-        res = await fetchImpl(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8_000) })
+        res = await fetchImpl(url, { method: 'POST', headers, body, redirect: 'manual', signal: AbortSignal.timeout(8_000) })
       } catch (e) {
         err = `unreachable: ${(e as Error).message}`
       }
@@ -274,6 +280,16 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       continue
     }
     if (r.kind === 'email') {
+      if (!mailConfigured(opts.env)) {
+        // Not a failure: hold it without spending an attempt; it goes out once MAIL_* exist.
+        await db.query(
+          `update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), last_error = $3,
+                  next_attempt_at = $2::timestamptz + ($4 || ' seconds')::interval, updated_at = now() where id = $1`,
+          [r.id, now, MAIL_NOT_CONFIGURED, String(MAIL_HOLD_RECHECK_S)],
+        )
+        out.held++
+        continue
+      }
       const to = String(r.config.to ?? '')
       const m = await sendMail({ to, subject: `[Dashboard] ${ev.summary}`, text: mailText(ev) }, fetchImpl, opts.env)
       if (m.ok) {

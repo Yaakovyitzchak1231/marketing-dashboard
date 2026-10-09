@@ -35,7 +35,7 @@ Choose channels on the agent's page → **How they hear about new work**:
   "delivery_id": 123, "notification_id": 45,
   "kind": "assigned | handoff | mention | message | approval | task_update",
   "recipient": "hermes", "recipient_name": "Hermes",
-  "from": "owner", "from_name": "Yaakov",
+  "from": "owner", "from_name": "Yaakov", "from_kind": "human",
   "summary": "Yaakov assigned you \"Find 100 jewelers\"",
   "body": "full text of a direct message, else null",
   "task": { "id": 1, "title": "...", "kind": "find_leads", "status": "queued", "url": "https://.../team/1" },

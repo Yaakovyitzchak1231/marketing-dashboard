@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createTestDb } from './helpers/pglite-db'
 import { createTask, handoffTask, sendMessage, comment, markRead } from '@/lib/ops/core'
 import { runOp, routeToOp } from '@/lib/ops/dispatch'
@@ -99,14 +101,14 @@ describe('webhook channel', () => {
     let status = 500
     const { f } = fakeFetch((c) => (c.url.includes('flaky') ? new Response('no', { status }) : new Response('ok')))
     await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV })
-    let d = (await deliveriesOf(n.id))[0]
+    let d = (await deliveriesOf(n.id)).find((x) => x.kind === 'webhook')!
     expect(d).toMatchObject({ status: 'pending', attempts: 1, last_error: 'answered 500' })
     // Not due again until the backoff passes.
     const again = await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV })
     expect(again.picked).toBe(0)
     status = 404
     await dispatchDue(db, { fetchImpl: f, now: new Date(WEEKDAY.getTime() + 60_000), env: MAIL_ENV })
-    d = (await deliveriesOf(n.id))[0]
+    d = (await deliveriesOf(n.id)).find((x) => x.kind === 'webhook')!
     expect(d).toMatchObject({ status: 'failed', last_error: 'answered 404' })
     const ev = await db.query<{ summary: string }>("select summary from lp.events where kind = 'delivery.failed' order by id desc limit 1")
     expect(ev.rows[0].summary).toContain('Flaky (webhook)')
@@ -114,11 +116,71 @@ describe('webhook channel', () => {
   })
 })
 
+describe('new agents', () => {
+  it('get a default pull channel, so their feed works before any push channel is added', async () => {
+    await addActor(db, 'owner', { id: 'fresh-agent', display_name: 'Fresh' })
+    const ch = await db.query<{ kind: string }>("select kind from lp.delivery_channels where actor_id = 'fresh-agent'")
+    expect(ch.rows.map((r) => r.kind)).toEqual(['pull'])
+    await createTask(db, 'owner', { title: 'Hello fresh', assigned_to: 'fresh-agent' })
+    const items = await feed(db, 'fresh-agent', { limit: 10 })
+    expect(items.some((e) => e.summary.includes('Hello fresh'))).toBe(true)
+    await addActor(db, 'owner', { id: 'a-person', display_name: 'Person', kind: 'human' })
+    const none = await db.query("select 1 from lp.delivery_channels where actor_id = 'a-person'")
+    expect(none.rows).toHaveLength(0)
+  })
+
+  it('webhook delivery does not follow redirects', async () => {
+    await addActor(db, 'owner', { id: 'redir', display_name: 'Redir' })
+    await addChannel(db, 'owner', { actor_id: 'redir', kind: 'webhook', url: 'https://redir.example/hook' })
+    await createTask(db, 'owner', { title: 'No redirects', assigned_to: 'redir' })
+    const { f, calls } = fakeFetch(() => new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/' } }))
+    await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV, limit: 500 })
+    const hook = calls.find((c) => c.url === 'https://redir.example/hook')!
+    expect(hook.init.redirect).toBe('manual')
+    expect(calls.some((c) => c.url.includes('169.254'))).toBe(false)
+  })
+})
+
 describe('email channel (Tab)', () => {
-  it('says plainly when mail is not configured, instead of failing silently', async () => {
+  it('says plainly when mail is not configured, as a retryable (not permanent) state', async () => {
     const r = await sendMail({ to: 'a@b.co', subject: 's', text: 't' }, async () => new Response('x'), {} as NodeJS.ProcessEnv)
-    expect(r).toMatchObject({ ok: false, retry: false })
-    expect((r as { error: string }).error).toMatch(/not configured/)
+    expect(r).toMatchObject({ ok: false, retry: true, unconfigured: true })
+    expect((r as { error: string }).error).toMatch(/waiting for mail settings/)
+  })
+
+  it('holds emails while MAIL_* are missing (no attempts burned), then sends them once the settings exist', async () => {
+    const t = await createTask(db, 'owner', { title: 'Find 100 jewelers (held mail)', assigned_to: 'tab' })
+    const n = await db.query<{ id: number }>("select id from lp.notifications where task_id = $1 and recipient = 'tab' order by id limit 1", [t.id])
+    const nid = n.rows[0].id
+    const noMail = { DASHBOARD_URL: 'https://dash.example' } as unknown as NodeJS.ProcessEnv
+    const { f, calls } = fakeFetch(() => Response.json({ id: 'msg_held' }))
+    // Many dispatches over hours (the live page dispatches every 10 s): it stays held, never failed.
+    for (let i = 0; i < MAX_ATTEMPTS + 4; i++) {
+      await dispatchDue(db, { fetchImpl: f, now: new Date(WEEKDAY.getTime() + i * 10 * 60_000), env: noMail, limit: 500 })
+    }
+    let d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'held', attempts: 0 })
+    expect(d.last_error).toMatch(/waiting for mail settings/)
+    expect(calls.filter((c) => c.url.includes('resend') || c.url.includes('brevo'))).toHaveLength(0)
+    const st = (await taskDeliveryStates(db, t.id)).find((s) => s.notification_id === nid)!
+    expect(st.status).toBe('held')
+    expect(st.last_error).toMatch(/waiting for mail settings/)
+    // 0014 puts deliveries that the old code failed for good ("mail is not configured") back on hold.
+    await db.query(
+      "update lp.deliveries set status = 'failed', failed_at = now(), attempts = 1, last_error = 'mail is not configured (MAIL_PROVIDER, MAIL_API_KEY, MAIL_FROM)' where id = $1",
+      [d.id],
+    )
+    const sql = readFileSync(join(__dirname, '..', 'db', 'migrations', '0014_mail_hold.sql'), 'utf8')
+    for (const stmt of sql.split(/;\s*\n/).map((s) => s.trim()).filter((s) => s.replace(/--.*$/gm, '').trim())) await db.query(stmt)
+    d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'held', attempts: 0 })
+    expect(d.last_error).toMatch(/waiting for mail settings/)
+    // Yaakov adds the three settings: the next dispatch after the recheck sends it.
+    const later = new Date(WEEKDAY.getTime() + (MAX_ATTEMPTS + 6) * 10 * 60_000)
+    await dispatchDue(db, { fetchImpl: f, now: later, env: MAIL_ENV, limit: 500 })
+    d = (await deliveriesOf(nid)).find((x) => x.kind === 'email')!
+    expect(d).toMatchObject({ status: 'sent', attempts: 1, last_error: null })
+    expect(calls.some((c) => c.url === 'https://api.resend.com/emails' && String(c.init.body).includes('Find 100 jewelers (held mail)'))).toBe(true)
   })
 
   it("mails Tab's mailbox through the provider's HTTPS API with the task and how to act on it", async () => {

@@ -11,6 +11,16 @@ Yaakov assigns / messages Hermes on the dashboard
     already on in the leaddesk profile; idempotent per event, so never a duplicate run)
   → acks the event (dashboard shows "delivered")
   → when the run finishes: complete_task / fail_task with Hermes' output (or a reply message)
+
+Safety rules (built into lib.mjs, tested in tests/hermes-relay.test.ts):
+- Only `assigned`, `handoff`, `mention` and `message` events start a run; `task_update`, `approval`
+  and anything else are acknowledged and logged only.
+- Only senders listed in RUN_FROM (default `owner,tab`) start a run; others are acked + logged.
+- Hermes never auto-replies to an agent: a reply goes to a person as a message, or onto the task
+  thread as a comment with @mentions defused; with no person and no task, the result stays in
+  Hermes. So two agents can never ping-pong.
+- All dashboard text reaches Hermes inside one clearly labeled untrusted block.
+- One run per dashboard notification (idempotency key = notification id).
 Agent → Yaakov pings: the dashboard queues a "relay" item for Hermes → relay runs
   `hermes send -t whatsapp "<text>"` (Hermes' own WhatsApp sender, no LLM) → ack.
   Held over Shabbos by the dashboard (per-person setting, default on).
@@ -20,7 +30,7 @@ Why this shape (research: `hermes_integration_research_oct9.md`): the Runs API i
 docs name for outside programs and dashboards, and the only one that returns Hermes' answer to the
 caller. No Hermes config change, no Hermes restart, no Hermes code patch. ntfy (open source, free,
 no account) carries only wake-up ids; the content is read from the dashboard with Hermes' key.
-A missed ping is caught by a fallback poll every 30 min.
+A missed ping is caught by a fallback poll every 60 min.
 
 Files: `relay.mjs` (service), `lib.mjs` (logic, tested in `tests/hermes-relay.test.ts`),
 `dashboard-relay.service` (systemd user unit), `env.example`.
