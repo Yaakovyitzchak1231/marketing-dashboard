@@ -283,7 +283,7 @@ function InstantlyLink({ campaign, requests, hasSteps, onChanged }: { campaign: 
               type="button"
               className={BUTTON_PRIMARY}
               disabled={busy || !hasSteps || pending.length > 0}
-              onClick={() => run('/instantly/push', 'POST', { what: 'steps_and_leads' }, 'Request created. It waits for your OK; nothing was sent.')}
+              onClick={() => run('/instantly/push', 'POST', { what: 'steps_and_leads' }, 'Request created. The leads wait for an OK; nothing was sent.')}
             >
               Ask to push steps + Ready leads
             </button>
@@ -303,6 +303,16 @@ function InstantlyLink({ campaign, requests, hasSteps, onChanged }: { campaign: 
                 <span>
                   #{r.id} · {r.what.replace(/_/g, ' ')} · asked by {r.requested_by}
                 </span>
+                {r.status === 'pending' && r.approval_id != null ? (
+                  <a className="underline" href="/activity#approvals">
+                    Leads in Needs your OK
+                  </a>
+                ) : r.status === 'pending' && r.payload?.confirm_url ? (
+                  <a className="underline" href={r.payload.confirm_url}>
+                    Review and confirm the leads
+                  </a>
+                ) : null}
+                {r.status === 'pending' && r.what !== 'leads' ? <span className="text-ink-faint">Steps: copy into Instantly by hand (not sent from here).</span> : null}
                 {r.status === 'pending' ? (
                   <button type="button" className={BUTTON} disabled={busy} onClick={() => run(`/instantly/requests/${r.id}/cancel`, 'POST', {}, 'Withdrawn.')}>
                     Withdraw
