@@ -1,0 +1,20 @@
+# systemd USER unit: ~/.config/systemd/user/dashboard-relay.service
+# Install steps: README.md in this folder. Outbound connections only; no port is opened.
+[Unit]
+Description=Marketing dashboard <-> Hermes relay (instant tasks, results, WhatsApp pings)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dashboard-relay
+EnvironmentFile=%h/.config/dashboard-relay/env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node %h/dashboard-relay/relay.mjs
+Restart=always
+RestartSec=5
+# Memory guard: it is a few MB in practice.
+MemoryMax=200M
+
+[Install]
+WantedBy=default.target
