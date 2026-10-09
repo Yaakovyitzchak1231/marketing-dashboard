@@ -7,9 +7,10 @@
  * - Cursor pagination (`limit` + `starting_after`, follow `next_starting_after`)
  *   until the API stops returning a cursor. Hitting the page cap is reported as
  *   `truncated: true`, never silently dropped.
- * - Caching: GETs ask Next for `revalidate: 300`; every call (GET or POST) is
- *   also memoised in-process for the same 5 minutes, which de-duplicates the
- *   concurrent identical calls one dashboard load makes.
+ * - Caching: GETs ask Next for `revalidate: 300` under the INSTANTLY_CACHE_TAG
+ *   tag (a new reply clears it, see the webhook route) and are memoised
+ *   in-process for 30 s, which de-duplicates the concurrent identical calls one
+ *   dashboard load makes. POSTs are memoised in-process for 5 minutes.
  * - Errors become InstantlyError with plain words and NO key in them.
  *
  * Read-only by construction: the only verbs this client sends are GET and
@@ -19,6 +20,10 @@ import 'server-only'
 
 export const INSTANTLY_BASE_URL = 'https://api.instantly.ai/api/v2'
 export const CACHE_SECONDS = 300
+/** Next fetch-cache tag on every Instantly GET; revalidateTag() on it forces fresh reads everywhere. */
+export const INSTANTLY_CACHE_TAG = 'instantly'
+/** GETs are backed by the shared Next cache, so the per-process memo only needs to cover one load. */
+const GET_MEMO_MS = 30_000
 const DEFAULT_TIMEOUT_MS = 20_000
 const DEFAULT_RETRIES = 3
 
@@ -47,7 +52,7 @@ export interface ClientOptions {
   retries?: number
   /** Base backoff in ms (doubles each retry). Tests pass 0. */
   backoffMs?: number
-  /** In-process memo TTL in ms; 0 disables. */
+  /** In-process memo TTL in ms (GETs: at most 30 s); 0 disables. */
   memoTtlMs?: number
   now?: () => number
   sleep?: (ms: number) => Promise<void>
@@ -63,7 +68,7 @@ export interface Page<T> {
 type MemoEntry = { at: number; value: Promise<unknown> }
 const MEMO = new Map<string, MemoEntry>()
 
-/** Test hook: forget every memoised response. */
+/** Forget every memoised response in this process (tests; the webhook route after a reply). */
 export function clearInstantlyMemo(): void {
   MEMO.clear()
 }
@@ -138,12 +143,13 @@ export class InstantlyClient {
     const url = `${this.baseUrl}${path}${buildQueryString(query)}`
     // The key's last 6 chars keep two workspaces apart in one process without storing the key in the memo key.
     const memoKey = `${this.apiKey.slice(-6)}|${method}|${url}|${body === undefined ? '' : JSON.stringify(body)}`
-    if (this.memoTtlMs > 0) {
+    const ttl = method === 'GET' ? Math.min(this.memoTtlMs, GET_MEMO_MS) : this.memoTtlMs
+    if (ttl > 0) {
       const hit = MEMO.get(memoKey)
-      if (hit && this.now() - hit.at < this.memoTtlMs) return hit.value as Promise<T>
+      if (hit && this.now() - hit.at < ttl) return hit.value as Promise<T>
     }
     const p = this.send<T>(method, path, url, body)
-    if (this.memoTtlMs > 0) {
+    if (ttl > 0) {
       MEMO.set(memoKey, { at: this.now(), value: p })
       // Never cache a failure.
       p.catch(() => {
@@ -165,7 +171,7 @@ export class InstantlyClient {
       const timer = setTimeout(() => controller.abort(), this.timeoutMs)
       let res: Response
       try {
-        const init: RequestInit & { next?: { revalidate: number } } = {
+        const init: RequestInit & { next?: { revalidate: number; tags?: string[] } } = {
           method,
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
@@ -175,7 +181,7 @@ export class InstantlyClient {
           body: body !== undefined ? JSON.stringify(body) : undefined,
           signal: controller.signal,
         }
-        if (method === 'GET') init.next = { revalidate: CACHE_SECONDS }
+        if (method === 'GET') init.next = { revalidate: CACHE_SECONDS, tags: [INSTANTLY_CACHE_TAG] }
         else init.cache = 'no-store'
         res = await this.fetchImpl(url, init)
       } catch (err) {

@@ -8,6 +8,7 @@ import { STAGE_LABELS } from '@/lib/leads/filters'
 import { STAGES } from '@/lib/leads/types'
 import { dateTime } from '@/components/leads/pills'
 import { kickRecompute } from '@/lib/rules/kick'
+import { AutoRefresh } from '@/components/ops/AutoRefresh'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,7 @@ export default async function OverviewPage() {
   const maxStage = Math.max(1, ...STAGES.map((s) => o.byStage[s]))
   return (
     <PageShell title="Overview" meta={`${fmt(o.companies)} leads · ${fmt(o.contacts)} email addresses`}>
+      <AutoRefresh seconds={30} />
       <div className="flex flex-col gap-7 sm:gap-8">
         <section aria-labelledby="next-h">
           <SectionHeader id="next-h" title="What needs you" />

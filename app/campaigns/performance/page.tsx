@@ -2,6 +2,8 @@ import { getDashboardData } from '@/lib/dashboard/load'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { loadSampleData } from '@/components/dashboard/sample'
 import { parseRange } from '@/components/dashboard/range'
+import { AutoRefresh } from '@/components/ops/AutoRefresh'
+import { CACHE_SECONDS } from '@/lib/instantly/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,5 +21,10 @@ export default async function Page({
   }
 
   const data = await getDashboardData(range)
-  return <Dashboard data={data} />
+  return (
+    <>
+      <Dashboard data={data} />
+      {data.configured ? <AutoRefresh on="reply" poll="always" seconds={CACHE_SECONDS} /> : null}
+    </>
+  )
 }
