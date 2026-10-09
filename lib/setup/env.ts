@@ -113,27 +113,74 @@ export function envStatus(feature: SetupFeature, env: Env = process.env): EnvKey
 
 const DASHBOARD = 'https://vercel.com/dashboard'
 
+const SAFE = /^[a-z0-9][a-z0-9-]*$/
+
 /**
- * The Vercel team slug and project name, read from Vercel's system variables.
- * A deployment URL is "<project>-<9-char id>-<team>.vercel.app"; the project name is
- * VERCEL_PROJECT_NAME when set, else the Git repo name (Vercel names projects after it).
+ * Assumptions and limits of Vercel URL parsing.
+ *
+ * Vercel's system variables do not expose the team slug, so the team can only be
+ * inferred from a deployment hostname. This module therefore does its best and
+ * falls back to the dashboard — it never invents a team or project name.
+ *
+ * What we can actually read:
+ * - Legacy preview hostnames look like `<project>-<9 char id>-<team>.vercel.app`.
+ *   The 9-char id is what makes the split between project name and team
+ *   unambiguous, so we require it. That also makes project names with dashes
+ *   safe: `my-project-ab12cd34e-acme` parses as project `my-project`, team `acme`.
+ * - Production hostnames are `<project>.vercel.app` (no team segment) or a custom
+ *   domain. Neither yields a team, so we cannot build the exact project URL for
+ *   them and fall back to the dashboard rather than link to the wrong project.
+ * - Custom domains never end in `.vercel.app`, so nothing can be derived from
+ *   them and we fall back to the dashboard.
+ *
+ * Project name candidates, in order: VERCEL_PROJECT_NAME (when the operator has set
+ * it — it is NOT a Vercel system variable), then VERCEL_GIT_REPO_SLUG (the Git repo
+ * slug, which Vercel uses to name a project only when it has never been renamed).
+ *
+ * If Vercel changes this format, the worst case is a fallback to the dashboard —
+ * never a link to the wrong project.
  */
 export function vercelProject(env: Env = process.env): { team: string; project: string } | null {
-  const host = (env.VERCEL_URL ?? '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase()
-  const m = /^(.+)\.vercel\.app$/.exec(host)
-  if (!m) return null
-  const candidates = [env.VERCEL_PROJECT_NAME, env.VERCEL_GIT_REPO_SLUG]
-    .map((s) => (s ?? '').trim().toLowerCase())
-    .filter(Boolean)
-  for (const project of candidates) {
-    const rest = m[1].startsWith(`${project}-`) ? m[1].slice(project.length + 1) : null
-    const t = rest ? /^[a-z0-9]{9}-([a-z0-9][a-z0-9-]*)$/.exec(rest) : null
-    if (t) return { team: t[1], project }
+  const app = stripVercelApp(hostname(env.VERCEL_URL))
+  if (!app) return null // not a *.vercel.app host (custom domain, localhost, …)
+
+  for (const project of projectCandidates(env)) {
+    const team = teamFromLegacyPreview(app, project)
+    if (team) return { team, project }
   }
   return null
 }
 
-const SAFE = /^[a-z0-9][a-z0-9-]*$/
+/** Read a hostname from a URL-like string: lowercased, scheme and path stripped. */
+function hostname(raw: string | undefined): string {
+  return (raw ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+}
+
+/** The subdomain part of a `*.vercel.app` host, or null for any other host. */
+function stripVercelApp(host: string): string | null {
+  return host.endsWith('.vercel.app') ? host.slice(0, -'.vercel.app'.length) : null
+}
+
+/** Project name candidates, most authoritative first. */
+function projectCandidates(env: Env): string[] {
+  return [env.VERCEL_PROJECT_NAME, env.VERCEL_GIT_REPO_SLUG]
+    .map((s) => (s ?? '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/**
+ * The legacy preview shape is `<project>-<9 char id>-<team>`. The 9-char id is what
+ * keeps a dashed project name from bleeding into the team, so we require it: a
+ * candidate that merely prefixes the real name leaves a remainder too short to
+ * match, and we fall back instead of guessing where the project name ends.
+ */
+function teamFromLegacyPreview(app: string, project: string): string | null {
+  const prefix = `${project}-`
+  if (!app.startsWith(prefix)) return null
+  const rest = app.slice(prefix.length)
+  const m = /^([a-z0-9]{9})-([a-z0-9][a-z0-9-]*)$/.exec(rest)
+  return m ? m[2] : null
+}
 
 /** Link straight to this project's Environment Variables page, or the closest thing. */
 export function vercelEnvSettingsUrl(env: Env = process.env): { url: string; exact: boolean } {

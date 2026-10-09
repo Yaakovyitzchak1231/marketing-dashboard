@@ -27,6 +27,22 @@ describe('Vercel links', () => {
     expect(vercelEnvSettingsUrl({ VERCEL_URL: 'localhost:3000' }).exact).toBe(false)
     expect(vercelEnvSettingsUrl({ VERCEL_URL: 'other-ab12cd34e-acme.vercel.app', VERCEL_GIT_REPO_SLUG: 'marketing-dashboard' }).exact).toBe(false)
   })
+  it('handles a project name that contains dashes', () => {
+    expect(vercelProject({ VERCEL_URL: 'my-project-ab12cd34e-acme.vercel.app', VERCEL_GIT_REPO_SLUG: 'my-project' })).toEqual({
+      team: 'acme',
+      project: 'my-project',
+    })
+  })
+  it('falls back to the dashboard for a custom domain', () => {
+    expect(vercelEnvSettingsUrl({ VERCEL_URL: 'app.example.com', VERCEL_GIT_REPO_SLUG: 'app' }).exact).toBe(false)
+  })
+  it('falls back to the dashboard for a production hostname (no team segment)', () => {
+    // Production URLs are `<project>.vercel.app` — no team to derive, so we never link.
+    expect(vercelEnvSettingsUrl({ VERCEL_URL: 'marketing-dashboard.vercel.app', VERCEL_GIT_REPO_SLUG: 'marketing-dashboard' }).exact).toBe(false)
+  })
+  it('falls back to the dashboard for a preview URL in an unknown format', () => {
+    expect(vercelEnvSettingsUrl({ VERCEL_URL: 'weird-git-branch.vercel.app', VERCEL_GIT_REPO_SLUG: 'marketing-dashboard' }).exact).toBe(false)
+  })
 })
 
 describe('envStatus', () => {
