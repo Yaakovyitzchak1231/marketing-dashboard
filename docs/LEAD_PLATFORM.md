@@ -194,3 +194,38 @@ custom header (`Authorization: Bearer <secret>`). Each event becomes a campaign 
 interested -> meeting; bounce marks the address invalid; unsubscribe marks
 do-not-contact), and replies open a task on the Reply desk. Unknown addresses are
 stored without inventing a lead.
+
+
+## Campaign email steps (0012)
+
+Each dashboard campaign has ordered email steps (Steps tab: `/campaigns/:id/steps`).
+
+- **Steps:** subject + body with `{{field}}` placeholders, wait (days) before the step, and a variant
+  label (A/B copies share a step number). Add, edit, reorder (↑ ↓), delete. Every change is in the
+  activity log with who did it and each field's old → new (a deleted step's full text stays in the log).
+- **Where `{{field}}` values come from**, first match wins: the campaign-lead override → the lead's own
+  field → an enrichment fact (best confidence, then most recently checked) → the field's fallback text.
+  The field list comes from the campaign's lead rules (0010: own set `c:<id>` → pool → default).
+- **Preview:** pick a lead and see every step filled. It lists each value and where it came from, flags
+  required fields with no real value (→ Ready-generic copy) and any `{{...}}` that would go out unfilled
+  (→ would be Parked), and shows the rules evaluator's stored verdict when there is one.
+- **Copy checks** (warnings, never blockers): no links, 55–80 words, ends with a question.
+- **Instantly (optional):** a person can link the campaign to an Instantly campaign id (stored only).
+  "Ask to push" creates a *pending request*; nothing in this feature calls Instantly. Only the human
+  approval flow (Needs your OK, PR #46) sends, and only Ready leads. Agents can edit steps and ask for a
+  push; they cannot link or approve (a database trigger refuses an agent's approval).
+
+API (same contract on both doors; see `lib/campaign-steps/http.ts`):
+people `/api/campaign-steps/:campaignId/...` (login), agents `/api/ops/campaign-steps/:campaignId/...` (ops token).
+
+| Method | Path | Does |
+|---|---|---|
+| GET | `/` | campaign, steps (with copy warnings), fields, push requests |
+| POST | `/` | add a step `{subject, body, delay_days?, variant?, step_number?}` |
+| PATCH / DELETE | `/:stepId` | edit / delete a step |
+| POST | `/reorder` | `{order: [current step numbers in the new order]}` |
+| GET | `/leads` | the campaign's leads |
+| GET | `/preview?lead=<id>` | every step filled for that lead |
+| PUT | `/instantly` | `{instantly_campaign_id: "<id or link>" \| null}` (people only) |
+| POST | `/instantly/push` | `{what?: steps \| leads \| steps_and_leads, note?}` → pending request, nothing sent |
+| POST | `/instantly/requests/:id/cancel` | withdraw a pending request |
