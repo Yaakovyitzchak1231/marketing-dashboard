@@ -1,16 +1,24 @@
 /**
  * "Link to Instantly": a campaign can point at one Instantly campaign (an id, stored only).
  *
- * Nothing here calls Instantly. Pushing steps or leads is a REQUEST: a pending row in
- * lp.campaign_instantly_requests that waits for a human. Only the human approval flow
- * (PR #46, Activity > Needs your OK) ever sends anything to Instantly.
- * TODO(after #46 merges): also queue the request in #46's lp.instantly_actions so it shows
- * in Needs your OK with its preview, and store that row's id in approval_id.
+ * Nothing here calls Instantly. Pushing steps or leads is a REQUEST: a row in
+ * lp.campaign_instantly_requests that waits for a human.
+ *   Leads go through #46's approval gate (lib/instantly/gate.ts):
+ *     - an agent's request queues an lp.instantly_actions row (awaiting_approval) and a pending
+ *       lp.approvals row, which shows in Activity > Needs your OK; approval_id points at it.
+ *     - a person's own request opens the usual Add to Instantly preview (/leads/instantly?action=…),
+ *       where they confirm it themselves (a person can't approve their own Needs-your-OK row).
+ *   Either way only a human's confirm sends, and the leads are re-scored with the campaign's
+ *   rules at that moment (only Ready leads upload).
+ *   Steps: #46 has no "write a sequence" change, so a steps request stays a record for a person
+ *   to copy into Instantly. Nothing sends steps.
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { logEvent } from '../ops/events.ts'
 import { columnsOf, getCampaign, loadCampaignLeads } from './adapter.ts'
 import { listSteps, StepsError } from './store.ts'
+import { requestAddLeads } from '../instantly/gate.ts'
+import { buildAddPreview, savePreview } from '../instantly/add-leads.ts'
 
 // Instantly v2 campaign ids are UUIDs.
 const INSTANTLY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -20,9 +28,13 @@ export interface PushRequest {
   campaign_id: number
   instantly_campaign_id: string
   what: 'steps' | 'leads' | 'steps_and_leads'
-  payload: { steps?: unknown[]; lead_count?: number; sample?: unknown[] }
+  payload: { steps?: unknown[]; lead_count?: number; sample?: unknown[]; instantly_action_id?: number; confirm_url?: string; ready_count?: number }
   note: string | null
   status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  /** The Needs-your-OK row (#46) holding the leads part, when an agent asked. */
+  approval_id: number | null
+  /** Where the leads part stands in the approval gate (lp.instantly_actions.status), when there is one. */
+  instantly_status?: string | null
   requested_by: string
   decided_by: string | null
   decided_at: Date | null
@@ -85,6 +97,53 @@ export async function linkInstantly(db: Db, actor: string, campaignId: number, r
  * Creates a pending request only; no Instantly call. Humans and agents can ask.
  */
 export async function requestPush(db: Db, actor: string, campaignId: number, input: { what?: unknown; note?: unknown }): Promise<PushRequest> {
+  const r = await recordPush(db, actor, campaignId, input)
+  if (r.what === 'steps' || !(r.payload.lead_count ?? 0)) return r
+  return queueLeads(db, actor, r)
+}
+
+/**
+ * Hand the leads part to #46's approval gate. An agent's ask lands in Needs your OK;
+ * a person's ask becomes an Add to Instantly preview they confirm. Nothing is sent here.
+ */
+async function queueLeads(db: Db, actor: string, r: PushRequest): Promise<PushRequest> {
+  const c = await getCampaign(db, r.campaign_id)
+  const leads = await loadCampaignLeads(db, r.campaign_id, { limit: 5000 })
+  const companyIds = [...new Set(leads.map((l) => l.company_id))]
+  const reason = r.note ?? `Push the leads of campaign "${c?.name ?? r.campaign_id}" (request #${r.id})`
+  let approvalId: number | null = null
+  let actionId: number
+  let readyCount: number
+  try {
+    if ((await actorKind(db, actor)) === 'human') {
+      const p = await buildAddPreview(db, { campaign_id: r.instantly_campaign_id, campaign_name: c?.name ?? null, company_ids: companyIds }, null)
+      const row = await savePreview(db, actor, p)
+      actionId = Number(row.id)
+      readyCount = p.ready.length
+    } else {
+      const out = await requestAddLeads(db, actor, { campaign_id: r.instantly_campaign_id, campaign_name: c?.name ?? null, company_ids: companyIds, reason }, null)
+      approvalId = Number(out.approval.id)
+      actionId = Number(out.action.id)
+      readyCount = out.preview.ready_count ?? 0
+    }
+  } catch (e) {
+    await db.query(`update lp.campaign_instantly_requests set status = 'cancelled', decided_at = now(), decision_note = $2 where id = $1`, [
+      r.id,
+      `Could not queue the leads: ${(e as Error).message}`.slice(0, 1000),
+    ])
+    throw new StepsError(`Could not queue the leads for an OK: ${(e as Error).message}`, 409)
+  }
+  const payload = { ...r.payload, instantly_action_id: actionId, ready_count: readyCount, confirm_url: `/leads/instantly?action=${actionId}` }
+  const { rows } = await db.query<PushRequest>(
+    `update lp.campaign_instantly_requests set approval_id = $2, payload = $3 where id = $1 returning *`,
+    [r.id, approvalId, JSON.stringify(payload)],
+  )
+  return norm(rows[0])
+}
+
+const norm = (r: PushRequest): PushRequest => ({ ...r, id: Number(r.id), campaign_id: Number(r.campaign_id), approval_id: r.approval_id == null ? null : Number(r.approval_id) })
+
+async function recordPush(db: Db, actor: string, campaignId: number, input: { what?: unknown; note?: unknown }): Promise<PushRequest> {
   const what = input.what == null || input.what === '' ? 'steps_and_leads' : String(input.what)
   if (!['steps', 'leads', 'steps_and_leads'].includes(what)) throw new StepsError('what must be steps, leads, or steps_and_leads.')
   const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 1000) : null
@@ -111,7 +170,7 @@ export async function requestPush(db: Db, actor: string, campaignId: number, inp
        values ($1, $2, $3, $4, $5, $6) returning *`,
       [campaignId, c.instantly_campaign_id, what, JSON.stringify(payload), note, actor],
     )
-    const r = { ...rows[0], id: Number(rows[0].id), campaign_id: Number(rows[0].campaign_id) }
+    const r = norm(rows[0])
     const parts = [what !== 'leads' ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : null, what !== 'steps' ? `${leads.length} lead${leads.length === 1 ? '' : 's'} (Ready only)` : null].filter(Boolean)
     await logEvent(q, {
       actor,
@@ -125,12 +184,28 @@ export async function requestPush(db: Db, actor: string, campaignId: number, inp
   }, actor)
 }
 
+/**
+ * The campaign's push requests. A request whose leads went to the approval gate shows the
+ * gate's outcome: approved / rejected in Needs your OK, or the preview confirmed / cancelled.
+ */
 export async function listPushRequests(q: Queryable, campaignId: number): Promise<PushRequest[]> {
-  const { rows } = await q.query<PushRequest>(
-    `select * from lp.campaign_instantly_requests where campaign_id = $1 order by created_at desc, id desc limit 20`,
+  const { rows } = await q.query<PushRequest & { approval_status: string | null }>(
+    `select r.*, a.status as approval_status, ia.status as instantly_status
+       from lp.campaign_instantly_requests r
+       left join lp.approvals a on a.id = r.approval_id
+       left join lp.instantly_actions ia on ia.id = nullif(r.payload->>'instantly_action_id', '')::bigint
+      where r.campaign_id = $1 order by r.created_at desc, r.id desc limit 20`,
     [campaignId],
   )
-  return rows.map((r) => ({ ...r, id: Number(r.id), campaign_id: Number(r.campaign_id) }))
+  return rows.map(({ approval_status, ...r }) => {
+    let status = r.status
+    if (status === 'pending') {
+      if (approval_status === 'approved' || ['approved', 'sending', 'done', 'unknown', 'failed'].includes(r.instantly_status ?? '')) status = 'approved'
+      else if (approval_status === 'rejected' || r.instantly_status === 'rejected') status = 'rejected'
+      else if (approval_status === 'expired' || approval_status === 'cancelled' || r.instantly_status === 'cancelled') status = 'cancelled'
+    }
+    return { ...norm(r), status }
+  })
 }
 
 /** Withdraw a pending request (whoever asked, or a person). Nothing is sent either way. */
@@ -145,6 +220,14 @@ export async function cancelPush(db: Db, actor: string, campaignId: number, requ
       `update lp.campaign_instantly_requests set status = 'cancelled', decided_at = now(), decided_by = $2 where id = $1 returning *`,
       [requestId, actor],
     )
+    // Withdraw the leads part from the approval gate too, if nobody has decided it yet.
+    const actionId = Number((r.payload as { instantly_action_id?: unknown } | null)?.instantly_action_id) || null
+    if (r.approval_id != null) {
+      await q.query(`update lp.approvals set status = 'cancelled', decided_at = now(), decision_note = 'withdrawn with the campaign push request' where id = $1 and status = 'pending'`, [r.approval_id])
+    }
+    if (actionId) {
+      await q.query(`update lp.instantly_actions set status = 'cancelled', finished_at = now() where id = $1 and status in ('preview', 'awaiting_approval')`, [actionId])
+    }
     await logEvent(q, {
       actor,
       kind: 'campaign.instantly_push_cancelled',
@@ -153,6 +236,6 @@ export async function cancelPush(db: Db, actor: string, campaignId: number, requ
       entity_id: campaignId,
       data: { request_id: requestId, changes: [{ field: 'status', old: 'pending', new: 'cancelled' }] },
     })
-    return { ...up[0], id: Number(up[0].id), campaign_id: Number(up[0].campaign_id) }
+    return norm(up[0])
   }, actor)
 }
