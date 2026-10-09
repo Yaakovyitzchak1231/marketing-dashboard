@@ -22,7 +22,8 @@ import type { LeadVerdict } from '../rules/evaluate.ts'
 export interface CampaignRef {
   id: number
   name: string
-  segment: string | null
+  /** The campaign's pool (lp.campaigns.pool, 0011). */
+  pool: string | null
   rule_set_id: number | null
   instantly_campaign_id: string | null
   instantly_linked_at: Date | string | null
@@ -69,9 +70,9 @@ export async function getCampaign(q: Queryable, id: number): Promise<CampaignRef
   const cols = await columnsOf(q, 'campaigns')
   if (!cols.size) return null
   const pick = (c: string, alias = c) => (cols.has(c) ? `c.${c} as ${alias}` : `null as ${alias}`)
-  const segment = cols.has('segment') ? 'c.segment' : cols.has('pool') ? 'c.pool' : 'null'
+  const pool = cols.has('pool') ? 'c.pool' : 'null'
   const { rows } = await q.query<CampaignRef>(
-    `select c.id, c.name, ${segment} as segment, ${pick('rule_set_id')}, ${pick('instantly_campaign_id')},
+    `select c.id, c.name, ${pool} as pool, ${pick('rule_set_id')}, ${pick('instantly_campaign_id')},
             ${pick('instantly_linked_at')}, ${pick('instantly_linked_by')}
        from lp.campaigns c where c.id = $1`,
     [id],
@@ -133,7 +134,7 @@ export async function liveVerdict(q: Queryable, c: CampaignRef, companyId: numbe
 export async function campaignRuleSet(q: Queryable, c: CampaignRef) {
   if (!(await columnsOf(q, 'rule_sets')).size) return null
   try {
-    return await effectiveRuleSet(q, { ruleSetId: c.rule_set_id, segment: c.segment })
+    return await effectiveRuleSet(q, { ruleSetId: c.rule_set_id, segment: c.pool })
   } catch {
     return null
   }

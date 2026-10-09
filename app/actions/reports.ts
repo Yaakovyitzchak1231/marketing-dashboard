@@ -91,7 +91,7 @@ export async function campaignSwitchAction(f: FormData) {
   const r = await campaignSwitch(db(), writer!, ME, { kind, campaign_id: s(f, 'campaign_id'), campaign_name: s(f, 'campaign_name') || null })
   clearInstantlyMemo()
   revalidatePath('/reports', 'layout')
-  revalidatePath('/campaigns')
+  revalidatePath('/campaigns/performance')
   redirect(withNote(to, r.ok ? 'good' : 'bad', r.message))
 }
 

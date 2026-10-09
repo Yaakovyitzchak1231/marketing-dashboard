@@ -34,7 +34,7 @@ export interface PreviewStep {
 export type CopyOutlook = 'ready_personalized' | 'ready_generic' | 'parked'
 
 export interface LeadPreview {
-  campaign: Pick<CampaignRef, 'id' | 'name' | 'segment'>
+  campaign: Pick<CampaignRef, 'id' | 'name' | 'pool'>
   lead: { company_id: number; company_name: string; contact_id: number | null; email: string | null; overrides: Record<string, string> }
   fields_from: string
   fields: PreviewField[]
@@ -97,7 +97,7 @@ export async function previewLead(q: Queryable, campaignId: number, companyId: n
   const verdict = await liveVerdict(q, campaign, companyId, now)
 
   return {
-    campaign: { id: campaign.id, name: campaign.name, segment: campaign.segment },
+    campaign: { id: campaign.id, name: campaign.name, pool: campaign.pool },
     lead: {
       company_id: lead.company.id,
       company_name: lead.company.name,

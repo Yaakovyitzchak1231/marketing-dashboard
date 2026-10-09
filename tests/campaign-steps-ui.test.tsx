@@ -8,7 +8,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const campaign = { id: 7, name: 'MD jewelers', segment: 'jeweler', rule_set_id: null, instantly_campaign_id: null, instantly_linked_at: null, instantly_linked_by: null }
+const campaign = { id: 7, name: 'MD jewelers', pool: 'jeweler', rule_set_id: null, instantly_campaign_id: null, instantly_linked_at: null, instantly_linked_by: null }
 const step: StepView = {
   id: 1, campaign_id: 7, step_number: 1, variant: 'A', subject: 'Hi {{firstName}}', body: 'See gemco.com. Thanks.', delay_days: 0,
   created_by: 'owner', updated_by: 'owner', created_at: new Date(), updated_at: new Date(),

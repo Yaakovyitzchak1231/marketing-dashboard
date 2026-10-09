@@ -210,6 +210,8 @@ describe('campaign steps (real Postgres via PGlite)', () => {
     expect((await ruleSetForCampaign(db, IID.toUpperCase())).id).toBe(rows[0].id)
     const other = await campaign(db, 'Second')
     await expect(linkInstantly(db, 'owner', other, IID)).rejects.toMatchObject({ status: 409 })
+    // The database itself refuses a second link to the same Instantly campaign (campaigns_instantly_uq).
+    await expect(db.query(`update lp.campaigns set instantly_campaign_id = $1 where id = $2`, [IID.toLowerCase(), other])).rejects.toThrow()
     // The preview carries the evaluator's live verdict under those rules.
     const p = await previewLead(db, camp, gem)
     expect(p.fields_from).toBe('rules: MD fall own rules')

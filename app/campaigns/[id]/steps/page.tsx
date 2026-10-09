@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db'
 import { DbNotConnected, PageShell } from '@/components/app/PageShell'
 import { EmptyNote } from '@/components/dashboard/primitives'
 import { StepsEditor } from '@/components/campaign-steps/StepsEditor'
+import { CampaignTabs } from '@/components/campaign-steps/CampaignTabs'
 import { stepsOverview } from '@/lib/campaign-steps/http'
 import { loadCampaignLeads } from '@/lib/campaign-steps/adapter'
 import { StepsError } from '@/lib/campaign-steps/store'
@@ -47,6 +48,7 @@ export default async function CampaignStepsPage({ params }: { params: Promise<{ 
         </>
       }
     >
+      <CampaignTabs campaignId={campaignId} active="steps" />
       <StepsEditor
         campaign={data.campaign}
         steps={data.steps}
