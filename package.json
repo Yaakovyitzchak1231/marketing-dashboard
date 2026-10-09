@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "node scripts/db-migrate.mjs --on-build && next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
@@ -13,6 +14,7 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "db:migrate": "node scripts/db-migrate.mjs",
     "import:lead-master": "node --experimental-strip-types scripts/import-lead-master.ts",
+    "push:lead-master": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/push-lead-master.ts",
     "lint:strict": "eslint . --ext .js,.jsx,.mjs,.ts,.tsx --max-warnings=0",
     "engine": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON engine/cli.ts",
     "export:lead-master": "node --experimental-strip-types scripts/export-lead-master.ts"

@@ -92,6 +92,22 @@ server later with `pg_dump -n lp`.
 
 Apply migrations: `DATABASE_URL=postgres://... npm run db:migrate` (`--status` to list).
 
+**On Vercel the migrations run by themselves.** `vercel.json` sets the build command to
+`npm run vercel-build` (`db:migrate --on-build`, then `next build`). On a production build
+with `DATABASE_URL` set (Vercel → Storage → Neon, prefix `DATABASE`), every pending file in
+`db/migrations` is applied in order, each in its own transaction under an advisory lock, so
+a re-run or two builds at once are safe. With no `DATABASE_URL` the step prints why it
+skipped and the build carries on (CI, previews without a database). Preview builds skip by
+default because they usually share the production database (`MIGRATE_ON_PREVIEW=1` to
+opt in; `MIGRATE_ON_BUILD=0` turns the step off). `DATABASE_URL_UNPOOLED` is used for
+migrations when the Neon integration provides it. A failing migration fails the build, so
+Vercel keeps serving the last good deploy.
+
+Missing keys: every "Setup needed" card lists the keys a screen reads (required vs
+optional, set or missing, never the value) with click-by-click steps and a button straight
+to the project's Vercel Environment Variables page; `/setup` shows all of them at once,
+plus how many migrations have run and how many leads are loaded.
+
 ### Moving the Lead Master in
 
 ```
@@ -106,6 +122,26 @@ never overwrites a value already in the database; contacts keep the database's s
 after the first import. Measured on a local Postgres with the Oct 6 export: 24,316 rows
 -> 23,951 companies, 24,316 contacts, 14,898 MillionVerifier results, 495 campaign
 touches, in 47 seconds; a second run added nothing.
+
+### Loading the Lead Master without the database URL
+
+An agent with a token from `OPS_AGENT_TOKENS` can load rows over HTTPS instead:
+
+```
+OPS_URL=https://<app>.vercel.app OPS_TOKEN=<agent token> \
+  npm run push:lead-master -- --csv lead_master.csv --dry-run   # counts only, writes nothing
+OPS_URL=https://<app>.vercel.app OPS_TOKEN=<agent token> \
+  npm run push:lead-master -- --csv lead_master.csv             # the real load
+```
+
+It posts gzip-compressed chunks (1,000 rows each, `--chunk` to change, at most 5,000) to
+`POST /api/ops/import/lead-master`, which runs the same `importLeadRows` as the script above,
+so it is just as idempotent: a re-sent chunk is matched, never duplicated. `?dry_run=1`
+runs the import inside a transaction and rolls it back, so the counts are real and
+nothing is written (each chunk is counted on its own, so a chunked dry run can count a
+company twice when its rows span chunks). A failed chunk prints `--start N` to resume.
+`GET` on the same path returns the current contact and company counts. The body also
+accepts a plain CSV (`Content-Type: text/csv`) or `{"rows": [...]}` JSON.
 
 ## The ops API (for agents)
 

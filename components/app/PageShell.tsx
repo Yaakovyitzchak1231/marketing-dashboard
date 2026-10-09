@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Card } from '@/components/dashboard/primitives'
+import { SetupNeeded } from './SetupNeeded'
 
 /** The title row every screen shares: title, one line of meta, an actions slot. */
 export function PageHeader({ title, meta, actions }: { title: string; meta?: ReactNode; actions?: ReactNode }) {
@@ -33,23 +33,22 @@ export function PageShell({
   )
 }
 
-/** DATABASE_URL is not set: say so, show no numbers. */
+/** DATABASE_URL is not set: say so, show no numbers, and say exactly how to set it. */
 export function DbNotConnected({ what }: { what: string }) {
   return (
-    <Card className="mx-auto max-w-[620px] px-5 py-6 sm:px-7 sm:py-7">
-      <div data-testid="db-not-connected">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-warn">Setup needed</p>
-        <h2 className="mt-1.5 text-[18px] font-semibold tracking-[-0.01em] text-ink">The lead database isn&rsquo;t connected</h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
-          {what} reads from the lead database, and this deploy has no{' '}
-          <code className="rounded bg-canvas px-1 font-numeric text-[12px]">DATABASE_URL</code> yet. Nothing here is estimated or filled
-          in, so the screen stays empty until it is set.
-        </p>
-      </div>
-    </Card>
+    <SetupNeeded
+      features={['leads']}
+      testId="db-not-connected"
+      title="The lead database isn’t connected"
+      intro={
+        <>
+          {what} reads from the lead database, and this deploy has no <code className="rounded bg-canvas px-1 font-numeric text-[12px]">DATABASE_URL</code>{' '}
+          yet. You don&rsquo;t type anything: Vercel creates the database and the key for you. Nothing here is estimated or filled in.
+        </>
+      }
+    />
   )
 }
-
 /** A small button-like link in the house style. */
 export const BUTTON =
   'inline-flex items-center rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50'

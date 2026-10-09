@@ -3,53 +3,48 @@
  * Apply db/migrations/*.sql in filename order to DATABASE_URL, once each.
  * Applied files are recorded in lp_schema_migrations (public schema, plain table).
  *
- *   DATABASE_URL=postgres://... node scripts/db-migrate.mjs           # apply pending
- *   DATABASE_URL=postgres://... node scripts/db-migrate.mjs --status  # list only
+ *   DATABASE_URL=postgres://... node scripts/db-migrate.mjs            # apply pending
+ *   DATABASE_URL=postgres://... node scripts/db-migrate.mjs --status   # list only
+ *   node scripts/db-migrate.mjs --on-build                             # what `npm run vercel-build` runs
  *
- * Plain Postgres: works against Supabase, the OVH server, or a laptop.
+ * --on-build never fails a build for a missing database: with no DATABASE_URL it
+ * prints why it skipped and exits 0. Preview builds skip too (see migrationPlan).
+ * A migration that fails with a database present does fail the build, so a deploy
+ * never goes live against a half-made schema (Vercel keeps the last good deploy).
+ *
+ * Plain Postgres: works against Neon, Supabase, the OVH server, or a laptop.
  */
-import { readdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
+import { applyMigrations, migrationPlan, sslFor } from './lib/migrate.mjs'
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'db', 'migrations')
-const url = process.env.DATABASE_URL
-if (!url) {
-  console.error('DATABASE_URL is not set.')
+const onBuild = process.argv.includes('--on-build')
+const statusOnly = process.argv.includes('--status')
+const plan = migrationPlan(process.env, { onBuild })
+
+if (!plan.run || !plan.url) {
+  if (onBuild) {
+    console.log(`db:migrate skipped: ${plan.reason}`)
+    process.exit(0)
+  }
+  console.error(plan.reason)
   process.exit(2)
 }
-const statusOnly = process.argv.includes('--status')
-const client = new pg.Client({ connectionString: url, ssl: /sslmode=require|supabase\.co|pooler\.supabase/.test(url) ? { rejectUnauthorized: false } : undefined })
-await client.connect()
+
+const client = new pg.Client({ connectionString: plan.url, ssl: sslFor(plan.url), connectionTimeoutMillis: 20_000 })
 try {
-  await client.query(`create table if not exists lp_schema_migrations (
-    filename text primary key, applied_at timestamptz not null default now())`)
-  const done = new Set((await client.query('select filename from lp_schema_migrations')).rows.map((r) => r.filename))
-  const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
-  for (const f of files) {
-    if (done.has(f)) {
-      console.log(`applied  ${f}`)
-      continue
-    }
-    if (statusOnly) {
-      console.log(`pending  ${f}`)
-      continue
-    }
-    const sql = readFileSync(join(dir, f), 'utf8')
-    await client.query('begin')
-    try {
-      await client.query(sql)
-      await client.query('insert into lp_schema_migrations (filename) values ($1)', [f])
-      await client.query('commit')
-      console.log(`applied  ${f}  (now)`)
-    } catch (e) {
-      await client.query('rollback')
-      console.error(`FAILED   ${f}: ${e.message}`)
-      process.exitCode = 1
-      break
-    }
-  }
+  await client.connect()
+} catch (e) {
+  console.error(`db:migrate could not reach the database: ${e.message}`)
+  process.exit(1)
+}
+try {
+  if (onBuild) console.log(`db:migrate (${plan.reason})`)
+  const r = await applyMigrations(client, { dir, statusOnly, log: (line) => console.log(line) })
+  if (r.failed) process.exitCode = 1
+  else if (!statusOnly) console.log(`db:migrate done: ${r.applied.length} applied now, ${r.already.length} already applied`)
 } finally {
   await client.end()
 }

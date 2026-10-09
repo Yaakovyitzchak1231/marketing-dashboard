@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Pill, type PillTone } from '@/components/dashboard/primitives'
-import { PageShell } from '@/components/app/PageShell'
+import { PageShell, DbNotConnected as AppDbNotConnected } from '@/components/app/PageShell'
 
 /** "4m ago" with the exact time on hover. Server-rendered per request. */
 export function Ago({ at, now = new Date() }: { at: Date | string | null; now?: Date }) {
@@ -80,16 +80,8 @@ export function PageFrame({ title, meta, actions, children }: { title: string; m
   )
 }
 
-export function DbNotConnected() {
-  return (
-    <div className="rounded-card border border-line bg-surface px-5 py-8 text-[13px] text-ink-muted shadow-card">
-      <p className="font-medium text-ink">The lead database isn&apos;t connected yet.</p>
-      <p className="mt-1">
-        Set <code className="rounded bg-canvas px-1">DATABASE_URL</code> to the Postgres that holds the <code className="rounded bg-canvas px-1">lp</code> schema, then run{' '}
-        <code className="rounded bg-canvas px-1">npm run db:migrate</code>. Nothing on this screen is shown until then.
-      </p>
-    </div>
-  )
+export function DbNotConnected({ what = 'This screen' }: { what?: string }) {
+  return <AppDbNotConnected what={what} />
 }
 
 export function ActorLink({ id, name }: { id: string | null; name: string | null }) {
