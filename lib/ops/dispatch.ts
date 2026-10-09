@@ -265,7 +265,7 @@ export const OPS: Record<string, Op> = {
     },
   },
   instantly_add_leads: {
-    args: '{campaign_id, campaign_name?, company_ids?: number[], emails?: string[], reason, task_id?, expires_in_hours? (default 72)}  -> NEVER sends: queues the change with a preview in "Needs your OK"; a human approves (the dashboard then adds them) or rejects with a reason. Poll get_approval / get_instantly_action.',
+    args: '{campaign_id, campaign_name?, company_ids?: number[], emails?: string[], batch?: "standard"|"role-inbox" (default standard; role-inbox = only role inboxes released after owner research came up empty), reason, task_id?, expires_in_hours? (default 72)}  -> NEVER sends: queues the change with a preview in "Needs your OK"; a human approves (the dashboard then adds them) or rejects with a reason. Poll get_approval / get_instantly_action.',
     run: async (db, actor, a) =>
       (await gate()).requestAddLeads(
         db,
@@ -275,6 +275,7 @@ export const OPS: Record<string, Op> = {
           campaign_name: a.campaign_name,
           company_ids: a.company_ids,
           emails: a.emails,
+          batch: a.batch,
           reason: requireReason(a),
           task_id: a.task_id == null ? null : id(a.task_id),
           expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
