@@ -88,6 +88,8 @@ describe('page comments: sending', () => {
     expect(rows).toEqual([{ status: 'pending', kind: 'email' }, { status: 'pending', kind: 'pull' }])
     expect(c.delivery).toBe('pending')
     const event = (await feed(db, 'tab')).find((e) => e.notification_id === n.id)
+    expect(event?.page_comment_id).toBe(c.id)
+    expect(event?.auto_reply).toBe(false)
     expect(event?.body).toContain(`pin=${c.id}`)
     expect(event?.body).toContain('Comment: This column is wrong')
   })

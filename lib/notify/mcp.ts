@@ -55,43 +55,43 @@ export const MCP_TOOLS: Tool[] = [
   },
   {
     name: 'claim_task',
-    description: 'Take a task (by id, or the next one you may do). You hold it with a lease; post_update keeps it.',
+    description: 'Take a task (by id, or the next one you may do). Save its attempts value as claim_attempt and pass that on every update/completion; post_update keeps the lease.',
     inputSchema: obj({ task_id: int, kinds: { type: 'array', items: { type: 'string' } }, lease_seconds: { type: 'integer', minimum: 15, maximum: 3600 } }),
     run: (db, agent, a) => runOp(db, agent, 'claim_task', a),
   },
   {
     name: 'post_update',
     description: 'Progress on a task you hold: a note on its thread (people see it live) and a lease heartbeat. Mention @owner to ping Yaakov.',
-    inputSchema: obj({ task_id: int, note: { type: 'string' }, progress: { type: 'object' }, lease_seconds: { type: 'integer', minimum: 15, maximum: 3600 } }, ['task_id']),
+    inputSchema: obj({ task_id: int, claim_attempt: int, note: { type: 'string' }, progress: { type: 'object' }, lease_seconds: { type: 'integer', minimum: 15, maximum: 3600 } }, ['task_id']),
     run: async (db, agent, a) => {
       const out: Json = {}
+      out.heartbeat = await runOp(db, agent, 'heartbeat', { task_id: a.task_id, claim_attempt: a.claim_attempt, progress: a.progress, lease_seconds: a.lease_seconds })
       if (typeof a.note === 'string' && a.note.trim()) out.comment = await runOp(db, agent, 'comment', { task_id: a.task_id, body: a.note })
-      out.heartbeat = await runOp(db, agent, 'heartbeat', { task_id: a.task_id, progress: a.progress, lease_seconds: a.lease_seconds }).catch((e: Error) => ({ skipped: e.message }))
       return out
     },
   },
   {
     name: 'complete_task',
     description: 'Finish a task you hold, with a short report (and a result object if the task kind expects one). Whoever asked is told at once.',
-    inputSchema: obj({ task_id: int, report: { type: 'string' }, result: { type: 'object' } }, ['task_id']),
+    inputSchema: obj({ task_id: int, claim_attempt: int, report: { type: 'string' }, result: { type: 'object' } }, ['task_id']),
     run: (db, agent, a) => runOp(db, agent, 'complete_task', a),
   },
   {
     name: 'fail_task',
     description: 'Give up on a task you hold, with the reason. retry=false stops further attempts.',
-    inputSchema: obj({ task_id: int, error: { type: 'string' }, retry: { type: 'boolean' } }, ['task_id', 'error']),
+    inputSchema: obj({ task_id: int, claim_attempt: int, error: { type: 'string' }, retry: { type: 'boolean' } }, ['task_id', 'error']),
     run: (db, agent, a) => runOp(db, agent, 'fail_task', a),
   },
   {
     name: 'handoff_task',
     description: 'Hand a task to a teammate (person or agent) with a note.',
-    inputSchema: obj({ task_id: int, to: { type: 'string' }, note: { type: 'string' } }, ['task_id', 'to', 'note']),
+    inputSchema: obj({ task_id: int, claim_attempt: int, to: { type: 'string' }, note: { type: 'string' } }, ['task_id', 'to', 'note']),
     run: (db, agent, a) => runOp(db, agent, 'handoff_task', a),
   },
   {
     name: 'send_message',
     description: "A direct message to a person ('owner' is Yaakov) or another agent. Delivered at once on their channels; optional task_id keeps it on that task's thread.",
-    inputSchema: obj({ to: { type: 'string' }, body: { type: 'string' }, task_id: int }, ['to', 'body']),
+    inputSchema: obj({ to: { type: 'string' }, body: { type: 'string' }, task_id: int, no_reply: { type: 'boolean' } }, ['to', 'body']),
     run: (db, agent, a) => runOp(db, agent, 'send_message', a),
   },
   {

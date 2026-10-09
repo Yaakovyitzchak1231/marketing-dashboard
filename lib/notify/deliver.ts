@@ -62,6 +62,9 @@ export interface DeliveryEvent {
   body: string | null
   task: { id: number; title: string; kind: string; status: string; url: string } | null
   comment_id: number | null
+  page_comment_id: number | null
+  /** Informational result: recipients must not start another automatic reply. */
+  auto_reply: boolean
   created_at: string
   /** Set when another agent carries this to a person (e.g. a WhatsApp to Yaakov). */
   relay: { target: string; to: string | null; text: string } | null
@@ -84,6 +87,8 @@ interface DeliveryJoin {
   body: string | null
   task_id: number | null
   comment_id: number | null
+  page_comment_id: number | null
+  auto_reply: boolean
   created_by: string | null
   n_created_at: Date
   recipient_name: string
@@ -99,7 +104,7 @@ interface DeliveryJoin {
 const JOIN = `
   select d.id, d.notification_id, d.channel_id, d.recipient, d.via, d.status, d.attempts,
          c.kind, c.config, c.secret,
-         n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.created_by, n.created_at as n_created_at,
+         n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.page_comment_id, n.auto_reply, n.created_by, n.created_at as n_created_at,
          r.display_name as recipient_name, r.kind as recipient_kind, r.quiet_shabbos,
          f.display_name as from_name, f.kind as from_kind,
          t.title as task_title, t.kind as task_kind, t.status as task_status
@@ -135,6 +140,8 @@ export function toEvent(r: DeliveryJoin, base = dashboardUrl()): DeliveryEvent {
       ? { id: r.task_id, title: r.task_title ?? '', kind: r.task_kind ?? '', status: r.task_status ?? '', url: `${base}/team/${r.task_id}` }
       : null,
     comment_id: r.comment_id,
+    page_comment_id: r.page_comment_id ?? null,
+    auto_reply: r.auto_reply === true,
     created_at: new Date(r.n_created_at).toISOString(),
     relay,
     ack: { method: 'POST', url: `${base}/api/ops/feed/ack`, body: { ids: [r.id] } },

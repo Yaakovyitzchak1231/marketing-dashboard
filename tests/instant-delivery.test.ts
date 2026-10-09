@@ -3,13 +3,15 @@ import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createTestDb } from './helpers/pglite-db'
-import { createTask, handoffTask, sendMessage, comment, markRead } from '@/lib/ops/core'
+import { createTask, handoffTask, sendMessage, comment, markRead, OpsError } from '@/lib/ops/core'
 import { runOp, routeToOp } from '@/lib/ops/dispatch'
 import { ackDeliveries, addChannel, dispatchDue, feed, signWebhook, taskDeliveryStates, MAX_ATTEMPTS } from '@/lib/notify/deliver'
 import { addActor, agentForDbKey, mintAgentKey, revokeAgentKey } from '@/lib/notify/keys'
 import { sendMail } from '@/lib/notify/mail'
 import { shabbosEndsAt, sunsetUtc } from '@/lib/notify/shabbos'
 import { handleMcp, MCP_TOOLS } from '@/lib/notify/mcp'
+import { saveDraft, sendPageComments } from '@/lib/page-comments/core'
+import { makeRelay } from '../ops/hermes-relay/lib.mjs'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 let db: TestDb
@@ -256,11 +258,22 @@ describe('agent -> human: relay to WhatsApp via Hermes, held over Shabbos', () =
 })
 
 describe('agent -> agent', () => {
+  it('carries full mention bodies and marks informational replies to prevent loops', async () => {
+    const task = await createTask(db, 'owner', { title: 'Full context' })
+    const body = `@hermes ${'context '.repeat(100)}final instruction`
+    const mention = await comment(db, 'tab', { task_id: task.id, body })
+    const events = await feed(db, 'hermes')
+    expect(events.find((e) => e.comment_id === mention.id)?.body).toBe(body)
+    const sent = await runOp(db, 'hermes', 'send_message', { to: 'tab', body: 'Result, not a new request', no_reply: true }) as { notification_id: number }
+    const replies = await feed(db, 'tab')
+    expect(replies.find((e) => e.notification_id === sent.notification_id)?.auto_reply).toBe(true)
+  })
+
   it('a direct message, a handoff and an @mention all reach the other agent', async () => {
     const r = (await runOp(db, 'hermes', 'send_message', { to: 'claude-code', body: 'Can you draft the Ohio email?' })) as { notification_id: number }
     expect(r.notification_id).toBeTruthy()
     const t = await createTask(db, 'owner', { title: 'Ohio list' })
-    await db.query("update lp.tasks set claimed_by = 'hermes', status = 'claimed', lease_expires_at = now() + interval '5 minutes' where id = $1", [t.id])
+    await db.query("update lp.tasks set claimed_by = 'hermes', status = 'claimed', attempts = 1, lease_expires_at = now() + interval '5 minutes' where id = $1", [t.id])
     await handoffTask(db, 'hermes', t.id, { to: 'claude-code', note: 'yours' })
     await comment(db, 'hermes', { task_id: t.id, body: '@claude-code check row 4' })
     const { rows } = await db.query<{ kind: string; status: string }>(
@@ -315,6 +328,73 @@ describe('MCP server', () => {
     }
     expect(bad.result.isError).toBe(true)
     expect(MCP_TOOLS.length).toBeGreaterThanOrEqual(10)
+  })
+})
+
+describe('Hermes relay against the actual ops/database contract', () => {
+  function connectedRelay(actor = 'hermes', output = 'Verified report: @tab stays quiet; cc @owner') {
+    let starts = 0
+    const relay = makeRelay({
+      cfg: { DASHBOARD_URL: 'https://dash.test', AGENT_ID: actor, RUN_FROM: 'owner,tab,hermes' },
+      exec: async () => { throw new Error('Unexpected external send') },
+      fetch: async (url: string, init: RequestInit = {}) => {
+        if (url === 'https://dash.test/api/ops') {
+          const args = JSON.parse(String(init.body))
+          try {
+            return Response.json({ ok: true, data: await runOp(db, actor, args.op, args) })
+          } catch (e) {
+            return Response.json({ ok: false, error: (e as Error).message }, { status: e instanceof OpsError ? e.status : 500 })
+          }
+        }
+        if (url === 'http://127.0.0.1:8643/v1/runs') {
+          starts++
+          return Response.json({ run_id: `fixture_${starts}` }, { status: 202 })
+        }
+        if (url.startsWith('http://127.0.0.1:8643/v1/runs/')) return Response.json({ status: 'completed', output })
+        throw new Error('Unexpected URL')
+      },
+    })
+    return { relay, starts: () => starts }
+  }
+
+  it('claims, acknowledges and completes using the stored attempt; report mentions do not wake agents', async () => {
+    const t = await createTask(db, 'owner', { title: 'Integrated relay task', assigned_to: 'hermes' })
+    const ev = (await feed(db, 'hermes')).find((e) => e.task?.id === t.id)!
+    const w = connectedRelay()
+    expect(await w.relay.handle(ev)).toBe('acked')
+    await w.relay.checkRuns()
+    const row = (await db.query<{ status: string; attempts: number; report: string }>('select status, attempts, report from lp.tasks where id = $1', [t.id])).rows[0]
+    expect(row).toMatchObject({ status: 'done', attempts: 1, report: 'Verified report: @\u200btab stays quiet; cc @owner' })
+    const mentions = await db.query<{ recipient: string }>("select recipient from lp.notifications where task_id = $1 and kind = 'mention'", [t.id])
+    expect(mentions.rows.map((r) => r.recipient)).toEqual(['owner'])
+    expect((await db.query<{ status: string }>('select status from lp.deliveries where id = $1', [ev.delivery_id])).rows[0].status).toBe('delivered')
+  })
+
+  it('answers a pinned page comment on its stored thread, with an informational notification', async () => {
+    const pin = await saveDraft(db, 'owner', { client_id: 'relay-integrated-pin', recipient: 'hermes', page_path: '/seo', body: 'Check this label' })
+    await sendPageComments(db, 'owner', ['relay-integrated-pin'], { DASHBOARD_URL: 'https://dash.test', NODE_ENV: 'test' })
+    const ev = (await feed(db, 'hermes')).find((e) => e.page_comment_id === pin.id)!
+    expect(ev).toBeDefined()
+    const w = connectedRelay('hermes', 'The label is correct.')
+    await w.relay.handle(ev)
+    await w.relay.checkRuns()
+    const rows = await db.query<{ author: string; body: string; auto_reply: boolean; page_comment_id: number }>(
+      'select r.author, r.body, n.auto_reply, n.page_comment_id from lp.page_comment_replies r join lp.notifications n on n.id = r.notification_id where r.page_comment_id = $1', [pin.id],
+    )
+    expect(rows.rows).toEqual([{ author: 'hermes', body: 'The label is correct.', auto_reply: true, page_comment_id: pin.id }])
+  })
+
+  it('an agent DM receives one informational reply that another relay acknowledges without a run', async () => {
+    const sent = await sendMessage(db, 'tab', { to: 'hermes', body: 'Check availability' })
+    const ev = (await feed(db, 'hermes')).find((e) => e.notification_id === sent.notification_id)!
+    const hermes = connectedRelay('hermes', 'Available.')
+    await hermes.relay.handle(ev)
+    await hermes.relay.checkRuns()
+    const reply = (await feed(db, 'tab')).find((e) => e.from === 'hermes' && e.body === 'Available.')!
+    expect(reply.auto_reply).toBe(true)
+    const tab = connectedRelay('tab')
+    expect(await tab.relay.handle(reply)).toBe('acked')
+    expect(tab.starts()).toBe(0)
   })
 })
 

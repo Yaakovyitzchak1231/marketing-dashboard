@@ -175,10 +175,16 @@ export class WpClient {
         } catch {
           return false
         }
-      }) ?? (list.length === 1 ? list[0] : undefined)
+      })
       if (hit) return this.toPage({ ...hit, type: type === 'pages' ? 'page' : 'post' })
     }
     return null
+  }
+
+  /** Creation must not silently get WordPress's auto-suffixed duplicate slug. */
+  async hasSlug(slug: string): Promise<boolean> {
+    const list = await this.call<RawPost[]>('GET', `/wp/v2/pages?slug=${encodeURIComponent(slug)}&context=edit&status=publish,draft,private,pending,trash`)
+    return list.some((p) => p.slug === slug)
   }
 
   async getPage(id: number, type: 'page' | 'post' = 'page'): Promise<WpPage> {

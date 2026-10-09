@@ -49,7 +49,7 @@ describe('tasks: claim with a lease, heartbeat, complete', () => {
     const stolen = await claimTask(db, 'hermes', { kinds: ['lease'] })
     expect(stolen?.claimed_by).toBe('hermes')
     await expect(completeTask(db, 'tab', t.id, {})).rejects.toThrow(/held by hermes/)
-    const done = await completeTask(db, 'hermes', t.id, { result: { ok: 1 }, report: 'Finished the lease test.' })
+    const done = await completeTask(db, 'hermes', t.id, { result: { ok: 1 }, report: 'Finished the lease test.', claim_attempt: stolen!.attempts })
     expect(done.status).toBe('done')
     const r = await db.query<{ kind: string }>('select kind from lp.comments where task_id = $1', [t.id])
     expect(r.rows.map((x) => x.kind)).toContain('report')
@@ -61,7 +61,7 @@ describe('tasks: claim with a lease, heartbeat, complete', () => {
     const f1 = await failTask(db, 'tab', t.id, { error: 'site timed out' })
     expect(f1.status).toBe('queued')
     await claimTask(db, 'tab', { kinds: ['flaky'] })
-    const f2 = await failTask(db, 'tab', t.id, { error: 'site timed out again' })
+    const f2 = await failTask(db, 'tab', t.id, { error: 'site timed out again', claim_attempt: 2 })
     expect(f2.status).toBe('failed')
   })
 
