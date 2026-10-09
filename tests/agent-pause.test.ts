@@ -135,7 +135,9 @@ describe('humans are never pausable, and only humans pause', () => {
   it('there is no ops call an agent could use to pause or resume', async () => {
     const r = await opsGet(nreq('https://x/api/ops', { headers: auth(TAB) }), ctx())
     const ops = Object.keys((await r.json()).ops)
-    expect(ops.filter((o) => /pause|resume/i.test(o))).toEqual([])
+    // instantly_pause_campaign / instantly_resume_campaign (#46) pause an Instantly campaign, not an agent,
+    // and only queue the change for a human's OK in "Needs your OK".
+    expect(ops.filter((o) => /pause|resume/i.test(o) && !o.startsWith('instantly_'))).toEqual([])
   })
 })
 

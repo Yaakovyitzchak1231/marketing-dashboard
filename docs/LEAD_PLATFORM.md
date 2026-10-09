@@ -170,7 +170,8 @@ read the request is refused (503).
 Ops: `whoami`, `presence`, `create_task`, `list_tasks`, `get_task`, `claim_task`,
 `heartbeat`, `complete_task`, `fail_task`, `handoff_task`, `update_task`, `comment`,
 `acquire_lock`, `release_lock`, `list_locks`, `log_event`, `request_approval`,
-`get_approval`, `memory_get`, `memory_put`, `memory_search`, `memory_delete`, `inbox`,
+`get_approval`, `instantly_add_leads`, `instantly_pause_campaign`, `instantly_resume_campaign`,
+`get_instantly_action`, `memory_get`, `memory_put`, `memory_search`, `memory_delete`, `inbox`,
 `mark_read`, `recent_events`.
 
 A typical agent loop:
@@ -185,6 +186,35 @@ complete_task {task_id, result, report}          -> report shows on the task and
 
 Instantly's own AI can't take locks, so treat campaigns it runs as checked out to
 `instantly-ai`.
+
+### Changes to Instantly: always a human's OK first
+
+Agents never change Instantly. The ops that touch it only queue the change:
+
+```
+instantly_add_leads {campaign_id, campaign_name?, company_ids? | emails?, reason, task_id?}
+instantly_pause_campaign {campaign_id, campaign_name?, reason}
+instantly_resume_campaign {campaign_id, campaign_name?, reason}
+  (REST: POST /api/ops/instantly/add-leads | pause | resume)
+-> {approval, action, preview, executed: false}
+get_instantly_action {action_id}   (GET /api/ops/instantly/actions/:id)
+```
+
+Each request builds the same preview a human sees (who would be added, who is
+left out and why, or the status change), stores it in `lp.instantly_actions` as
+`awaiting_approval`, and opens a pending approval in Activity > Needs your OK
+(expires after 72 h unless `expires_in_hours` says otherwise). A human's
+Approve opens a confirm line; the confirm runs exactly the stored change (leads
+that stopped qualifying since the request are dropped first). Reject needs a
+reason, which the agent gets in its inbox and in `decision_note`. Every step is
+in the activity log with who did it.
+
+Default-deny: `request_approval` refuses anything that mentions Instantly (approving
+it would run nothing and leave the agent to make the change itself), and the
+database refuses to mark an Instantly change as sending unless a human confirmed
+it (migration 0009). Changes the dashboard can't make (sequences, settings,
+deleting) are done by a human in Instantly. Agents should not hold an Instantly
+API key of their own.
 
 ## Instantly webhook
 

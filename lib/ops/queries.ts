@@ -121,8 +121,8 @@ export async function listProjects(q: Queryable) {
 }
 
 export async function pendingApprovals(q: Queryable) {
-  const { rows } = await q.query<{ id: number; action: string; summary: string; est_cost_usd: number | null; requested_by: string; requester_name: string; task_id: number | null; created_at: Date; expires_at: Date | null; payload: unknown }>(
-    `select ap.id, ap.action, ap.summary, ap.est_cost_usd, ap.requested_by, a.display_name as requester_name, ap.task_id, ap.created_at, ap.expires_at, ap.payload
+  const { rows } = await q.query<{ id: number; action: string; summary: string; est_cost_usd: number | null; requested_by: string; requester_name: string; task_id: number | null; created_at: Date; expires_at: Date | null; payload: unknown; instantly_action_id: number | null }>(
+    `select ap.id, ap.action, ap.summary, ap.est_cost_usd, ap.requested_by, a.display_name as requester_name, ap.task_id, ap.created_at, ap.expires_at, ap.payload, ap.instantly_action_id
        from lp.approvals ap join lp.actors a on a.id = ap.requested_by
       where ap.status = 'pending' and (ap.expires_at is null or ap.expires_at > now())
       order by ap.created_at`,
