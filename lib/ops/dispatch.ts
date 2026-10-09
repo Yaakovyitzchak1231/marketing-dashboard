@@ -35,6 +35,7 @@ import {
 import { logEvent } from './events.ts'
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
+import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -325,6 +326,8 @@ export const OPS: Record<string, Op> = {
         kind_prefix: str(a.kind_prefix) ?? null,
       }),
   },
+  // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
+  ...CAMPAIGN_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
@@ -364,6 +367,7 @@ export function routeToOp(method: string, path: string[]): { op: string; args: A
   if (method === 'POST' && a === 'inbox' && b === 'read') return { op: 'mark_read', args: {} }
   if (method === 'POST' && a === 'presence') return { op: 'presence', args: {} }
   if (method === 'GET' && a === 'whoami') return { op: 'whoami', args: {} }
+  if (a === 'campaigns') return campaignRoute(method, path)
   if (a === 'rules') {
     if (method === 'GET' && !b) return { op: 'list_rule_sets', args: {} }
     if (method === 'POST' && b === 'recompute' && !c) return { op: 'rules_recompute', args: {} }

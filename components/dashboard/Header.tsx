@@ -39,7 +39,7 @@ export function Header({
               return (
                 <Link
                   key={k}
-                  href={`/campaigns?range=${k}`}
+                  href={`/campaigns/performance?range=${k}`}
                   aria-current={selected ? 'page' : undefined}
                   prefetch={false}
                   className={`min-w-[40px] rounded-[3px] px-2.5 py-1.5 text-center text-[12px] font-medium tabular-nums transition-colors ${
@@ -52,7 +52,7 @@ export function Header({
             })}
           </nav>
           <a
-            href={`/campaigns?range=${active === 'custom' ? '30d' : active}`}
+            href={`/campaigns/performance?range=${active === 'custom' ? '30d' : active}`}
             className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-muted hover:text-ink"
             title="Reload from Instantly (data is cached for up to 5 minutes)"
           >
