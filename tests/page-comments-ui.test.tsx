@@ -182,5 +182,29 @@ describe('the comment layer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
     })
     expect(a.reply).toHaveBeenCalledWith(5, 'thanks')
+    // Closing it keeps it closed, even when the list refreshes.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'))
+    })
+    expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
+  })
+
+  it('a pin closed before anything was written is thrown away', async () => {
+    const main = page()
+    const { a } = fakeActions()
+    render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    await act(async () => {
+      fireEvent.click(main.querySelector('h1')!)
+    })
+    expect(screen.getByRole('dialog', { name: 'New comment' })).toHaveTextContent('On heading "Leads"')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    })
+    expect(screen.queryByRole('dialog', { name: 'New comment' })).toBeNull()
+    expect(loadLocal(localStorage)).toEqual({})
+    expect(a.discard).toHaveBeenCalled()
   })
 })

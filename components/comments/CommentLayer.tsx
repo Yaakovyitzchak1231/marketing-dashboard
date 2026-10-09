@@ -304,13 +304,18 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
     }
   }, [place])
 
-  // Opening a pin from the tray (other page) or from a link (?pin=12) once the page is here.
+  // Opening a pin from the tray (other page) or from a link (?pin=12) once the page is here. Once per
+  // request: closing the box must not reopen it on the next refresh.
+  const handled = useRef<string | null>(null)
   useEffect(() => {
     const s = session()
     const wanted = s?.getItem(OPEN_KEY)
     const q = new URLSearchParams(window.location.search).get('pin')
-    const target = wanted ? pins.find((p) => p.client_id === wanted) : q ? pins.find((p) => String(p.id) === q) : undefined
+    const key = wanted ? `open:${wanted}` : q ? `${window.location.pathname}?pin=${q}` : null
+    if (!key || key === handled.current) return
+    const target = wanted ? pins.find((p) => p.client_id === wanted) : pins.find((p) => String(p.id) === q)
     if (!target || !onPage(target, pathname)) return
+    handled.current = key
     s?.removeItem(OPEN_KEY)
     if (target.status === 'resolved') setShowResolved(true)
     setShowPins(true)
@@ -478,6 +483,8 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
           busy={busy}
           onEdit={(patch) => edit(open.client_id, patch)}
           onClose={() => {
+            // A pin closed before anything was written is not worth keeping.
+            if (open.status === 'draft' && !open.body.trim() && !open.tag) return void discard(open.client_id)
             if (timers.current[open.client_id]) void saveNow(open.client_id)
             setOpenId(null)
           }}
