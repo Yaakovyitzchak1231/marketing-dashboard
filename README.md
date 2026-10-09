@@ -133,6 +133,14 @@ login locally (development server only).
 GitHub Actions (`.github/workflows/ci.yml`) runs `npm ci`, typecheck, lint,
 tests and a production build on every pull request and on pushes to `main`.
 
+After each PR merged into `main`, `.github/workflows/docs-maintainer.yml` runs
+Claude (Haiku) to check the docs against the code, update
+`docs/ARCHITECTURE.md`, and flag orphaned code or inconsistencies. It comments
+its report on the merged PR and opens a `docs/maintenance-pr-<n>` PR when docs
+need fixing; it never edits code or pushes to `main`. It needs the
+`ANTHROPIC_API_KEY` repository secret, and can be re-run by hand from the
+Actions tab with a PR number.
+
 ## Deploy on Vercel
 
 The project is already linked to Vercel (production:
