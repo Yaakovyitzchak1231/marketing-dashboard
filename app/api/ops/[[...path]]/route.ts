@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { opsGate } from '@/lib/ops/gate'
 import { OPS, routeToOp, runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
+import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +67,8 @@ async function handle(req: NextRequest, ctx: Ctx, method: 'GET' | 'POST') {
 
   try {
     const data = await runOp(db, agent, op, args)
+    // Anything this call notified goes out right after the response (webhook, email, ntfy ping).
+    if (method === 'POST') kickDelivery(db)
     return NextResponse.json({ ok: true, op, data }, { headers: NO_STORE })
   } catch (e) {
     if (e instanceof OpsError) return fail(e.status, e.message)

@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { createTask } from '@/lib/ops/core'
+import { kickDelivery } from '@/lib/notify/kick'
 import { logEvent } from '@/lib/ops/events'
 import { saveCampaignMeta } from '@/lib/reports/meta'
 import { deleteCost, upsertCost } from '@/lib/reports/costs'
@@ -149,6 +150,7 @@ export async function assignFollowUpAction(f: FormData) {
     if (/already exists/.test(e.message)) return null
     throw e
   })
+  if (t) kickDelivery(db())
   revalidatePath('/team')
   revalidatePath('/reports/weekly')
   redirect(withNote(to, 'good', t ? `Assigned to ${agent} (task #${t.id}).` : 'That follow-up is already on the board.'))

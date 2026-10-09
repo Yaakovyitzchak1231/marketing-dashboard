@@ -95,16 +95,19 @@ export async function touchActor(q: Queryable, actor: string, statusNote?: strin
   }
 }
 
-async function notify(
+export async function notify(
   q: Queryable,
-  n: { recipient: string; kind: string; summary: string; task_id?: number | null; comment_id?: number | null; created_by: string },
-): Promise<void> {
-  if (n.recipient === n.created_by) return
-  await q.query(
-    `insert into lp.notifications (recipient, kind, summary, task_id, comment_id, created_by)
-     select $1, $2, $3, $4, $5, $6 where exists (select 1 from lp.actors where id = $1)`,
-    [n.recipient, n.kind, n.summary.slice(0, 500), n.task_id ?? null, n.comment_id ?? null, n.created_by],
+  n: { recipient: string; kind: string; summary: string; body?: string | null; task_id?: number | null; comment_id?: number | null; created_by: string },
+): Promise<number | null> {
+  if (n.recipient === n.created_by) return null
+  // The insert fires lp.fan_out_notification (migration 0013): one delivery row per channel of the
+  // recipient, sent right after the request by lib/notify (kickDelivery).
+  const { rows } = await q.query<{ id: number }>(
+    `insert into lp.notifications (recipient, kind, summary, body, task_id, comment_id, created_by)
+     select $1, $2, $3, $4, $5, $6, $7 where exists (select 1 from lp.actors where id = $1) returning id`,
+    [n.recipient, n.kind, n.summary.slice(0, 500), n.body ?? null, n.task_id ?? null, n.comment_id ?? null, n.created_by],
   )
+  return rows[0]?.id ?? null
 }
 
 async function loadTask(q: Queryable, id: number, forUpdate = false): Promise<TaskRow> {
@@ -407,6 +410,51 @@ export async function comment(db: Db, actor: string, c: { task_id?: number | nul
     await requireActor(q, actor)
     await touchActor(q, actor)
     return addComment(q, actor, { ...c, kind: 'comment' })
+  }, actor)
+}
+
+/**
+ * A direct message: human -> agent, agent -> human, agent -> agent. Lands in the recipient's
+ * inbox and goes out on their delivery channels at once. With task_id it is also kept on the
+ * task's thread.
+ */
+export async function sendMessage(db: Db, actor: string, m: { to: string; body: string; task_id?: number | null }): Promise<{ notification_id: number | null; comment_id: number | null }> {
+  return db.tx(async (q) => {
+    const me = await requireActor(q, actor)
+    await touchActor(q, actor)
+    const to = await requireActor(q, String(m.to ?? '').trim().toLowerCase())
+    if (to.id === me.id) throw new OpsError('that is you')
+    const body = nonEmpty(m.body, 'body', 20000)
+    let commentId: number | null = null
+    let where = ''
+    if (m.task_id) {
+      const t = await loadTask(q, m.task_id)
+      where = ` on "${t.title}"`
+      const c = await q.query<{ id: number }>(
+        `insert into lp.comments (task_id, author, body, kind, mentions) values ($1, $2, $3, 'comment', $4) returning id`,
+        [t.id, actor, body, [to.id]],
+      )
+      commentId = c.rows[0].id
+    }
+    const id = await notify(q, {
+      recipient: to.id,
+      kind: 'message',
+      summary: `${me.display_name}${where}: ${body.slice(0, 160)}`,
+      body,
+      task_id: m.task_id ?? null,
+      comment_id: commentId,
+      created_by: actor,
+    })
+    await logEvent(q, {
+      actor,
+      kind: 'message.sent',
+      summary: `${me.display_name} → ${to.display_name}${where}: ${body.slice(0, 160)}`,
+      entity_type: m.task_id ? 'task' : 'actor',
+      entity_id: m.task_id ?? to.id,
+      task_id: m.task_id ?? null,
+      data: { notification_id: id, to: to.id },
+    })
+    return { notification_id: id, comment_id: commentId }
   }, actor)
 }
 

@@ -29,10 +29,12 @@ import {
   recentEvents,
   releaseLock,
   requestApproval,
+  sendMessage,
   touchActor,
   updateTask,
 } from './core.ts'
 import { logEvent } from './events.ts'
+import { ackDeliveries, dispatchDue, feed } from '../notify/deliver.ts'
 
 // The Instantly gate and its read-only lookups are server-only modules; they
 // load on first use so this table stays importable anywhere.
@@ -351,6 +353,24 @@ export const OPS: Record<string, Op> = {
       return inbox(db, actor, { unread_only: a.unread_only === undefined ? true : Boolean(a.unread_only), limit: a.limit == null ? undefined : Number(a.limit) })
     },
   },
+  send_message: {
+    args: '{to: actor id, body, task_id?}  -- a direct message to a person or agent; it goes out on their channels at once',
+    run: (db, actor, a) => sendMessage(db, actor, { to: String(a.to ?? ''), body: String(a.body ?? ''), task_id: a.task_id == null ? null : id(a.task_id) }),
+  },
+  feed: {
+    args: '{after_id?, limit?}  -- your new events (assignments, handoffs, mentions, messages, relay jobs). Ack each with feed_ack; unacked ones come back after 2 min',
+    run: async (db, actor, a) => {
+      await touchActor(db, actor)
+      const items = await feed(db, actor, { after_id: a.after_id == null ? null : Number(a.after_id), limit: a.limit == null ? undefined : Number(a.limit) })
+      // Reading the feed also pushes anything due (retries need no cron).
+      await dispatchDue(db).catch(() => undefined)
+      return items
+    },
+  },
+  feed_ack: {
+    args: '{ids: delivery_id[]}  -- "got it": marks those events delivered',
+    run: async (db, actor, a) => ackDeliveries(db, actor, Array.isArray(a.ids) ? a.ids.map((x) => id(x, 'ids')) : []),
+  },
   mark_read: {
     args: '{ids?: number[]}  -- omit to mark all read',
     run: async (db, actor, a) => ({ marked: await markRead(db, actor, Array.isArray(a.ids) ? a.ids.map((x) => id(x, 'ids')) : undefined) }),
@@ -455,6 +475,9 @@ export function routeToOp(method: string, path: string[]): { op: string; args: A
     if (method === 'GET' && b) return { op: 'memory_get', args: { key: decodeURIComponent(b) } }
   }
   if (method === 'GET' && a === 'inbox' && !b) return { op: 'inbox', args: {} }
+  if (method === 'GET' && a === 'feed' && !b) return { op: 'feed', args: {} }
+  if (method === 'POST' && a === 'feed' && b === 'ack' && !c) return { op: 'feed_ack', args: {} }
+  if (method === 'POST' && a === 'messages' && !b) return { op: 'send_message', args: {} }
   if (method === 'POST' && a === 'inbox' && b === 'read') return { op: 'mark_read', args: {} }
   if (method === 'POST' && a === 'presence') return { op: 'presence', args: {} }
   if (method === 'GET' && a === 'whoami') return { op: 'whoami', args: {} }

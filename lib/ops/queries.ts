@@ -12,6 +12,8 @@ export interface ActorView {
   locks_held: number
   unread: number
   memory_notes: number
+  /** Enabled delivery channels (migration 0013): 0 means it only hears about work when it checks in. */
+  channels: number
   /** Set while a human has this agent paused (migration 0008). */
   paused_at: Date | null
   paused_by_name: string | null
@@ -26,6 +28,7 @@ export async function listActors(q: Queryable): Promise<ActorView[]> {
             (select count(*)::int from lp.locks l where l.holder = a.id and l.lease_expires_at > now()) as locks_held,
             (select count(*)::int from lp.notifications n where n.recipient = a.id and n.read_at is null) as unread,
             (select count(*)::int from lp.agent_memory m where m.scope = a.id) as memory_notes,
+            (select count(*)::int from lp.delivery_channels c where c.actor_id = a.id and c.enabled) as channels,
             a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason
        from lp.actors a where a.active
       order by a.kind desc, a.last_seen_at desc nulls last, a.display_name`,
@@ -165,10 +168,10 @@ export async function feed(q: Queryable, f: { actor?: string | null; kind_prefix
 export async function actorDetail(q: Queryable, id: string) {
   const a = await q.query<{
     id: string; kind: string; display_name: string; harness: string | null; status_note: string | null; last_seen_at: Date | null; can_send: boolean
-    paused_at: Date | null; paused_by_name: string | null; pause_reason: string | null
+    paused_at: Date | null; paused_by_name: string | null; pause_reason: string | null; quiet_shabbos: boolean
   }>(
     `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at, a.can_send,
-            a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason
+            a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason, a.quiet_shabbos
        from lp.actors a where a.id = $1`,
     [id],
   )
@@ -180,8 +183,13 @@ export async function actorDetail(q: Queryable, id: string) {
     'select id, key, notes, source, updated_by, updated_at from lp.agent_memory where scope = $1 order by updated_at desc limit 200',
     [id],
   )
-  const notifications = await q.query<{ id: number; kind: string; summary: string; task_id: number | null; created_at: Date; read_at: Date | null }>(
-    'select id, kind, summary, task_id, created_at, read_at from lp.notifications where recipient = $1 order by created_at desc limit 30',
+  const notifications = await q.query<{
+    id: number; kind: string; summary: string; body: string | null; task_id: number | null; created_at: Date; read_at: Date | null
+    created_by: string | null; delivery: string; delivery_error: string | null
+  }>(
+    `select n.id, n.kind, n.summary, n.body, n.task_id, n.created_at, n.read_at, n.created_by, s.status as delivery, s.last_error as delivery_error
+       from lp.notifications n join lp.notification_delivery s on s.notification_id = n.id
+      where n.recipient = $1 order by n.created_at desc limit 30`,
     [id],
   )
   const locks = await q.query<{ resource: string; note: string | null; lease_expires_at: Date }>('select resource, note, lease_expires_at from lp.locks where holder = $1 and lease_expires_at > now()', [id])

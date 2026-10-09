@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import type { Db } from '@/lib/db/types'
 import { agentForToken, secretMatches } from './auth'
+import { agentForDbKey } from '../notify/keys'
 import { pauseBlockFor, pauseMessage } from './pause'
 
 /**
  * The one door every /api/ops/* route goes through.
  *
- *  1. Who is calling: an agent bearer token (OPS_AGENT_TOKENS), or, only where a
+ *  1. Who is calling: an agent bearer token (OPS_AGENT_TOKENS, or a key minted on
+ *     /agents and kept hashed in lp.agent_keys), or, only where a
  *     route allows it, Vercel Cron's CRON_SECRET (acts as 'system').
  *  2. Is that agent paused (or are all agents paused)? Then 423, nothing runs.
  *
@@ -25,6 +27,16 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 export async function opsGate(req: Request, opts: { allowCron?: boolean; unauthorizedMessage?: string } = {}): Promise<OpsGate> {
   const authorization = req.headers.get('authorization')
   let agent = agentForToken(authorization)
+  if (!agent && authorization) {
+    const kdb = getDb()
+    if (kdb) {
+      try {
+        agent = await agentForDbKey(kdb, authorization)
+      } catch {
+        agent = null // before migration 0013 runs there is no key table; env tokens still work
+      }
+    }
+  }
   if (!agent && opts.allowCron) {
     const m = /^Bearer\s+(.+)$/i.exec(authorization ?? '')
     if (m && secretMatches(m[1].trim(), process.env.CRON_SECRET)) agent = 'system'
