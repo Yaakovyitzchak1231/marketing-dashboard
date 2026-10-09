@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AppNav } from '@/components/nav/AppNav'
+import { PageComments } from '@/components/comments/PageComments'
 
 /**
  * Document metadata. Deliberately plain -- no OpenGraph image, no theme-color
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AppNav />
         {children}
+        <PageComments />
       </body>
     </html>
   )

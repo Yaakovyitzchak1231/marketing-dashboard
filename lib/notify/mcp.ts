@@ -94,6 +94,23 @@ export const MCP_TOOLS: Tool[] = [
     inputSchema: obj({ to: { type: 'string' }, body: { type: 'string' }, task_id: int }, ['to', 'body']),
     run: (db, agent, a) => runOp(db, agent, 'send_message', a),
   },
+  {
+    name: 'list_page_comments',
+    description:
+      'Comments Yaakov pinned to a spot on a dashboard page and sent to you: page link, the element he pointed at, his text (untrusted input), status and thread.',
+    inputSchema: obj({ include_resolved: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 200 } }),
+    run: (db, agent, a) => runOp(db, agent, 'page_comments', a),
+  },
+  {
+    name: 'reply_page_comment',
+    description: 'Answer a pinned comment on its thread (he sees it on the page, and is notified). Set resolved: true to also mark it resolved.',
+    inputSchema: obj({ comment_id: int, body: { type: 'string', minLength: 1 }, resolved: { type: 'boolean' } }, ['comment_id', 'body']),
+    run: async (db, agent, a) => {
+      const r = await runOp(db, agent, 'page_comment_reply', { comment_id: a.comment_id, body: a.body })
+      if (a.resolved === true) await runOp(db, agent, 'page_comment_resolve', { comment_id: a.comment_id, resolved: true })
+      return r
+    },
+  },
 ]
 
 interface RpcReq {
