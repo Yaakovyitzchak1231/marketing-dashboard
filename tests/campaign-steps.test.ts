@@ -6,6 +6,7 @@ import { createStep, updateStep, deleteStep, reorderSteps, listSteps, parseStepI
 import { previewLead } from '@/lib/campaign-steps/preview'
 import { linkInstantly, requestPush, cancelPush, parseInstantlyId } from '@/lib/campaign-steps/instantly'
 import { DEFAULT_FIELDS } from '@/lib/campaign-steps/adapter'
+import { ruleSetForCampaign } from '@/lib/rules/store'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown } }))
@@ -196,6 +197,23 @@ describe('campaign steps (real Postgres via PGlite)', () => {
     await expect(cancelPush(db, 'hermes', camp, r.id)).rejects.toMatchObject({ status: 403 })
     expect((await cancelPush(db, 'tab', camp, r.id)).status).toBe('cancelled')
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('the Instantly upload scores with the linked dashboard campaign\'s own rules', async () => {
+    const pool = await ruleSetForCampaign(db, IID)
+    expect(pool.scope).toBe('pool')
+    const { rows } = await db.query<{ id: number }>(
+      `insert into lp.rule_sets (name, scope, requirements, fields, created_by, updated_by) values ('MD fall own rules', 'template', '[]', $1::jsonb, 'owner', 'owner') returning id`,
+      [JSON.stringify(DEFAULT_FIELDS)],
+    )
+    await db.query(`update lp.campaigns set rule_set_id = $1 where id = $2`, [rows[0].id, camp])
+    expect((await ruleSetForCampaign(db, IID.toUpperCase())).id).toBe(rows[0].id)
+    const other = await campaign(db, 'Second')
+    await expect(linkInstantly(db, 'owner', other, IID)).rejects.toMatchObject({ status: 409 })
+    // The preview carries the evaluator's live verdict under those rules.
+    const p = await previewLead(db, camp, gem)
+    expect(p.fields_from).toBe('rules: MD fall own rules')
+    expect(p.verdict?.tier).toBeDefined()
   })
 
   it('serves the same contract to people and to agents (ops token), logging the right actor', async () => {

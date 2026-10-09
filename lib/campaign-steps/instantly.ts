@@ -53,6 +53,13 @@ export async function linkInstantly(db: Db, actor: string, campaignId: number, r
     const c = await getCampaign(q, campaignId)
     if (!c) throw new StepsError(`No campaign ${campaignId}.`, 404)
     if (c.instantly_campaign_id === next) return { campaign: c, changed: false }
+    if (next) {
+      const { rows: other } = await q.query<{ id: number; name: string }>(
+        `select id, name from lp.campaigns where instantly_campaign_id = $1 and id <> $2 limit 1`,
+        [next, campaignId],
+      )
+      if (other[0]) throw new StepsError(`That Instantly campaign is already linked to "${other[0].name}". Unlink it there first.`, 409)
+    }
     const stamp = (await columnsOf(q, 'campaigns')).has('updated_by') ? ', updated_by = $3' : ''
     await q.query(
       `update lp.campaigns set instantly_campaign_id = $2${stamp}, instantly_linked_at = case when $2::text is null then null else now() end,

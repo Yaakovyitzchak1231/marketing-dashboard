@@ -79,10 +79,27 @@ export async function effectiveRuleSet(
   return row(rows[0])
 }
 
-/** The rule set an Instantly campaign uses right now (own > pool > default). */
+/**
+ * The rule set an Instantly campaign uses right now. When a dashboard campaign is linked to
+ * this Instantly campaign (0012: lp.campaigns.instantly_campaign_id), its rules win, so the
+ * upload scores leads exactly as the dashboard campaign shows them:
+ *   linked campaign's own set (rule_set_id) > Instantly-keyed set > pool (linked campaign's, else campaign_meta) > default.
+ */
 export async function ruleSetForCampaign(q: Queryable, campaignId: string | null, segmentHint?: string | null): Promise<RuleSetRow> {
   const { rows } = await q.query<{ segment: string | null }>('select segment from lp.campaign_meta where campaign_id = $1', [campaignId ?? ''])
-  return effectiveRuleSet(q, { campaignKey: campaignId, segment: rows[0]?.segment ?? segmentHint ?? null })
+  const linked = campaignId
+    ? (
+        await q.query<{ rule_set_id: number | null; pool: string | null }>(
+          `select rule_set_id, pool from lp.campaigns where instantly_campaign_id = $1 order by id limit 1`,
+          [campaignId.toLowerCase()],
+        )
+      ).rows[0]
+    : undefined
+  return effectiveRuleSet(q, {
+    ruleSetId: linked?.rule_set_id == null ? null : Number(linked.rule_set_id),
+    campaignKey: campaignId,
+    segment: linked?.pool ?? rows[0]?.segment ?? segmentHint ?? null,
+  })
 }
 
 /** The rule sets that score a lead in this pool: the pool's own, and campaigns with their own rules in that pool. */

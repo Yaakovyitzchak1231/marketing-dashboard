@@ -3,7 +3,7 @@
  * missing and the copy warnings. Reads only; writes nothing.
  */
 import type { Queryable } from '../db/types.ts'
-import { fieldsForCampaign, getCampaign, loadCampaignLeads, storedVerdict, type CampaignRef, type StoredVerdict } from './adapter.ts'
+import { fieldsForCampaign, getCampaign, liveVerdict, loadCampaignLeads, type CampaignRef, type LiveVerdict } from './adapter.ts'
 import { copyChecks, fillTemplate, type CopyWarning, type Filled, type ValueSource } from './render.ts'
 import { loadLead, resolveValues } from './resolve.ts'
 import { listSteps, StepsError, type StepRow } from './store.ts'
@@ -43,8 +43,8 @@ export interface LeadPreview {
   leftovers: string[]
   outlook: CopyOutlook
   outlook_why: string[]
-  /** The rules evaluator's stored verdict (0010), when there is one. */
-  verdict: StoredVerdict | null
+  /** The rules evaluator's verdict for this lead under the campaign's rules (eligibility: email, holds, requirements). */
+  verdict: LiveVerdict | null
 }
 
 export async function previewLead(q: Queryable, campaignId: number, companyId: number, now: Date = new Date()): Promise<LeadPreview> {
@@ -55,7 +55,7 @@ export async function previewLead(q: Queryable, campaignId: number, companyId: n
   const lead = await loadLead(q, companyId, cl?.contact_id ?? null)
   if (!lead) throw new StepsError(`No lead ${companyId}.`, 404)
   const overrides = cl?.overrides ?? {}
-  const { fields, from, rule_set_id } = await fieldsForCampaign(q, campaign)
+  const { fields, from } = await fieldsForCampaign(q, campaign)
   const values = resolveValues(fields, lead, overrides, now)
   const steps = await listSteps(q, campaignId)
 
@@ -94,7 +94,7 @@ export async function previewLead(q: Queryable, campaignId: number, companyId: n
     why.push(`Would go out with ${leftovers.map((n) => `{{${n}}}`).join(', ')} unfilled: add a value, an override, or a fallback.`)
   }
   if (!steps.length) why.push('This campaign has no steps yet.')
-  const verdict = await storedVerdict(q, rule_set_id, companyId)
+  const verdict = await liveVerdict(q, campaign, companyId, now)
 
   return {
     campaign: { id: campaign.id, name: campaign.name, segment: campaign.segment },

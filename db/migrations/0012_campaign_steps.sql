@@ -37,6 +37,8 @@ create table if not exists lp.campaign_leads (
 alter table lp.campaigns add column if not exists instantly_campaign_id text;
 alter table lp.campaigns add column if not exists instantly_linked_at   timestamptz;
 alter table lp.campaigns add column if not exists instantly_linked_by   text references lp.actors(id);
+-- One dashboard campaign per Instantly campaign, so the upload knows whose rules to use.
+create unique index if not exists campaigns_instantly_uq on lp.campaigns (instantly_campaign_id) where instantly_campaign_id is not null;
 
 -- ---------------------------------------------------------------- steps
 create table if not exists lp.campaign_steps (

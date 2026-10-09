@@ -205,7 +205,7 @@ Each dashboard campaign has ordered email steps (Steps tab: `/campaigns/:id/step
   activity log with who did it and each field's old → new (a deleted step's full text stays in the log).
 - **Where `{{field}}` values come from**, first match wins: the campaign-lead override → the lead's own
   field → an enrichment fact (best confidence, then most recently checked) → the field's fallback text.
-  The field list comes from the campaign's lead rules (0010: own set `c:<id>` → pool → default).
+  The field list comes from the campaign's lead rules (0010: its own set `rule_set_id` → its pool's → default).
 - **Preview:** pick a lead and see every step filled. It lists each value and where it came from, flags
   required fields with no real value (→ Ready-generic copy) and any `{{...}}` that would go out unfilled
   (→ would be Parked), and shows the rules evaluator's stored verdict when there is one.
@@ -214,6 +214,8 @@ Each dashboard campaign has ordered email steps (Steps tab: `/campaigns/:id/step
   "Ask to push" creates a *pending request*; nothing in this feature calls Instantly. Only the human
   approval flow (Needs your OK, PR #46) sends, and only Ready leads. Agents can edit steps and ask for a
   push; they cannot link or approve (a database trigger refuses an agent's approval).
+  One dashboard campaign per Instantly campaign: Add to Instantly then scores leads with the linked
+  dashboard campaign's rules (`ruleSetForCampaign`), so the upload matches what the Steps tab shows.
 
 API (same contract on both doors; see `lib/campaign-steps/http.ts`):
 people `/api/campaign-steps/:campaignId/...` (login), agents `/api/ops/campaign-steps/:campaignId/...` (ops token).

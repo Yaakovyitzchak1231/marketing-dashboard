@@ -88,7 +88,7 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
               {p.verdict ? (
                 <Pill tone={p.verdict.tier === 'parked' ? 'bad' : 'neutral'} title={p.verdict.reasons.map((r) => r.label).join('; ')}>
                   Rules: {TIER[p.verdict.tier] ?? p.verdict.tier}
-                  {p.verdict.stale ? ' (re-scoring)' : ''}
+                  {p.verdict.batch === 'role-inbox' ? ' · role-inbox batch' : ''}
                 </Pill>
               ) : null}
             </div>

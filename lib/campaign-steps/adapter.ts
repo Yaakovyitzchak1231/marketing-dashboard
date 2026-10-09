@@ -8,12 +8,16 @@
  * defaults (0012 itself creates a minimal lp.campaigns / lp.campaign_leads so the
  * steps work on their own). Every read checks the table/column exists first.
  *
- * TODO(after 0010 merges): import PersonalizationField from '@/lib/rules/schema' and
- *   ruleSetForCampaign from '@/lib/rules/store' instead of the local copies below.
+ * Lead rules (0010, PR #48) are merged into this branch: fields and verdicts come from
+ * effectiveRuleSet / evaluateCompanies (lib/rules).
  * TODO(after 0011 merges): if B names the per-lead overrides differently
  *   (e.g. a separate key/value table), change loadCampaignLeads() only.
  */
 import type { Queryable } from '../db/types.ts'
+import type { PersonalizationField } from '../rules/schema.ts'
+import { effectiveRuleSet } from '../rules/store.ts'
+import { evaluateCompanies } from '../rules/recompute.ts'
+import type { LeadVerdict } from '../rules/evaluate.ts'
 
 export interface CampaignRef {
   id: number
@@ -25,21 +29,7 @@ export interface CampaignRef {
   instantly_linked_by: string | null
 }
 
-/** Same shape as worker A's PersonalizationField (lib/rules/schema.ts, 0010). */
-export interface PersonalizationField {
-  id: string
-  /** The merge key: {{name}} in a step. */
-  name: string
-  /** contact.<column>, company.<column>, or enrichment:<fact key>. */
-  source: string
-  /** Needed for Ready-personalized: without a real value the lead is Ready-generic. */
-  required: boolean
-  /** Sent when there is no real value. Never counts as a real value. */
-  fallback?: string | null
-  min_confidence?: 'high' | 'medium' | 'low' | null
-  max_age_days?: number | null
-  enabled: boolean
-}
+export type { PersonalizationField }
 
 export interface CampaignLead {
   company_id: number
@@ -126,64 +116,34 @@ export async function loadCampaignLeads(q: Queryable, campaignId: number, opts: 
   }))
 }
 
-/** Worker A's key for a workspace campaign's own rule set (EVALUATOR_INTERFACE.md). */
-export const campaignRuleKey = (id: number) => `c:${id}`
-
-export interface StoredVerdict {
-  tier: 'ready_personalized' | 'ready_generic' | 'parked'
-  batch: string
-  reasons: { rule: string; label: string; detail: string; standing: boolean }[]
-  missing: string[]
-  stale: boolean
-}
+export type LiveVerdict = Pick<LeadVerdict, 'tier' | 'batch' | 'reasons' | 'missing' | 'contact_id'>
 
 /**
- * The evaluator's stored verdict for this lead under that rule set (worker A's
- * lp.lead_evaluations, 0010), or null when 0010 isn't there or the lead isn't scored yet.
- * TODO(after 0010 merges): call evaluateCompanies(q, ruleSet, [companyId]) from
- * '@/lib/rules/recompute' for a live verdict instead of the stored one.
+ * The rules evaluator's verdict for this lead, scored live against the campaign's rule set
+ * (same evaluator as the overview, the lead page and the Instantly upload).
  */
-export async function storedVerdict(q: Queryable, ruleSetId: number | null, companyId: number): Promise<StoredVerdict | null> {
-  if (ruleSetId == null) return null
-  const cols = await columnsOf(q, 'lead_evaluations')
-  if (!cols.size) return null
-  const { rows } = await q.query<StoredVerdict>(
-    `select tier, batch, reasons, missing, stale from lp.lead_evaluations where rule_set_id = $1 and company_id = $2`,
-    [ruleSetId, companyId],
-  )
-  const r = rows[0]
-  if (!r) return null
-  const arr = (v: unknown) => (typeof v === 'string' ? JSON.parse(v) : Array.isArray(v) ? v : [])
-  return { ...r, reasons: arr(r.reasons), missing: arr(r.missing) }
+export async function liveVerdict(q: Queryable, c: CampaignRef, companyId: number, now = new Date()): Promise<LiveVerdict | null> {
+  const rs = await campaignRuleSet(q, c)
+  if (!rs) return null
+  const [v] = await evaluateCompanies(q, rs, [companyId], now)
+  return v ? { tier: v.tier, batch: v.batch, reasons: v.reasons, missing: v.missing, contact_id: v.contact_id } : null
 }
 
-/**
- * The personalization fields this campaign uses: its own rule set, else its pool's,
- * else the default (worker A's 0010). Without 0010, DEFAULT_FIELDS.
- */
+/** The campaign's rule set: its own (campaigns.rule_set_id) > its pool's > the default. Null before 0010 is migrated. */
+export async function campaignRuleSet(q: Queryable, c: CampaignRef) {
+  if (!(await columnsOf(q, 'rule_sets')).size) return null
+  try {
+    return await effectiveRuleSet(q, { ruleSetId: c.rule_set_id, segment: c.segment })
+  } catch {
+    return null
+  }
+}
+
+/** The personalization fields this campaign uses (from its rule set); DEFAULT_FIELDS when there is none. */
 export async function fieldsForCampaign(q: Queryable, c: CampaignRef): Promise<{ fields: PersonalizationField[]; from: string; rule_set_id: number | null }> {
-  const rs = await columnsOf(q, 'rule_sets')
-  if (rs.size && rs.has('fields')) {
-    const { rows } = await q.query<{ id: number; name: string; fields: unknown }>(
-      `select id, name, fields from lp.rule_sets r
-        where not r.archived and (
-              (r.scope = 'campaign' and r.campaign_id = $3)
-           or ($1::bigint is not null and r.id = $1)
-           or (r.scope = 'pool' and r.segment = $2)
-           or r.scope = 'default')
-        order by case when r.scope = 'campaign' and r.campaign_id = $3 then 0 when r.id = $1 then 1 when r.scope = 'pool' then 2 else 3 end
-        limit 1`,
-      [c.rule_set_id, c.segment, campaignRuleKey(c.id)],
-    )
-    if (rows[0]) {
-      const raw = typeof rows[0].fields === 'string' ? JSON.parse(rows[0].fields) : rows[0].fields
-      const fields = (Array.isArray(raw) ? raw : []) as PersonalizationField[]
-      return {
-        fields: fields.filter((f) => f && f.enabled !== false && f.name && f.source),
-        from: `rules: ${rows[0].name}`,
-        rule_set_id: Number(rows[0].id),
-      }
-    }
+  const rs = await campaignRuleSet(q, c)
+  if (rs) {
+    return { fields: rs.fields.filter((f) => f && f.enabled !== false && f.name && f.source), from: `rules: ${rs.name}`, rule_set_id: rs.id }
   }
   return { fields: DEFAULT_FIELDS, from: 'default fields (lead rules not set up yet)', rule_set_id: null }
 }
