@@ -9,7 +9,7 @@ import { nameAddressKey, normalizeDomain, normalizePhone } from '../leads/normal
 
 export interface CompanyInput {
   name: string
-  segment?: 'jeweler' | 'ai_agency' | 'other'
+  segment?: 'jeweler' | 'ai_agency' | 'ai_builder' | 'other'
   vertical?: string | null
   website?: string | null
   phone?: string | null

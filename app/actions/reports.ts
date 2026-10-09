@@ -112,7 +112,8 @@ export async function previewAddLeadsAction(f: FormData) {
   } catch {
     /* name is cosmetic */
   }
-  const preview = await buildAddPreview(db(), { campaign_id: campaignId, campaign_name: campaignName, company_ids: companyIds }, lookup)
+  const batch = s(f, 'batch') === 'role-inbox' ? 'role-inbox' : 'standard'
+  const preview = await buildAddPreview(db(), { campaign_id: campaignId, campaign_name: campaignName, company_ids: companyIds, batch }, lookup)
   const row = await savePreview(db(), ME, preview)
   redirect(`/leads/instantly?action=${row.id}`)
 }

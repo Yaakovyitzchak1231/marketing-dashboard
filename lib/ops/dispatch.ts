@@ -40,6 +40,13 @@ const gate = () => import('../instantly/gate.ts')
 const lookups = () => import('../instantly/lookup.ts')
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
+import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
+import { leadReadiness } from '../rules/readiness.ts'
+import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
+import { FIELD_CATALOG, OPS as RULE_OPS } from '../rules/schema.ts'
+import { STANDING_RULES } from '../rules/standing.ts'
+import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
+import { RulesError } from '../rules/schema.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -258,7 +265,7 @@ export const OPS: Record<string, Op> = {
     },
   },
   instantly_add_leads: {
-    args: '{campaign_id, campaign_name?, company_ids?: number[], emails?: string[], reason, task_id?, expires_in_hours? (default 72)}  -> NEVER sends: queues the change with a preview in "Needs your OK"; a human approves (the dashboard then adds them) or rejects with a reason. Poll get_approval / get_instantly_action.',
+    args: '{campaign_id, campaign_name?, company_ids?: number[], emails?: string[], batch?: "standard"|"role-inbox" (default standard; role-inbox = only role inboxes released after owner research came up empty), reason, task_id?, expires_in_hours? (default 72)}  -> NEVER sends: queues the change with a preview in "Needs your OK"; a human approves (the dashboard then adds them) or rejects with a reason. Poll get_approval / get_instantly_action.',
     run: async (db, actor, a) =>
       (await gate()).requestAddLeads(
         db,
@@ -268,6 +275,7 @@ export const OPS: Record<string, Op> = {
           campaign_name: a.campaign_name,
           company_ids: a.company_ids,
           emails: a.emails,
+          batch: a.batch,
           reason: requireReason(a),
           task_id: a.task_id == null ? null : id(a.task_id),
           expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
@@ -346,6 +354,52 @@ export const OPS: Record<string, Op> = {
     args: '{ids?: number[]}  -- omit to mark all read',
     run: async (db, actor, a) => ({ marked: await markRead(db, actor, Array.isArray(a.ids) ? a.ids.map((x) => id(x, 'ids')) : undefined) }),
   },
+  list_rule_sets: {
+    args: '{}  -- every lead rule set (default, pools, campaigns, templates) with counts; read-only',
+    run: async (db) => {
+      const [sets, counts, jobs] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db)])
+      return {
+        rule_sets: sets.map((s) => ({ ...s, counts: counts.get(s.id) ?? null, rescore: jobs.get(s.id) ?? null })),
+        standing_rules: STANDING_RULES,
+        fields: FIELD_CATALOG,
+        conditions: RULE_OPS,
+      }
+    },
+  },
+  get_rule_set: {
+    args: '{rule_set_id?: number, campaign_id?: string}  -- one rule set, or the one an Instantly campaign uses now; read-only',
+    run: async (db, _actor, a) => {
+      const rs = a.rule_set_id != null ? await getRuleSet(db, id(a.rule_set_id, 'rule_set_id')) : await ruleSetForCampaign(db, str(a.campaign_id) ?? null)
+      if (!rs) throw new OpsError('rule set not found', 404)
+      return { ...rs, proposals: await listProposals(db, rs.id) }
+    },
+  },
+  lead_readiness: {
+    args: '{company_id}  -- Ready-personalized / Ready-generic / Parked (with reasons) under every rule set for the lead\'s pool',
+    run: async (db, _actor, a) => {
+      const out = await leadReadiness(db, id(a.company_id, 'company_id'))
+      return out.map((r) => ({ rule_set: { id: r.ruleSet.id, name: r.ruleSet.name, scope: r.ruleSet.scope, campaign_id: r.ruleSet.campaign_id, version: r.ruleSet.version }, verdict: r.verdict }))
+    },
+  },
+  propose_rule_change: {
+    args: '{rule_set_id, name, requirements: [...], fields: [...], note?}  -- agents cannot change rules; this puts the change in Needs your OK and a person applies it on /rules/:id',
+    run: (db, actor, a) => proposeRuleChange(db, actor, a),
+  },
+  mark_owner_research_exhausted: {
+    args: '{company_id, exhausted?: boolean (default true), note?}  -- the owner\'s own email can\'t be found; releases the store\'s role inbox to role-inbox batches (still only a human sends)',
+    run: async (db, actor, a) => {
+      try {
+        return await setOwnerResearchExhausted(db, actor, id(a.company_id, 'company_id'), a.exhausted === undefined ? true : a.exhausted === true || a.exhausted === 'true', str(a.note) ?? null)
+      } catch (e) {
+        if (e instanceof RulesError) throw new OpsError(e.message, e.status)
+        throw e
+      }
+    },
+  },
+  rules_recompute: {
+    args: '{budget_ms?: number}  -- run one re-scoring pass (max 25 s); changes no rules',
+    run: (db, _actor, a) => runRecompute(db, { budgetMs: Math.min(25_000, Math.max(1_000, Number(a.budget_ms) || 10_000)) }),
+  },
   recent_events: {
     args: '{limit?, since_id?, actor?, kind_prefix?}',
     run: (db, _actor, a) =>
@@ -401,5 +455,13 @@ export function routeToOp(method: string, path: string[]): { op: string; args: A
   if (method === 'POST' && a === 'inbox' && b === 'read') return { op: 'mark_read', args: {} }
   if (method === 'POST' && a === 'presence') return { op: 'presence', args: {} }
   if (method === 'GET' && a === 'whoami') return { op: 'whoami', args: {} }
+  if (a === 'rules') {
+    if (method === 'GET' && !b) return { op: 'list_rule_sets', args: {} }
+    if (method === 'POST' && b === 'recompute' && !c) return { op: 'rules_recompute', args: {} }
+    if (method === 'GET' && b && /^\d+$/.test(b) && !c) return { op: 'get_rule_set', args: { rule_set_id: Number(b) } }
+    if (method === 'POST' && b && /^\d+$/.test(b) && c === 'propose') return { op: 'propose_rule_change', args: { rule_set_id: Number(b) } }
+  }
+  if (method === 'GET' && a === 'leads' && b && /^\d+$/.test(b) && c === 'readiness') return { op: 'lead_readiness', args: { company_id: Number(b) } }
+  if (method === 'POST' && a === 'leads' && b && /^\d+$/.test(b) && c === 'owner-research-exhausted') return { op: 'mark_owner_research_exhausted', args: { company_id: Number(b) } }
   return null
 }

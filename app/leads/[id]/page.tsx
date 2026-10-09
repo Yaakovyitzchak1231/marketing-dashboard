@@ -12,6 +12,9 @@ import { EditFields } from '@/components/leads/EditFields'
 import { EDITABLE_CONTACT_STATUSES, FIELD_LABELS } from '@/lib/leads/edit-fields'
 import { SEGMENT_LABELS, STAGE_LABELS } from '@/lib/leads/filters'
 import type { Stage, VerificationStatus } from '@/lib/leads/types'
+import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
+import { TierPill } from '@/components/rules/bits'
+import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +65,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     )
   }
   if (!/^\d{1,15}$/.test(id)) notFound()
-  const d = await getLeadDetail(db, Number(id))
+  const [d, readiness] = await Promise.all([getLeadDetail(db, Number(id)), leadReadiness(db, Number(id))])
   if (!d) notFound()
   const c = d.company
   const site = safeHref(c.website)
@@ -107,6 +110,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </dl>
           </Card>
 
+          <Readiness list={readiness} contacts={d.contacts} />
+          <Card className="px-4 py-3">
+            <OwnerResearchToggle
+              companyId={c.id}
+              exhausted={Boolean(c.owner_research_exhausted_at)}
+              at={c.owner_research_exhausted_at ? shortDate(c.owner_research_exhausted_at) : null}
+              by={c.owner_research_exhausted_by ? (d.actors.find((a) => a.id === c.owner_research_exhausted_by)?.display_name ?? c.owner_research_exhausted_by) : null}
+            />
+          </Card>
+
           <Section title="Contacts" meta={`${d.contacts.length}`}>
             {d.contacts.length ? (
               <ul className="divide-y divide-line-soft">
@@ -147,13 +160,14 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
           <Section title="Research findings" meta={`${d.enrichment.length}`}>
             {d.enrichment.length ? (
-              <Table head={['Field', 'Value', 'Confidence', 'How', 'Evidence']}>
+              <Table head={['Field', 'Value', 'Confidence', 'How', 'Last checked', 'Evidence']}>
                 {d.enrichment.map((e) => (
                   <tr key={e.id}>
                     <Td className="whitespace-nowrap text-ink-muted">{e.field.replace(/_/g, ' ')}</Td>
                     <Td className="max-w-[240px] text-ink [overflow-wrap:anywhere]">{e.value}</Td>
                     <Td>{e.confidence ? <Pill tone={e.confidence === 'high' ? 'good' : e.confidence === 'medium' ? 'neutral' : 'warn'}>{e.confidence}</Pill> : <Dash />}</Td>
                     <Td className="min-w-[120px] text-[12px] text-ink-muted">{[e.method.replace(/_/g, ' '), e.actor_name].filter(Boolean).join(' · ')}</Td>
+                    <Td className="whitespace-nowrap tabular-nums text-[12px] text-ink-faint">{e.last_checked_at ? shortDate(e.last_checked_at) : <Dash />}</Td>
                     <Td>{safeHref(e.evidence_url) ? <a href={safeHref(e.evidence_url)!} target="_blank" rel="noreferrer noopener" className="text-accent">source</a> : <Dash />}</Td>
                   </tr>
                 ))}
@@ -343,4 +357,48 @@ function Td({ children, className = '' }: { children: ReactNode; className?: str
 
 function Dash() {
   return <span className="text-unavailable">—</span>
+}
+
+/** Ready-personalized / Ready-generic / Parked under every rule set for this lead's pool (live, same evaluator as everywhere). */
+function Readiness({ list, contacts }: { list: LeadReadiness[]; contacts: LeadDetail['contacts'] }) {
+  if (!list.length) return null
+  const email = (cid: number | null) => contacts.find((c) => c.id === cid)?.email ?? null
+  return (
+    <Section title="Ready for campaigns" meta="Scored live against the lead rules">
+      <ul className="divide-y divide-line-soft">
+        {list.map(({ ruleSet, verdict }) => (
+          <li key={ruleSet.id} className="px-4 py-2.5 text-[13px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <TierPill tier={verdict.tier} />
+              <Link href={`/rules/${ruleSet.id}`} prefetch={false} className="font-medium text-ink hover:text-accent">
+                {ruleSet.name}
+              </Link>
+              {verdict.contact_id ? <span className="text-[12px] text-ink-faint">via {email(verdict.contact_id) ?? `contact ${verdict.contact_id}`}</span> : null}
+            </div>
+            {verdict.reasons.length ? (
+              <ul className="mt-1 list-disc pl-5 text-[12.5px] text-ink-muted">
+                {verdict.reasons.map((r, i) => (
+                  <li key={i}>
+                    {r.label}: {r.detail}
+                    {r.standing ? <span className="text-ink-faint"> (standing rule)</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {verdict.tier !== 'parked' && verdict.batch === 'role-inbox' ? (
+              <p className="mt-1 text-[12.5px] text-ink-muted">Role inbox: goes out only in a role-inbox batch, with no-name copy.</p>
+            ) : null}
+            {verdict.tier !== 'parked' && verdict.batch !== 'role-inbox' && verdict.missing.length ? (
+              <p className="mt-1 text-[12.5px] text-ink-muted">Generic because these have no real value: {verdict.missing.join(', ')}</p>
+            ) : null}
+            {verdict.tier !== 'parked' && Object.keys(verdict.merge).length ? (
+              <p className="mt-1 text-[12px] text-ink-faint [overflow-wrap:anywhere]">
+                Would send: {Object.entries(verdict.merge).map(([k, v]) => `{{${k}}} = “${v}”`).join(' · ')}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
 }

@@ -18,6 +18,8 @@ export interface SourceRow { id: number; contact_id: number | null; kind: string
 export interface EnrichmentRow {
   id: number; contact_id: number | null; field: string; value: string; confidence: string | null
   evidence_url: string | null; method: string; actor_id: string | null; actor_name: string | null; created_at: Date
+  /** When someone last confirmed the fact still holds (migration 0010); freshness rules read this. */
+  last_checked_at: Date | null
 }
 export interface VerificationRow {
   id: number; contact_id: number | null; email: string; provider: string; result: string; verdict: string
@@ -65,7 +67,7 @@ export async function getLeadDetail(db: Queryable, id: number): Promise<LeadDeta
     ),
     db.query<EnrichmentRow>(
       `select e.id, e.contact_id, e.field, e.value, e.confidence, e.evidence_url, e.method, e.actor_id,
-              a.display_name as actor_name, e.created_at
+              a.display_name as actor_name, e.created_at, e.last_checked_at
          from lp.enrichment e left join lp.actors a on a.id = e.actor_id
         where e.company_id = $1 order by e.field, e.created_at desc`,
       [id],

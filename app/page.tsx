@@ -7,6 +7,7 @@ import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitive
 import { STAGE_LABELS } from '@/lib/leads/filters'
 import { STAGES } from '@/lib/leads/types'
 import { dateTime } from '@/components/leads/pills'
+import { kickRecompute } from '@/lib/rules/kick'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,8 @@ export default async function OverviewPage() {
     )
   }
   const o = await loadOverview(db)
+  // Keep stored Ready/Parked scores fresh without making this page wait.
+  if (o.readiness && (o.readiness.rescoring || o.readiness.stale || o.readiness.scored < o.readiness.companies)) kickRecompute(db)
   const maxStage = Math.max(1, ...STAGES.map((s) => o.byStage[s]))
   return (
     <PageShell title="Overview" meta={`${fmt(o.companies)} leads · ${fmt(o.contacts)} email addresses`}>
@@ -32,12 +35,40 @@ export default async function OverviewPage() {
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card md:grid-cols-3 xl:grid-cols-6">
             <Tile label="Replies waiting" value={o.repliesWaiting} href="/replies" tone={o.repliesWaiting ? 'accent' : undefined} note="human replies, not yet answered" />
             <Tile label="Interested" value={o.interested} href="/replies#interested" note="from Instantly labels" />
-            <Tile label="Ready to send" value={o.readyToSend} href="/leads?verification=valid" note="verified emails not in a campaign" />
+            {o.readiness && o.readiness.scored > 0 ? (
+              <Tile
+                label="Ready"
+                value={o.readiness.personalized + o.readiness.generic}
+                href="/rules"
+                note={`${fmt(o.readiness.personalized)} personalized · ${fmt(o.readiness.generic)} generic · ${fmt(o.readiness.parked)} parked${o.readiness.rescoring ? ' · re-scoring' : ''}`}
+              />
+            ) : (
+              <Tile label="Ready to send" value={o.readyToSend} href="/leads?verification=valid" note="verified emails not in a campaign (lead rules not scored yet)" />
+            )}
             <Tile label="Needs verification" value={o.needsVerificationCompanies} href="/leads?view=verify" note={`${fmt(o.unverifiedContacts)} unverified emails`} />
             <Tile label="Needs research" value={o.needsResearch} href="/leads?view=research" note={o.researchQueued ? `${fmt(o.researchQueued)} more queued` : 'no site or owner work done'} />
             <Tile label="In campaigns" value={o.inCampaigns} href="/leads?view=campaign" note="leads with Instantly activity" />
           </div>
         </section>
+
+        {o.readiness && o.readiness.topReasons.length ? (
+          <section aria-labelledby="parked-h">
+            <SectionHeader id="parked-h" title="Why leads are parked" meta={<Link href="/rules" className="text-accent">Lead rules</Link>} />
+            <Card className="px-4 py-3 text-[13px]">
+              <ul className="space-y-0.5">
+                {o.readiness.topReasons.map((r) => (
+                  <li key={r.rule} className="text-ink-muted">
+                    <b className="font-semibold tabular-nums text-ink">{fmt(r.n)}</b> {r.label}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[11px] text-ink-faint">
+                Under each lead&apos;s pool rules · {fmt(o.readiness.scored)} of {fmt(o.readiness.companies)} leads scored
+                {o.readiness.stale ? ` · ${fmt(o.readiness.stale)} waiting to refresh` : ''}
+              </p>
+            </Card>
+          </section>
+        ) : null}
 
         <div className="grid gap-7 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
           <section aria-labelledby="stage-h">

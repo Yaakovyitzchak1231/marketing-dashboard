@@ -79,6 +79,12 @@ describe('approval gate before Instantly', () => {
     await expect(requestAddLeads(db, 'hermes', { campaign_id: '../leads', company_ids: [co.a] }, null)).rejects.toThrow(/campaign id/)
   })
 
+  it('an agent can ask for the role-inbox batch; the batch rides the stored preview', async () => {
+    const r = await requestAddLeads(db, 'hermes', { campaign_id: CID, company_ids: [co.a], batch: 'role-inbox', reason: 'role inboxes' }, null)
+    expect(r.action.preview?.batch).toBe('role-inbox')
+    await expect(requestAddLeads(db, 'hermes', { campaign_id: CID, company_ids: [co.a], batch: 'everyone', reason: 'x' }, null)).rejects.toThrow(/batch must be/)
+  })
+
   it('only a human decides: an agent is refused, the generic approve path is refused, own requests are refused', async () => {
     const r = await requestAddLeads(db, 'tab', { campaign_id: CID, company_ids: [co.a], reason: 'x' }, null)
     await expect(decideInstantlyApproval(db, neverCalled(), 'hermes', r.approval.id, 'approved', { confirm: true })).rejects.toThrow(/only a signed-in human/)

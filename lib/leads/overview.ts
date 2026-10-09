@@ -3,6 +3,7 @@ import type { Queryable } from '@/lib/db/types'
 import { STAGES, type Stage } from './types'
 import { loadReplyDesk } from './replies'
 import { TOUCH_COMPANY_REL } from './queries'
+import { overviewReadiness, type OverviewReadiness } from '../rules/readiness'
 
 export interface OverviewEvent { id: number; at: Date; actor: string | null; actor_name: string | null; kind: string; summary: string; entity_type: string | null; entity_id: string | null }
 
@@ -16,8 +17,10 @@ export interface OverviewData {
   /** Companies with at least one unverified email; and the unverified emails themselves. */
   needsVerificationCompanies: number
   unverifiedContacts: number
-  /** Emails verified valid, not do-not-contact, not on hold, and not yet in Instantly / sent / replied / bounced / rejected. */
+  /** Emails verified valid, not do-not-contact, not on hold, and not yet in Instantly / sent / replied / bounced / rejected (email-only count). */
   readyToSend: number
+  /** Leads scored by the lead-rules evaluator under their pool's rules; null before migration 0010. */
+  readiness: OverviewReadiness | null
   /** Companies with at least one Instantly event (campaign_touches). */
   inCampaigns: number
   repliesWaiting: number
@@ -30,7 +33,7 @@ export interface OverviewData {
 }
 
 export async function loadOverview(db: Queryable): Promise<OverviewData> {
-  const [stage, totals, tasks, agents, recent, desk] = await Promise.all([
+  const [stage, totals, tasks, agents, recent, desk, readiness] = await Promise.all([
     db.query<{ stage: Stage; n: number }>(`select stage, count(*)::int as n from lp.companies group by stage`),
     db.query<{
       companies: number; contacts: number; needs_research: number; research_queued: number; needs_verif_co: number
@@ -62,6 +65,7 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
          from lp.events e left join lp.actors a on a.id = e.actor order by e.at desc, e.id desc limit 5`,
     ),
     loadReplyDesk(db),
+    overviewReadiness(db),
   ])
   const byStage = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>
   for (const r of stage.rows) byStage[r.stage] = Number(r.n)
@@ -75,6 +79,7 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
     needsVerificationCompanies: Number(t.needs_verif_co),
     unverifiedContacts: Number(t.unverified),
     readyToSend: Number(t.ready),
+    readiness,
     inCampaigns: Number(t.in_campaigns),
     repliesWaiting: desk.filter((d) => d.bucket === 'needs_reply').length,
     interested: desk.filter((d) => d.bucket === 'interested').length,

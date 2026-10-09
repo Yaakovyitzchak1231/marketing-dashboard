@@ -42,7 +42,7 @@ function LeadTable({ leads, showReason }: { leads: PreviewLead[]; showReason?: b
         <tr>
           <th className={TH}>Lead</th>
           <th className={TH}>Email</th>
-          <th className={TH}>{showReason ? 'Why not' : 'Verified'}</th>
+          <th className={TH}>{showReason ? 'Why not' : 'Ready as'}</th>
         </tr>
       </thead>
       <tbody>
@@ -53,7 +53,21 @@ function LeadTable({ leads, showReason }: { leads: PreviewLead[]; showReason?: b
               {l.first_name ? <div className="text-[11px] text-ink-faint">{[l.first_name, l.last_name].filter(Boolean).join(' ')}</div> : null}
             </td>
             <td className={`${TD} break-all`}>{l.email ?? <span className="text-unavailable">none</span>}</td>
-            <td className={TD}>{showReason && l.excluded ? EXCLUDE_WORDS[l.excluded] : l.verification_status}</td>
+            <td className={TD}>
+              {showReason && l.excluded ? (
+                <>
+                  {EXCLUDE_WORDS[l.excluded] ?? l.excluded}
+                  {l.park_reasons?.length ? <div className="text-[11px] text-ink-faint">{l.park_reasons.join(' · ')}</div> : null}
+                </>
+              ) : (
+                <>
+                  {l.tier === 'ready_personalized' ? 'Ready-personalized' : l.tier === 'ready_generic' ? 'Ready-generic' : l.verification_status}
+                  {l.merge && Object.keys(l.merge).length ? (
+                    <div className="text-[11px] text-ink-faint [overflow-wrap:anywhere]">{Object.entries(l.merge).map(([k, v]) => `${k}: ${v}`).join(' · ')}</div>
+                  ) : null}
+                </>
+              )}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -99,7 +113,7 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
   return (
     <PageShell
       title="Add to an Instantly campaign"
-      meta="Preview first. Only verified leads that aren’t in Instantly yet are sent, and only when you confirm."
+      meta="Preview first. Only leads Ready under the campaign’s lead rules (and not in Instantly yet) are sent, and only when you confirm."
       actions={<Link href="/leads" prefetch={false} className={BUTTON}>Back to Leads</Link>}
     >
       <ActionNote note={sp.note} tone={sp.tone} />
@@ -127,6 +141,13 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
               <span className="font-numeric tabular-nums">{leftN}</span> left out
             </p>
             {action.preview?.instantlyNote ? <p className="mt-1 text-[12px] text-ink-faint">{action.preview.instantlyNote}</p> : null}
+            {action.preview?.rules ? (
+              <p className="mt-1 text-[12px] text-ink-faint">
+                Scored with the lead rules <Link href={`/rules/${action.preview.rules.id}`} className="text-accent">{action.preview.rules.name}</Link> (v{action.preview.rules.version})
+                {action.preview.batch === 'role-inbox' ? ' · role-inbox batch: role inboxes only, tagged tab_batch=role-inbox' : ''}. Re-checked when you confirm.
+              </p>
+            ) : null}
+
             {action.status === 'awaiting_approval' ? (
               <p className="mt-2 text-[12px] text-ink-muted">
                 An agent asked for this{action.requested_reason ? `: ${action.requested_reason}` : ''}. Approve or reject it in <Link className="text-accent" href="/activity" prefetch={false}>Activity › Needs your OK</Link>.
@@ -184,6 +205,10 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
               ))}
             </select>
             <CampaignNameField campaigns={campaigns} />
+            <select name="batch" className={`${inputCls} max-w-[240px]`} aria-label="Batch" defaultValue="standard">
+              <option value="standard">Named inboxes</option>
+              <option value="role-inbox">Role-inbox batch (info@ etc., no-name copy)</option>
+            </select>
             <button type="submit" className={BUTTON} disabled={campaigns.length === 0}>Preview</button>
           </form>
         </Card>
