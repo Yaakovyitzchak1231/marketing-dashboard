@@ -276,7 +276,8 @@ export async function discardDraft(db: Db, actor: string, clientId: string): Pro
 
 /** Where the dashboard lives, for links in the message (same rule as lib/notify). */
 export function baseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const u = env.DASHBOARD_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : '')
+  const host = env.VERCEL_PROJECT_PRODUCTION_URL || env.VERCEL_URL
+  const u = env.DASHBOARD_URL || (host ? `https://${host}` : '')
   return u.replace(/\/+$/, '')
 }
 
@@ -311,6 +312,8 @@ export function composeMessage(c: Pick<PageCommentView, 'id' | 'page_path' | 'pa
   return { summary, body: lines.join('\n') }
 }
 
+export const MAX_BATCH = 200
+
 export interface SendResult {
   client_id: string
   ok: boolean
@@ -323,7 +326,9 @@ export interface SendResult {
 export async function sendPageComments(db: Db, actor: string, clientIds: string[], env: NodeJS.ProcessEnv = process.env): Promise<SendResult[]> {
   const base = baseUrl(env)
   const out: SendResult[] = []
-  for (const clientId of Array.from(new Set(clientIds.map((x) => String(x ?? '').trim()))).slice(0, 100)) {
+  const ids = Array.from(new Set(clientIds.map((x) => String(x ?? '').trim())))
+  // A bounded batch per request; the rest are reported (never silently dropped) and stay drafts.
+  for (const clientId of ids.slice(0, MAX_BATCH)) {
     try {
       const r = await db.tx(async (q) => {
         const me = await requireAgentOrHuman(q, actor)
@@ -355,6 +360,7 @@ export async function sendPageComments(db: Db, actor: string, clientIds: string[
       if (!(e instanceof OpsError)) console.error('page comment send failed', (e as Error).message)
     }
   }
+  for (const clientId of ids.slice(MAX_BATCH)) out.push({ client_id: clientId, ok: false, error: `more than ${MAX_BATCH} at once; send again for the rest` })
   return out
 }
 

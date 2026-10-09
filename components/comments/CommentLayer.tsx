@@ -351,7 +351,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
       if (!ready.length) return setNotice('Write something first.')
       setBusy(true)
       setNotice(null)
-      for (const id of ready) await saveNow(id) // the server sends what you see
+      await Promise.all(ready.map((id) => saveNow(id))) // the server sends what you see
       const r = await actions.send(ready).catch(() => ({ ok: false, error: 'Could not reach the server. Your drafts are kept.' }) as Fail)
       setBusy(false)
       if (!r.ok) return setNotice(r.error)
