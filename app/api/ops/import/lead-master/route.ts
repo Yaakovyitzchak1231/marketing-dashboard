@@ -9,15 +9,14 @@
  *        change lands in status_history (changed_by = the agent) and one 'import.status_sync' event.
  *   GET  /api/ops/import/lead-master            how many contacts/companies are in the database now
  *
- * Auth: an agent token from OPS_AGENT_TOKENS ("Authorization: Bearer <token>").
+ * Auth: an agent token from OPS_AGENT_TOKENS ("Authorization: Bearer <token>"); a paused agent gets 423.
  * Idempotent: rows already in the database are matched (by email, then company
  * domain/phone/name), never duplicated or overwritten, so a chunk can be re-sent safely.
  * At most MAX_ROWS_PER_REQUEST rows per call; scripts/push-lead-master.ts sends a
  * whole CSV in chunks and resumes with --start.
  */
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
-import { agentForToken } from '@/lib/ops/auth'
+import { opsGate } from '@/lib/ops/gate'
 import { ImportRequestError, MAX_ROWS_PER_REQUEST, importRowsOverHttp, parseImportBody } from '@/lib/leads/import-request'
 import { syncContactStatuses } from '@/lib/leads/sync-status'
 
@@ -37,9 +36,9 @@ function truthy(v: string | null): boolean {
 }
 
 export async function GET(req: Request) {
-  const agent = agentForToken(req.headers.get('authorization'))
-  if (!agent) return fail(401, 'Missing or unknown token.')
-  const db = getDb()
+  const gate = await opsGate(req, { unauthorizedMessage: 'Missing or unknown token.' })
+  if (!gate.ok) return gate.response
+  const { db } = gate
   if (!db) return fail(503, 'The lead database is not connected (DATABASE_URL is not set).')
   try {
     const { rows } = await db.query<{ contacts: number; companies: number }>(
@@ -52,9 +51,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const agent = agentForToken(req.headers.get('authorization'))
-  if (!agent) return fail(401, 'Missing or unknown token.')
-  const db = getDb()
+  const gate = await opsGate(req, { unauthorizedMessage: 'Missing or unknown token.' })
+  if (!gate.ok) return gate.response
+  const { agent, db } = gate
   if (!db) return fail(503, 'The lead database is not connected (DATABASE_URL is not set).')
 
   const url = new URL(req.url)

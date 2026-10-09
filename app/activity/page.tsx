@@ -18,6 +18,7 @@ const KINDS: { key: string; label: string }[] = [
   { key: 'approval.', label: 'Approvals' },
   { key: 'lock.', label: 'Checkouts' },
   { key: 'memory.', label: 'Memory' },
+  { key: 'agent.', label: 'Pauses' },
 ]
 
 type SP = Promise<{ actor?: string; kind?: string; before?: string }>

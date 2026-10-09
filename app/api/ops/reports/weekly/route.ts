@@ -3,15 +3,16 @@
  * (Authorization: Bearer <its OPS_AGENT_TOKENS token>). Read-only.
  */
 import { NextResponse } from 'next/server'
-import { agentForToken } from '@/lib/ops/auth'
+import { opsGate } from '@/lib/ops/gate'
 import { loadWeeklyReport } from '@/lib/reports/load'
 import { weeklyMarkdown } from '@/lib/reports/weekly'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const agent = agentForToken(req.headers.get('authorization'))
-  if (!agent) return NextResponse.json({ ok: false, error: 'Missing or unknown agent token (Authorization: Bearer <token>).' }, { status: 401 })
+  const gate = await opsGate(req)
+  if (!gate.ok) return gate.response
+  const { agent } = gate
   const format = new URL(req.url).searchParams.get('format') ?? 'json'
   const { report, sample } = await loadWeeklyReport()
   if (format === 'md' || format === 'markdown') {

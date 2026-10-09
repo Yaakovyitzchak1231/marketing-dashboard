@@ -3,10 +3,13 @@ import { notFound } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { actorDetail, listProjects, sharedMemory } from '@/lib/ops/queries'
 import { createTaskAction, markReadAction, memoryDeleteAction, memoryPutAction } from '@/app/actions/ops'
+import { pauseAgentAction, resumeAgentAction } from '@/app/actions/agents'
+import { pauseAllState } from '@/lib/ops/pause'
+import { PauseControl } from '@/components/ops/PauseControl'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { Ago, DbNotConnected, PageFrame, Presence, btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
 import { TaskCard } from '@/components/ops/TaskCard'
-import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
+import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +23,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
     )
   }
   const id = (await params).id
-  const [d, projects, shared] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db)])
+  const [d, projects, shared, all] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db)])
   if (!d) notFound()
   const { actor: a } = d
   const now = new Date()
@@ -32,6 +35,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       meta={
         <span className="inline-flex items-center gap-1.5">
           <Presence lastSeen={a.last_seen_at} now={now} />
+          {a.paused_at ? <Pill tone="warn">Paused</Pill> : null}
           {isAgent ? 'Agent' : 'Person'} · last seen <Ago at={a.last_seen_at} now={now} />
           {a.status_note ? ` · “${a.status_note}”` : ''}
         </span>
@@ -39,6 +43,32 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       actions={<Link href="/agents" className={btnCls}>All agents</Link>}
     >
       <AutoRefresh seconds={15} />
+      {isAgent ? (
+        <Card className={`mb-5 flex flex-wrap items-center gap-3 p-4 ${a.paused_at || all ? 'border-warn/40' : ''}`}>
+          <div className="min-w-0 flex-1 text-[12.5px] leading-snug">
+            {a.paused_at ? (
+              <p className="text-warn">
+                <span className="font-semibold">Paused</span> by {a.paused_by_name ?? 'a person'} <Ago at={a.paused_at} now={now} />
+                {a.pause_reason ? ` · “${a.pause_reason}”` : ''}. Its requests are refused; the tasks and claims below stay as they are.
+              </p>
+            ) : all ? (
+              <p className="text-warn">All agents are paused (by {all.by_name}). Resume them on the Agents page.</p>
+            ) : (
+              <p className="text-ink-muted">Running. Pausing refuses every request {a.display_name} makes until you resume; its tasks, claims and memory are kept.</p>
+            )}
+          </div>
+          <PauseControl
+            paused={Boolean(a.paused_at)}
+            pauseAction={pauseAgentAction}
+            resumeAction={resumeAgentAction}
+            fields={{ agent_id: a.id }}
+            pauseLabel={`Pause ${a.display_name}`}
+            resumeLabel={`Resume ${a.display_name}`}
+            pauseText={`${a.display_name}'s requests will be refused until you resume. Its ${d.current.length} open task${d.current.length === 1 ? '' : 's'} stay visible as they are.`}
+            resumeText={`${a.display_name} can work again${all ? ' once pause-all is lifted' : ''}.`}
+          />
+        </Card>
+      ) : null}
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
           <section>

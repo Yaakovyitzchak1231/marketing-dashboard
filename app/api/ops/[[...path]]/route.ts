@@ -2,7 +2,8 @@
  * The ops API: how agents (Tab, Hermes, Claude, Manus...) work in the same
  * database as the humans. Authenticated by each agent's own bearer token
  * (OPS_AGENT_TOKENS); the login gate in middleware.ts lets /api/ops through so
- * this route can do that check itself.
+ * this route can do that check itself (lib/ops/gate.ts: token, then
+ * "is this agent paused?" -> 423).
  *
  *   GET  /api/ops                       -> the list of ops and their arguments
  *   POST /api/ops  {op, ...args}        -> run one op as the calling agent
@@ -11,8 +12,7 @@
  *   GET|POST /api/ops/memory, GET /api/ops/memory/:key, GET /api/ops/inbox, POST /api/ops/inbox/read, POST /api/ops/presence
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
-import { agentForToken } from '@/lib/ops/auth'
+import { opsGate } from '@/lib/ops/gate'
 import { OPS, routeToOp, runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
 
@@ -27,9 +27,9 @@ function fail(status: number, error: string) {
 }
 
 async function handle(req: NextRequest, ctx: Ctx, method: 'GET' | 'POST') {
-  const agent = agentForToken(req.headers.get('authorization'))
-  if (!agent) return fail(401, 'Missing or unknown agent token (Authorization: Bearer <token>).')
-  const db = getDb()
+  const gate = await opsGate(req)
+  if (!gate.ok) return gate.response
+  const { agent, db } = gate
   if (!db) return fail(503, 'The lead database is not connected (DATABASE_URL is not set).')
 
   const path = (await ctx.params).path ?? []

@@ -11,7 +11,7 @@
  */
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
-import { agentForToken, secretMatches } from '@/lib/ops/auth'
+import { opsGate } from '@/lib/ops/gate'
 import { exportCsv, finishExport, startExport } from '@/lib/export/lead-master'
 import { DEFAULT_EXPORT_TAB, tokenFromEnv, writeExportTab } from '@/lib/export/sheets'
 import { logEvent } from '@/lib/ops/events'
@@ -19,11 +19,9 @@ import { logEvent } from '@/lib/ops/events'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-function caller(req: Request): string | null {
-  const agent = agentForToken(req.headers.get('authorization'))
-  if (agent) return agent
-  const m = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')
-  return m && secretMatches(m[1].trim(), process.env.CRON_SECRET) ? 'system' : null
+/** Agent token or CRON_SECRET ('system'); a paused agent (or "pause all") gets 423. */
+function caller(req: Request) {
+  return opsGate(req, { allowCron: true, unauthorizedMessage: 'Missing or unknown token.' })
 }
 
 async function sheet(actor: string) {
@@ -51,8 +49,9 @@ async function sheet(actor: string) {
 }
 
 export async function GET(req: Request) {
-  const who = caller(req)
-  if (!who) return NextResponse.json({ ok: false, error: 'Missing or unknown token.' }, { status: 401 })
+  const gate = await caller(req)
+  if (!gate.ok) return gate.response
+  const who = gate.agent
   if (new URL(req.url).searchParams.get('to') === 'sheet') return sheet(who)
   const db = getDb()
   if (!db) return NextResponse.json({ ok: false, error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
@@ -68,7 +67,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const who = caller(req)
-  if (!who) return NextResponse.json({ ok: false, error: 'Missing or unknown token.' }, { status: 401 })
+  const gate = await caller(req)
+  if (!gate.ok) return gate.response
+  const who = gate.agent
   return sheet(who)
 }
