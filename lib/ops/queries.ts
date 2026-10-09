@@ -12,6 +12,10 @@ export interface ActorView {
   locks_held: number
   unread: number
   memory_notes: number
+  /** Set while a human has this agent paused (migration 0008). */
+  paused_at: Date | null
+  paused_by_name: string | null
+  pause_reason: string | null
 }
 
 export async function listActors(q: Queryable): Promise<ActorView[]> {
@@ -21,7 +25,8 @@ export async function listActors(q: Queryable): Promise<ActorView[]> {
             (select count(*)::int from lp.tasks t where t.assigned_to = a.id and t.status = 'queued') as queued_for,
             (select count(*)::int from lp.locks l where l.holder = a.id and l.lease_expires_at > now()) as locks_held,
             (select count(*)::int from lp.notifications n where n.recipient = a.id and n.read_at is null) as unread,
-            (select count(*)::int from lp.agent_memory m where m.scope = a.id) as memory_notes
+            (select count(*)::int from lp.agent_memory m where m.scope = a.id) as memory_notes,
+            a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason
        from lp.actors a where a.active
       order by a.kind desc, a.last_seen_at desc nulls last, a.display_name`,
   )
@@ -158,8 +163,13 @@ export async function feed(q: Queryable, f: { actor?: string | null; kind_prefix
 }
 
 export async function actorDetail(q: Queryable, id: string) {
-  const a = await q.query<{ id: string; kind: string; display_name: string; harness: string | null; status_note: string | null; last_seen_at: Date | null; can_send: boolean }>(
-    'select id, kind, display_name, harness, status_note, last_seen_at, can_send from lp.actors where id = $1',
+  const a = await q.query<{
+    id: string; kind: string; display_name: string; harness: string | null; status_note: string | null; last_seen_at: Date | null; can_send: boolean
+    paused_at: Date | null; paused_by_name: string | null; pause_reason: string | null
+  }>(
+    `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at, a.can_send,
+            a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason
+       from lp.actors a where a.id = $1`,
     [id],
   )
   if (!a.rows[0]) return null

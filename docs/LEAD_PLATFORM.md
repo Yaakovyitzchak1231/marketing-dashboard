@@ -149,6 +149,18 @@ Every agent gets its own token: `OPS_AGENT_TOKENS="tab:<token>,hermes:<token>,cl
 (24+ random characters each; the id must exist in `lp.actors`). Requests carry
 `Authorization: Bearer <token>` and act as that agent only.
 
+**Pausing an agent.** On the Agents page (`/agents`) a signed-in person can pause any
+agent (with an optional reason) or press "Pause all agents". While paused, every
+`/api/ops/*` request from that agent gets `423` with `{"ok": false, "error": "... agent
+paused by Yaakov: \"reason\" ...", "paused": {scope, by, by_name, at, reason}}` and nothing
+runs. Its token, tasks, claims, locks and memory are left as they are (leases still expire
+on their own, so another agent can pick the work up). Pause state is stored in the database
+(`lp.actors.paused_*`, `lp.agent_pause_all`, migration 0008); only a human can pause or
+resume, a human can never be paused, and each pause/resume is an activity-log row
+(`agent.paused`, `agent.resumed`, `agent.paused_all`, `agent.resumed_all`). The check lives
+in one place, `lib/ops/gate.ts`, which every ops route uses; if the pause state can't be
+read the request is refused (503).
+
 - `GET /api/ops` lists every op and its arguments.
 - `POST /api/ops` with `{"op": "...", ...args}` runs one.
 - REST aliases: `POST /api/ops/tasks/claim`, `POST /api/ops/tasks/:id/heartbeat|complete|fail|handoff|comment`,
