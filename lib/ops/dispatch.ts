@@ -33,6 +33,11 @@ import {
   updateTask,
 } from './core.ts'
 import { logEvent } from './events.ts'
+
+// The Instantly gate and its read-only lookups are server-only modules; they
+// load on first use so this table stays importable anywhere.
+const gate = () => import('../instantly/gate.ts')
+const lookups = () => import('../instantly/lookup.ts')
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 
@@ -45,6 +50,29 @@ function id(v: unknown, field = 'task_id'): number {
   return n
 }
 const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
+
+/**
+ * Default-deny for Instantly: a generic approval that talks about Instantly is
+ * refused, because approving it would not run anything here and the agent
+ * would have to make the change itself. Instantly changes go through the
+ * instantly_* ops, which the dashboard runs only after a human approves.
+ */
+export function mentionsInstantly(...parts: unknown[]): boolean {
+  return parts.some((p) => {
+    if (p == null) return false
+    const s = typeof p === 'string' ? p : JSON.stringify(p)
+    return /instantly/i.test(s ?? '')
+  })
+}
+
+const INSTANTLY_ONLY_THROUGH_GATE =
+  'Instantly changes are not approved this way. Use instantly_add_leads, instantly_pause_campaign or instantly_resume_campaign: they queue the change with a preview in "Needs your OK" and the dashboard runs it only after a human approves. Any other Instantly change (sequences, settings, deleting) is done by a human in Instantly.'
+
+function requireReason(a: Args): string {
+  const r = typeof a.reason === 'string' ? a.reason.trim() : ''
+  if (!r) throw new OpsError('reason is required: one plain sentence the human reads before approving')
+  return r
+}
 
 export const OPS: Record<string, Op> = {
   whoami: {
@@ -216,16 +244,72 @@ export const OPS: Record<string, Op> = {
     },
   },
   request_approval: {
-    args: '{action: send|spend|destructive|other, summary, payload?, est_cost_usd?, task_id?, expires_in_hours?}  -> poll get_approval until approved/rejected',
-    run: (db, actor, a) =>
-      requestApproval(db, actor, {
+    args: '{action: send|spend|destructive|other, summary, payload?, est_cost_usd?, task_id?, expires_in_hours?}  -> poll get_approval until approved/rejected. Not for Instantly changes (use the instantly_* ops).',
+    run: (db, actor, a) => {
+      if (mentionsInstantly(a.summary, a.payload)) throw new OpsError(INSTANTLY_ONLY_THROUGH_GATE, 409)
+      return requestApproval(db, actor, {
         action: String(a.action ?? '') as 'send',
         summary: String(a.summary ?? ''),
         payload: a.payload,
         est_cost_usd: a.est_cost_usd == null ? null : Number(a.est_cost_usd),
         task_id: a.task_id == null ? null : id(a.task_id),
         expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
-      }),
+      })
+    },
+  },
+  instantly_add_leads: {
+    args: '{campaign_id, campaign_name?, company_ids?: number[], emails?: string[], reason, task_id?, expires_in_hours? (default 72)}  -> NEVER sends: queues the change with a preview in "Needs your OK"; a human approves (the dashboard then adds them) or rejects with a reason. Poll get_approval / get_instantly_action.',
+    run: async (db, actor, a) =>
+      (await gate()).requestAddLeads(
+        db,
+        actor,
+        {
+          campaign_id: a.campaign_id,
+          campaign_name: a.campaign_name,
+          company_ids: a.company_ids,
+          emails: a.emails,
+          reason: requireReason(a),
+          task_id: a.task_id == null ? null : id(a.task_id),
+          expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
+        },
+        (await lookups()).instantlyLookupFromEnv(),
+      ),
+  },
+  instantly_pause_campaign: {
+    args: '{campaign_id, campaign_name?, reason, task_id?, expires_in_hours?}  -> NEVER pauses directly: queues it for a human OK',
+    run: async (db, actor, a) => {
+      const reason = requireReason(a)
+      const cid = typeof a.campaign_id === 'string' ? a.campaign_id.trim() : ''
+      return (await gate()).requestCampaignSwitch(db, actor, {
+        kind: 'pause',
+        campaign_id: a.campaign_id,
+        campaign_name: a.campaign_name,
+        reason,
+        current_status: cid ? await (await lookups()).campaignStatusFromEnv(cid) : null,
+        task_id: a.task_id == null ? null : id(a.task_id),
+        expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
+      })
+    },
+  },
+  instantly_resume_campaign: {
+    args: '{campaign_id, campaign_name?, reason, task_id?, expires_in_hours?}  -> NEVER resumes directly: queues it for a human OK',
+    run: async (db, actor, a) => {
+      const reason = requireReason(a)
+      const cid = typeof a.campaign_id === 'string' ? a.campaign_id.trim() : ''
+      return (await gate()).requestCampaignSwitch(db, actor, {
+        kind: 'resume',
+        campaign_id: a.campaign_id,
+        campaign_name: a.campaign_name,
+        reason,
+        current_status: cid ? await (await lookups()).campaignStatusFromEnv(cid) : null,
+        task_id: a.task_id == null ? null : id(a.task_id),
+        expires_in_hours: a.expires_in_hours == null ? undefined : Number(a.expires_in_hours),
+      })
+    },
+  },
+  get_instantly_action: {
+    args: '{action_id}  -> a queued Instantly change: awaiting_approval | approved | rejected (decision_note says why) | sending | done | failed | unknown | cancelled',
+    run: async (db, _actor, a) => (await gate()).getInstantlyAction(db, id(a.action_id, 'action_id')),
   },
   get_approval: {
     args: '{approval_id}',
@@ -298,6 +382,12 @@ export function routeToOp(method: string, path: string[]): { op: string; args: A
   }
   if (method === 'POST' && a === 'events' && !b) return { op: 'log_event', args: {} }
   if (method === 'GET' && a === 'events' && !b) return { op: 'recent_events', args: {} }
+  if (a === 'instantly') {
+    if (method === 'POST' && b === 'add-leads' && !c) return { op: 'instantly_add_leads', args: {} }
+    if (method === 'POST' && b === 'pause' && !c) return { op: 'instantly_pause_campaign', args: {} }
+    if (method === 'POST' && b === 'resume' && !c) return { op: 'instantly_resume_campaign', args: {} }
+    if (method === 'GET' && b === 'actions' && c && /^\d+$/.test(c)) return { op: 'get_instantly_action', args: { action_id: Number(c) } }
+  }
   if (a === 'approvals') {
     if (method === 'POST' && !b) return { op: 'request_approval', args: {} }
     if (method === 'GET' && b && /^\d+$/.test(b)) return { op: 'get_approval', args: { approval_id: Number(b) } }

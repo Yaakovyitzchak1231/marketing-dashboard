@@ -17,6 +17,9 @@ export const dynamic = 'force-dynamic'
 
 const STATUS_WORD: Record<ActionRow['status'], string> = {
   preview: 'Waiting for your OK',
+  awaiting_approval: 'Agent request, waiting for approval (Activity)',
+  approved: 'Approved, about to send',
+  rejected: 'Rejected, nothing sent',
   sending: 'Sending…',
   done: 'Done',
   failed: 'Failed, nothing added',
@@ -115,7 +118,7 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
                 <p className="text-[12px] text-ink-faint">Campaign</p>
                 <p className="text-[15px] font-semibold text-ink">{action.campaign_name ?? action.campaign_id}</p>
               </div>
-              <Pill tone={action.status === 'done' ? 'good' : action.status === 'preview' ? 'accent' : action.status === 'failed' || action.status === 'unknown' ? 'bad' : 'neutral'}>
+              <Pill tone={action.status === 'done' ? 'good' : action.status === 'preview' || action.status === 'awaiting_approval' ? 'accent' : action.status === 'failed' || action.status === 'unknown' ? 'bad' : 'neutral'}>
                 {STATUS_WORD[action.status]}
               </Pill>
             </div>
@@ -124,6 +127,12 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
               <span className="font-numeric tabular-nums">{leftN}</span> left out
             </p>
             {action.preview?.instantlyNote ? <p className="mt-1 text-[12px] text-ink-faint">{action.preview.instantlyNote}</p> : null}
+            {action.status === 'awaiting_approval' ? (
+              <p className="mt-2 text-[12px] text-ink-muted">
+                An agent asked for this{action.requested_reason ? `: ${action.requested_reason}` : ''}. Approve or reject it in <Link className="text-accent" href="/activity" prefetch={false}>Activity › Needs your OK</Link>.
+              </p>
+            ) : null}
+            {action.status === 'rejected' && action.decision_note ? <p className="mt-2 text-[12px] text-ink-muted">Rejected: {action.decision_note}</p> : null}
             {action.status === 'preview' ? (
               <div className="mt-3">
                 <ConfirmAction

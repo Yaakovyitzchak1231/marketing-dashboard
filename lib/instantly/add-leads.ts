@@ -14,6 +14,11 @@
  * is never sent again (double clicks, refreshes and retries are no-ops).
  * Afterwards each sent contact gets a campaign touch ('added_to_campaign'),
  * status 'in-Instantly', and the activity log says what happened.
+ *
+ * Only a human can send: every function here that calls Instantly checks the
+ * actor is an active human first, and the database refuses a row moving to
+ * 'sending' without a human confirmed_by (migration 0009). Agents queue
+ * changes through lib/instantly/gate.ts, which a human approves.
  */
 import type { Db, Queryable } from '@/lib/db/types'
 import { HELD_STATUSES } from '@/lib/leads/types'
@@ -150,13 +155,24 @@ export async function buildAddPreview(
   }
 }
 
+export type ActionStatus =
+  | 'preview'
+  | 'awaiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'sending'
+  | 'done'
+  | 'failed'
+  | 'unknown'
+  | 'cancelled'
+
 export interface ActionRow {
   id: number
   kind: 'add_leads' | 'pause' | 'resume'
   campaign_id: string
   campaign_name: string | null
   contact_ids: number[]
-  status: 'preview' | 'sending' | 'done' | 'failed' | 'unknown' | 'cancelled'
+  status: ActionStatus
   preview: AddPreview | null
   result: Record<string, unknown> | null
   error: string | null
@@ -164,6 +180,24 @@ export interface ActionRow {
   confirmed_by: string | null
   created_at: string
   finished_at: string | null
+  approval_id?: number | null
+  requested_reason?: string | null
+  decided_by?: string | null
+  decision_note?: string | null
+}
+
+/** Thrown when anyone but an active human tries to send a change to Instantly. */
+export class NotHumanError extends Error {
+  readonly status = 403
+  constructor(actor: string) {
+    super(`Only a signed-in human can send changes to Instantly ('${actor}' is not one). Agents queue changes for approval.`)
+    this.name = 'NotHumanError'
+  }
+}
+
+export async function assertHuman(q: Queryable, actor: string): Promise<void> {
+  const { rows } = await q.query<{ kind: string; active: boolean }>('select kind, active from lp.actors where id = $1', [actor])
+  if (!rows[0] || rows[0].kind !== 'human' || !rows[0].active) throw new NotHumanError(actor)
 }
 
 export async function savePreview(q: Queryable, actor: string, p: AddPreview): Promise<ActionRow> {
@@ -196,12 +230,16 @@ export function toAddLead(l: PreviewLead): AddLead {
   return out
 }
 
-/** Atomically move a preview row to 'sending'. Returns null when it was not a preview any more. */
-async function claim(db: Db, id: number, actor: string): Promise<ActionRow | null> {
+/**
+ * Atomically move a row to 'sending'. Returns null when it was not in the
+ * expected state any more. 'preview' is the human's own Add-to-Instantly flow;
+ * 'approved' is an agent's request a human just approved (lib/instantly/gate.ts).
+ */
+async function claim(db: Db, id: number, actor: string, from: 'preview' | 'approved'): Promise<ActionRow | null> {
   const { rows } = await db.query<ActionRow>(
     `update lp.instantly_actions set status = 'sending', confirmed_by = $2, confirmed_at = now()
-      where id = $1 and status = 'preview' returning *`,
-    [id, actor],
+      where id = $1 and status = $3 and kind = 'add_leads' returning *`,
+    [id, actor, from],
   )
   return rows[0] ?? null
 }
@@ -212,8 +250,15 @@ export interface ConfirmOutcome {
   message: string
 }
 
-export async function confirmAddLeads(db: Db, writer: InstantlyWriter, id: number, actor: string): Promise<ConfirmOutcome> {
-  const row = await claim(db, id, actor)
+export async function confirmAddLeads(
+  db: Db,
+  writer: InstantlyWriter,
+  id: number,
+  actor: string,
+  opts: { from?: 'preview' | 'approved' } = {},
+): Promise<ConfirmOutcome> {
+  await assertHuman(db, actor)
+  const row = await claim(db, id, actor, opts.from ?? 'preview')
   if (!row) {
     const existing = await getAction(db, id)
     if (!existing) throw new Error('That preview does not exist.')
@@ -277,7 +322,7 @@ export async function confirmAddLeads(db: Db, writer: InstantlyWriter, id: numbe
         : `Added leads to ${what}: ${ready.length} sent${anyCount ? `, Instantly took ${uploaded}` : ''}`,
       entity_type: 'campaign',
       entity_id: row.campaign_id,
-      data: summary,
+      data: row.approval_id ? { ...summary, approval_id: row.approval_id, requested_by: row.created_by } : summary,
     })
     return rows[0]
   }, actor)
@@ -296,12 +341,41 @@ export async function campaignSwitch(
   actor: string,
   input: { kind: 'pause' | 'resume'; campaign_id: string; campaign_name?: string | null },
 ): Promise<{ ok: boolean; message: string; action: ActionRow }> {
+  await assertHuman(db, actor)
   const { rows } = await db.query<ActionRow>(
     `insert into lp.instantly_actions (kind, campaign_id, campaign_name, status, created_by, confirmed_by, confirmed_at)
      values ($1, $2, $3, 'sending', $4, $4, now()) returning *`,
     [input.kind, input.campaign_id, input.campaign_name ?? null, actor],
   )
-  const row = rows[0]
+  return runSwitch(db, writer, actor, rows[0])
+}
+
+/**
+ * Run an agent's pause/resume request that a human just approved: the row
+ * moves 'approved' -> 'sending' (only once; a second call is a no-op).
+ */
+export async function runApprovedSwitch(
+  db: Db,
+  writer: InstantlyWriter,
+  actor: string,
+  id: number,
+): Promise<{ ok: boolean; message: string; action: ActionRow }> {
+  await assertHuman(db, actor)
+  const { rows } = await db.query<ActionRow>(
+    `update lp.instantly_actions set status = 'sending', confirmed_by = $2, confirmed_at = now()
+      where id = $1 and status = 'approved' and kind in ('pause', 'resume') returning *`,
+    [id, actor],
+  )
+  if (!rows[0]) {
+    const existing = await getAction(db, id)
+    if (!existing) throw new Error('That Instantly change does not exist.')
+    return { ok: false, message: `Already ${existing.status}; nothing was sent again.`, action: existing }
+  }
+  return runSwitch(db, writer, actor, rows[0])
+}
+
+async function runSwitch(db: Db, writer: InstantlyWriter, actor: string, row: ActionRow): Promise<{ ok: boolean; message: string; action: ActionRow }> {
+  const input = { kind: row.kind as 'pause' | 'resume', campaign_id: row.campaign_id, campaign_name: row.campaign_name }
   let err: InstantlyWriteError | null = null
   let result: Record<string, unknown> | null = null
   try {
@@ -323,6 +397,7 @@ export async function campaignSwitch(
       summary: err ? `${verb.replace(/d$/, '')} ${name} did not go through: ${err.message}` : `${verb} ${name} in Instantly`,
       entity_type: 'campaign',
       entity_id: input.campaign_id,
+      data: row.approval_id ? { approval_id: row.approval_id, requested_by: row.created_by } : undefined,
     })
     return r.rows[0]
   }, actor)

@@ -5,6 +5,10 @@ import { decideApprovalAction, releaseLockAction } from '@/app/actions/ops'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { Ago, DbNotConnected, PageFrame, btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
+import { InstantlyApprovalCard } from '@/components/ops/InstantlyApprovalCard'
+import { ActionNote } from '@/components/reports/Note'
+import { actionsEnabled } from '@/lib/instantly/writer'
+import { expireStaleInstantlyRequests, type GatePreview } from '@/lib/instantly/gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +24,7 @@ const KINDS: { key: string; label: string }[] = [
   { key: 'memory.', label: 'Memory' },
 ]
 
-type SP = Promise<{ actor?: string; kind?: string; before?: string }>
+type SP = Promise<{ actor?: string; kind?: string; before?: string; note?: string; tone?: string }>
 
 function dayLabel(d: Date, tz: string): string {
   return d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric' })
@@ -37,6 +41,8 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
   }
   const sp = await searchParams
   const before = Number(sp.before) > 0 ? Number(sp.before) : null
+  await expireStaleInstantlyRequests(db).catch(() => 0)
+  const instantlyOn = actionsEnabled()
   const [events, approvals, locks, actors] = await Promise.all([
     feed(db, { actor: sp.actor || null, kind_prefix: sp.kind || null, limit: 150, before_id: before }),
     pendingApprovals(db),
@@ -57,6 +63,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
   return (
     <PageFrame title="Activity" meta="Everything every agent and person did, in plain English. Nothing outward happens without an approval here.">
       <AutoRefresh seconds={15} />
+      <ActionNote note={sp.note} tone={sp.tone} />
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -105,20 +112,24 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
               {approvals.length ? approvals.map((a) => (
                 <div key={a.id} className="space-y-2 p-3 text-[13px]">
                   <div className="flex items-center gap-2">
-                    <Pill tone={a.action === 'spend' || a.action === 'destructive' ? 'warn' : 'accent'}>{a.action}</Pill>
+                    <Pill tone={a.instantly_action_id || a.action === 'spend' || a.action === 'destructive' ? 'warn' : 'accent'}>{a.instantly_action_id ? 'Instantly' : a.action}</Pill>
                     <span className="text-[11.5px] text-ink-faint">{a.requester_name} · <Ago at={a.created_at} now={now} /></span>
                   </div>
                   <p className="leading-snug text-ink">{a.summary}</p>
                   {a.est_cost_usd != null ? <p className="text-[12px] tabular-nums text-ink-muted">Estimated cost ${Number(a.est_cost_usd).toFixed(2)}</p> : null}
                   {a.task_id ? <Link className="text-[12px] text-accent" href={`/team/${a.task_id}`}>Open the task</Link> : null}
-                  <form action={decideApprovalAction} className="space-y-2">
-                    <input type="hidden" name="approval_id" value={a.id} />
-                    <input name="note" className={inputCls} placeholder="Note (optional)" />
-                    <div className="flex gap-2">
-                      <button name="decision" value="approved" className={primaryBtnCls} type="submit">Approve</button>
-                      <button name="decision" value="rejected" className={btnCls} type="submit">Reject</button>
-                    </div>
-                  </form>
+                  {a.instantly_action_id ? (
+                    <InstantlyApprovalCard approvalId={a.id} preview={a.payload as GatePreview} enabled={instantlyOn} />
+                  ) : (
+                    <form action={decideApprovalAction} className="space-y-2">
+                      <input type="hidden" name="approval_id" value={a.id} />
+                      <input name="note" className={inputCls} placeholder="Note (optional)" />
+                      <div className="flex gap-2">
+                        <button name="decision" value="approved" className={primaryBtnCls} type="submit">Approve</button>
+                        <button name="decision" value="rejected" className={btnCls} type="submit">Reject</button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )) : <EmptyNote>Nothing is waiting for you.</EmptyNote>}
             </Card>
