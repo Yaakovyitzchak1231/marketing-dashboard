@@ -4,7 +4,8 @@
  * Server actions behind the Reports screens and the Instantly action buttons.
  * They run as the signed-in human ('owner') behind the login gate. Every
  * Instantly change here needs his explicit confirm click in the UI; agents
- * cannot reach these (they use /api/ops, which has no Instantly writes).
+ * cannot reach these. Agents only queue Instantly changes through /api/ops
+ * (instantly_* ops -> lib/instantly/gate.ts), which run after a human approves.
  */
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
