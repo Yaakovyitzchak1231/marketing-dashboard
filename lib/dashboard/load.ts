@@ -89,6 +89,8 @@ export interface DashboardContext {
   threads: ApiEmail[]
   /** false when the /emails call failed, so replies cannot be read. */
   threadsOk: boolean
+  /** true when Instantly had more reply threads than the page cap let us read. */
+  threadsTruncated: boolean
   accounts: ApiAccount[]
   accountJobs: Array<{ emails: string[]; w: { start: string; end: string } }>
 }
@@ -297,6 +299,7 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
       campaignNames: new Map(ids.map((id) => [id, nameOf(id)])),
       threads: threadsPage?.items ?? [],
       threadsOk: Boolean(threadsPage),
+      threadsTruncated: Boolean(threadsPage?.truncated),
       accounts,
       accountJobs,
     },
@@ -432,6 +435,14 @@ export async function loadAccounts(ctx: DashboardContext): Promise<Stage<SenderA
 /** Replied leads still waiting on you, newest reply first. */
 export async function loadReplies(ctx: DashboardContext): Promise<Stage<RepliedLead[]>> {
   const errors: SourceError[] = []
+  // The thread list is capped (the /emails endpoint is rate-limited), so say so
+  // rather than let the list below look complete.
+  if (ctx.threadsTruncated) {
+    errors.push({
+      source: 'emails',
+      message: `Only the first ${ctx.threads.length} reply threads were read; Instantly has more, so some replies are not listed.`,
+    })
+  }
   const threadContacts = [...new Set(ctx.threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
   let leads: ApiLead[] | null = []
   if (threadContacts.length) {

@@ -1,4 +1,5 @@
 import type { RepliedLead } from '@/lib/dashboard/types'
+import { plural } from './format'
 import { Card, EmptyNote, Pill, SectionHeader, type PillTone } from './primitives'
 
 const INTEREST: Record<RepliedLead['interest'], { label: string; tone: PillTone }> = {
@@ -65,9 +66,31 @@ function LeadItem({ l }: { l: RepliedLead }) {
   )
 }
 
-export function RepliesList({ leads }: { leads: RepliedLead[] }) {
-  const waiting = sortWaiting(leads.filter((l) => l.awaitingOurReply))
-  const others = [...leads.filter((l) => !l.awaitingOurReply)].sort((a, b) => (b.lastReplyAt ?? '').localeCompare(a.lastReplyAt ?? ''))
+/**
+ * Instantly's own reply counts for the range, stated next to the list. The list
+ * is built from lead records, which cannot tell a person from an autoresponder;
+ * Instantly counts the automatic ones separately. Saying both is the honest
+ * thing to do — the alternative is implying every reply in the list is a person.
+ */
+function AutomaticNote({ replied, autoReplies }: { replied: number | null; autoReplies: number | null }) {
+  if (!autoReplies) return null
+  return (
+    <p className="mt-2 px-1 text-[11px] leading-relaxed text-ink-faint">
+      Instantly counted{' '}
+      {replied === null ? null : <>{plural(replied, 'human reply', 'human replies')} and </>}
+      {plural(autoReplies, 'automatic reply', 'automatic replies')} (out-of-office, autoresponders) in this range. Automatic replies are not waiting on you.
+    </p>
+  )
+}
+
+/** A reply that is ours to answer: the lead spoke last and Instantly did not call it out-of-office. */
+function isWaiting(l: RepliedLead): boolean {
+  return l.awaitingOurReply && l.interest !== 'out_of_office'
+}
+
+export function RepliesList({ leads, replied, autoReplies }: { leads: RepliedLead[]; replied: number | null; autoReplies: number | null }) {
+  const waiting = sortWaiting(leads.filter(isWaiting))
+  const others = [...leads.filter((l) => !isWaiting(l))].sort((a, b) => (b.lastReplyAt ?? '').localeCompare(a.lastReplyAt ?? ''))
   return (
     <section className="min-w-0" aria-labelledby="replies-heading">
       <SectionHeader
@@ -77,7 +100,7 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
       />
       <Card>
         {waiting.length === 0 ? (
-          <EmptyNote>{leads.length ? "You're caught up. Every reply in this range has an answer." : 'No replies in this range.'}</EmptyNote>
+          <EmptyNote>{leads.length ? 'You\u2019re caught up. No reply in this range is waiting on you.' : 'No replies in this range.'}</EmptyNote>
         ) : (
           <ul className="divide-y divide-line-soft" data-testid="waiting-list">
             {waiting.map((l) => (
@@ -88,10 +111,10 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
         {others.length ? (
           <details className="group border-t border-line-soft">
             <summary className="cursor-pointer list-none px-4 py-2.5 text-[12px] font-medium text-accent hover:underline sm:px-5">
-              <span className="group-open:hidden">Show {others.length} answered repl{others.length === 1 ? 'y' : 'ies'}</span>
-              <span className="hidden group-open:inline">Hide answered replies</span>
+              <span className="group-open:hidden">Show {others.length} other repl{others.length === 1 ? 'y' : 'ies'}</span>
+              <span className="hidden group-open:inline">Hide other replies</span>
             </summary>
-            <ul className="divide-y divide-line-soft border-t border-line-soft">
+            <ul className="divide-y divide-line-soft border-t border-line-soft" data-testid="other-replies">
               {others.map((l) => (
                 <LeadItem key={`${l.email}-${l.campaignId ?? ''}`} l={l} />
               ))}
@@ -99,6 +122,7 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
           </details>
         ) : null}
       </Card>
+      <AutomaticNote replied={replied} autoReplies={autoReplies} />
     </section>
   )
 }

@@ -6,10 +6,10 @@ import { PassThrough } from 'node:stream'
 import type { CampaignRow, DailyPoint, RepliedLead, SenderAccount } from '@/lib/dashboard/types'
 import { PerformanceView } from '@/components/dashboard/PerformanceView'
 import {
-  getDashboardData, loadSummary, loadStages, combineStages, insightsFor,
+  getDashboardData, loadSummary, loadStages, combineStages, insightsFor, loadDaily, loadCampaigns, loadReplies,
 } from '@/lib/dashboard/load'
 import { InstantlyClient, clearInstantlyMemo } from '@/lib/instantly/client'
-import { fakeInstantly, type Override, C1, C2, C3 } from './helpers/instantly-fake'
+import { fakeInstantly, fixture, type Override, C1, C2, C3 } from './helpers/instantly-fake'
 
 const KEY = 'fake-key-DO-NOT-LEAK-987654'
 const NOW = new Date('2026-10-08T16:00:00Z') // 12:00 in New York
@@ -209,6 +209,26 @@ describe('getDashboardData', () => {
     expect(accounts.errors).toEqual([])
     expect(accounts.data).toHaveLength(3)
     expect(replies.errors).toEqual([])
+  })
+
+  it('says so when the reply-thread list was cut off, and files it with the replies', async () => {
+    // /emails is capped at 2 pages; a cursor on the last page means there were more.
+    const { client } = setup((c) =>
+      c.path === '/emails' && c.query.get('starting_after')
+        ? new Response(JSON.stringify({ items: fixture<{ items: unknown[] }>('threads_page2').items, next_starting_after: 'more' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : undefined,
+    )
+    const summary = await loadSummary('30d', { client, now: NOW, timeZone: TZ })
+    expect(summary.errors).toEqual([]) // the totals are whole; this is a replies problem
+    const replies = await loadReplies(summary.ctx!)
+    expect(replies.errors.map((e) => e.source)).toEqual(['emails'])
+    expect(replies.errors[0].message).toMatch(/Only the first 4 reply threads were read/)
+    // The other stages are untouched by it.
+    expect((await loadCampaigns(summary.ctx!)).errors).toEqual([])
+    expect((await loadDaily(summary.ctx!)).errors).toEqual([])
   })
 
   it('splits the per-inbox request when Instantly says it is too large (413)', async () => {

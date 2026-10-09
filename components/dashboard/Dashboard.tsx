@@ -61,7 +61,7 @@ function Body({ data }: { data: DashboardData }) {
           <DailyChart daily={data.daily} />
           <CampaignTable campaigns={data.campaigns} />
           <div className="grid gap-7 sm:gap-8 lg:grid-cols-2">
-            <RepliesList leads={data.repliedLeads} />
+            <RepliesList leads={data.repliedLeads} replied={data.totals.counts.replied} autoReplies={data.totals.counts.autoReplies} />
             <AccountsTable accounts={data.accounts} />
           </div>
           <Footnote range={data.range} previous={data.previous} />

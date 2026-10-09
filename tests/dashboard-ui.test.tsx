@@ -5,12 +5,13 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
-import type { DashboardData } from '@/lib/dashboard/types'
+import type { DashboardData, RepliedLead } from '@/lib/dashboard/types'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { bestStep, sortCampaigns } from '@/components/dashboard/CampaignTable'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import type { LiveChange } from '@/components/ops/live'
-import { CampaignsSection, DailySection, KpiSection } from '@/components/dashboard/PerformanceView'
+import { CampaignsSection, DailySection, KpiSection, RepliesSection } from '@/components/dashboard/PerformanceView'
+import { RepliesList } from '@/components/dashboard/RepliesList'
 import type { DashboardSummary } from '@/lib/dashboard/load'
 import { refreshCount } from './mock-navigation'
 
@@ -142,21 +143,21 @@ describe('Dashboard', () => {
   })
 })
 
-describe('streamed sections', () => {
-  function summaryFixture(trackingOff = false): DashboardSummary {
-    const d = fixture()
-    return {
-      generatedAt: d.generatedAt,
-      range: d.range,
-      configured: true,
-      totals: d.totals,
-      previous: d.previous,
-      trackingOff,
-      errors: [],
-      ctx: null,
-    }
+function summaryFixture(trackingOff = false): DashboardSummary {
+  const d = fixture()
+  return {
+    generatedAt: d.generatedAt,
+    range: d.range,
+    configured: true,
+    totals: d.totals,
+    previous: d.previous,
+    trackingOff,
+    errors: [],
+    ctx: null,
   }
+}
 
+describe('streamed sections', () => {
   it('the KPI band renders from the fast summary alone, before any section has loaded', () => {
     render(<KpiSection summary={summaryFixture(true)} />)
     expect(within(screen.getByTestId('kpi-sent')).getByText('2,618')).toBeInTheDocument()
@@ -175,6 +176,50 @@ describe('streamed sections', () => {
     render(<DailySection result={{ data: [], errors: [] }} />)
     expect(screen.queryByTestId('errors-notice')).toBeNull()
     expect(screen.getByText('No daily activity reported for this range.')).toBeInTheDocument()
+  })
+})
+
+describe('replies panel', () => {
+  function lead(over: Partial<RepliedLead>): RepliedLead {
+    return {
+      email: 'a@shop.example', name: 'A', company: null, campaignId: null, campaignName: null,
+      interest: 'unlabeled', lastReplyAt: null, lastReplySnippet: null, awaitingOurReply: false, daysWaiting: null,
+      ...over,
+    }
+  }
+  const human = lead({ email: 'dana@shop.example', name: 'Dana R.', awaitingOurReply: true, daysWaiting: 3, lastReplyAt: '2026-10-05T12:00:00Z', lastReplySnippet: 'Sounds interesting' })
+  const auto = lead({ email: 'care@catbird.example', name: 'Catbird', interest: 'out_of_office', awaitingOurReply: true, daysWaiting: 23, lastReplyAt: '2026-09-16T12:00:00Z', lastReplySnippet: 'Auto-Response' })
+
+  it('does not call an out-of-office auto-reply "waiting on you"', () => {
+    render(<RepliesList leads={[human, auto]} replied={9} autoReplies={11} />)
+    const waiting = screen.getByTestId('waiting-list')
+    expect(within(waiting).getAllByRole('listitem')).toHaveLength(1)
+    expect(waiting).toHaveTextContent('Dana R.')
+    expect(waiting).not.toHaveTextContent('Catbird')
+    // Still listed, under its own heading, with the label Instantly gave it.
+    const other = screen.getByTestId('other-replies')
+    expect(other).toHaveTextContent('Catbird')
+    expect(other).toHaveTextContent('Out of office')
+  })
+
+  it("states Instantly's own counts rather than implying every reply is a person", () => {
+    render(<RepliesList leads={[human, auto]} replied={9} autoReplies={11} />)
+    expect(screen.getByText(/Instantly counted 9 human replies and 11 automatic replies/)).toBeInTheDocument()
+  })
+
+  it('says nothing about automatic replies when Instantly reported none', () => {
+    render(<RepliesList leads={[human]} replied={1} autoReplies={0} />)
+    expect(screen.queryByText(/automatic replies/)).toBeNull()
+  })
+
+  it('shows the truncation notice with the panel it affects', () => {
+    render(
+      <RepliesSection
+        result={{ data: [human], errors: [{ source: 'emails', message: 'Only the first 200 reply threads were read; Instantly has more, so some replies are not listed.' }] }}
+        summary={summaryFixture()}
+      />,
+    )
+    expect(screen.getByTestId('errors-notice')).toHaveTextContent('some replies are not listed')
   })
 })
 

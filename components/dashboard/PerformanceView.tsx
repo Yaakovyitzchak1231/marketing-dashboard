@@ -42,7 +42,7 @@ export function PerformanceView({ summary, stages }: { summary: DashboardSummary
           </Suspense>
           <div className="grid gap-7 sm:gap-8 lg:grid-cols-2">
             <Suspense fallback={<CardSkeleton />}>
-              <AwaitStage stage={stages.replies}>{(r) => <RepliesSection result={r} />}</AwaitStage>
+              <AwaitStage stage={stages.replies}>{(r) => <RepliesSection result={r} summary={summary} />}</AwaitStage>
             </Suspense>
             <Suspense fallback={<CardSkeleton />}>
               <AwaitStage stage={stages.accounts}>{(r) => <AccountsSection result={r} />}</AwaitStage>
@@ -95,11 +95,11 @@ export function CampaignsSection({ result }: { result: Stage<CampaignRow[]> }) {
   )
 }
 
-export function RepliesSection({ result }: { result: Stage<RepliedLead[]> }) {
+export function RepliesSection({ result, summary }: { result: Stage<RepliedLead[]>; summary: DashboardSummary }) {
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {result.errors.length ? <ErrorsNotice errors={result.errors} /> : null}
-      <RepliesList leads={result.data} />
+      <RepliesList leads={result.data} replied={summary.totals.counts.replied} autoReplies={summary.totals.counts.autoReplies} />
     </div>
   )
 }
