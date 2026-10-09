@@ -32,6 +32,7 @@ import {
   type PreviewLead,
 } from '@/lib/instantly/add-leads'
 import type { InstantlyWriter } from '@/lib/instantly/writer'
+import type { Batch } from '@/lib/rules/evaluate'
 
 const CAMPAIGN_ID = /^[0-9a-f-]{8,64}$/i
 const DEFAULT_EXPIRY_HOURS = 72
@@ -185,7 +186,7 @@ const QUEUED_NOTE = 'Queued for a human OK in the dashboard (Activity > Needs yo
 export async function requestAddLeads(
   db: Db,
   actor: string,
-  input: { campaign_id: unknown; campaign_name?: unknown; company_ids?: unknown; emails?: unknown; reason?: unknown; task_id?: number | null; expires_in_hours?: number },
+  input: { campaign_id: unknown; campaign_name?: unknown; company_ids?: unknown; emails?: unknown; batch?: unknown; reason?: unknown; task_id?: number | null; expires_in_hours?: number },
   lookupInInstantly: ((emails: string[]) => Promise<string[]>) | null,
 ): Promise<RequestResult> {
   const cid = campaignId(input.campaign_id)
@@ -194,7 +195,9 @@ export async function requestAddLeads(
   const me = await agentName(db, actor)
   const { ids, unknownEmails } = await resolveCompanies(db, input)
   // The Instantly lookup is a read (POST /leads/list); it runs outside the transaction.
-  const p: AddPreview = await buildAddPreview(db, { campaign_id: cid, campaign_name: name, company_ids: ids }, lookupInInstantly)
+  if (input.batch != null && input.batch !== 'standard' && input.batch !== 'role-inbox') throw new OpsError('batch must be standard or role-inbox')
+  const batch: Batch = input.batch === 'role-inbox' ? 'role-inbox' : 'standard'
+  const p: AddPreview = await buildAddPreview(db, { campaign_id: cid, campaign_name: name, company_ids: ids, batch }, lookupInInstantly)
   const preview: Omit<GatePreview, 'instantly_action_id'> = {
     kind: 'add_leads',
     campaign_id: cid,
@@ -277,7 +280,7 @@ async function refreshReady(db: Db, row: ActionRow): Promise<{ kept: number; dro
   const p = row.preview
   if (!p) return { kept: 0, dropped: [] }
   const companyIds = [...new Set(p.ready.map((l) => l.company_id))]
-  const fresh = await buildAddPreview(db, { campaign_id: row.campaign_id, campaign_name: row.campaign_name, company_ids: companyIds }, null)
+  const fresh = await buildAddPreview(db, { campaign_id: row.campaign_id, campaign_name: row.campaign_name, company_ids: companyIds, batch: p.batch === 'role-inbox' ? 'role-inbox' : 'standard' }, null)
   const ok = new Set(fresh.ready.map((l) => l.contact_id))
   const why = new Map(fresh.excluded.map((l) => [l.contact_id, l.excluded ? EXCLUDE_WORDS[l.excluded] : 'no longer the best contact']))
   const keep = p.ready.filter((l) => ok.has(l.contact_id))
