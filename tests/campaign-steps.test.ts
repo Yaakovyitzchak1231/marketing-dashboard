@@ -189,6 +189,15 @@ describe('campaign steps (real Postgres via PGlite)', () => {
     expect(r).toMatchObject({ status: 'pending', requested_by: 'tab', instantly_campaign_id: IID })
     expect(r.payload.lead_count).toBe(3)
     expect(r.payload.steps).toHaveLength(2)
+    // The leads part waits in Needs your OK (#46's gate): a pending approval tied to an
+    // awaiting_approval Instantly action for the linked campaign. Nothing was sent.
+    expect(r.approval_id).toEqual(expect.any(Number))
+    const ap = (await db.query<{ status: string; requested_by: string; instantly_action_id: number }>(`select status, requested_by, instantly_action_id from lp.approvals where id = $1`, [r.approval_id])).rows[0]
+    expect(ap).toMatchObject({ status: 'pending', requested_by: 'tab' })
+    const act = (await db.query<{ kind: string; status: string; campaign_id: string; approval_id: number }>(`select kind, status, campaign_id, approval_id from lp.instantly_actions where id = $1`, [ap.instantly_action_id])).rows[0]
+    expect(act).toMatchObject({ kind: 'add_leads', status: 'awaiting_approval', campaign_id: IID })
+    expect(Number(act.approval_id)).toBe(r.approval_id)
+    expect(r.payload.instantly_action_id).toBe(Number(ap.instantly_action_id))
     await expect(requestPush(db, 'owner', camp, {})).rejects.toMatchObject({ status: 409 })
     // An agent can never approve one, not even by writing the row directly.
     await expect(
@@ -196,6 +205,23 @@ describe('campaign steps (real Postgres via PGlite)', () => {
     ).rejects.toThrow(/only a human/)
     await expect(cancelPush(db, 'hermes', camp, r.id)).rejects.toMatchObject({ status: 403 })
     expect((await cancelPush(db, 'tab', camp, r.id)).status).toBe('cancelled')
+    // Withdrawing it withdraws the Needs-your-OK row and the queued action too.
+    expect((await db.query<{ status: string }>(`select status from lp.approvals where id = $1`, [r.approval_id])).rows[0].status).toBe('cancelled')
+    expect((await db.query<{ status: string }>(`select status from lp.instantly_actions where id = $1`, [ap.instantly_action_id])).rows[0].status).toBe('cancelled')
+
+    // Steps alone: #46 has no "write a sequence" change, so it stays a pending record (no approval, no action).
+    const s = await requestPush(db, 'tab', camp, { what: 'steps' })
+    expect(s).toMatchObject({ status: 'pending', approval_id: null })
+    expect(s.payload.instantly_action_id).toBeUndefined()
+    await cancelPush(db, 'owner', camp, s.id)
+
+    // A person's own ask becomes an Add to Instantly preview they confirm themselves
+    // (the gate won't let anyone approve their own Needs-your-OK row).
+    const h = await requestPush(db, 'owner', camp, { what: 'leads' })
+    expect(h.approval_id).toBeNull()
+    expect(h.payload.confirm_url).toBe(`/leads/instantly?action=${h.payload.instantly_action_id}`)
+    expect((await db.query<{ status: string }>(`select status from lp.instantly_actions where id = $1`, [h.payload.instantly_action_id])).rows[0].status).toBe('preview')
+    await cancelPush(db, 'owner', camp, h.id)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
