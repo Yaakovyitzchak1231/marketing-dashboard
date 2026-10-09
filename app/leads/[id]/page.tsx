@@ -8,6 +8,8 @@ import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/pri
 import { StagePill, VerificationPill, ResearchPill, place, dateTime, shortDate } from '@/components/leads/pills'
 import { StageSelect } from '@/components/leads/StageSelect'
 import { CommentForm } from '@/components/leads/CommentForm'
+import { EditFields } from '@/components/leads/EditFields'
+import { EDITABLE_CONTACT_STATUSES, FIELD_LABELS } from '@/lib/leads/edit-fields'
 import { SEGMENT_LABELS, STAGE_LABELS } from '@/lib/leads/filters'
 import type { Stage, VerificationStatus } from '@/lib/leads/types'
 
@@ -80,6 +82,19 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-6">
           <Card className="px-4 py-3">
+            <div className="mb-2 flex justify-end">
+              <EditFields
+                endpoint={`/api/leads/${c.id}`}
+                title="store details"
+                fields={[
+                  { name: 'name', label: 'Name', value: c.name },
+                  { name: 'website', label: 'Website', value: c.website, type: 'url' },
+                  { name: 'phone', label: 'Phone', value: c.phone, type: 'tel' },
+                  { name: 'city', label: 'City', value: c.city },
+                  { name: 'state', label: 'State', value: c.state },
+                ]}
+              />
+            </div>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
               <Fact label="Stage"><StagePill stage={c.stage} /></Fact>
               <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
@@ -100,7 +115,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                     <div className="min-w-0">
                       <div className="truncate font-medium text-ink">{ct.email ?? 'No email'}</div>
                       <div className="text-[12px] text-ink-faint">
-                        {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.title, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
+                        {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.title, ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
@@ -108,6 +123,19 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                     <span className="flex items-center gap-1.5">
                       {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
                       <VerificationPill status={ct.verification_status} />
+                      <EditFields
+                        endpoint={`/api/leads/${c.id}/contacts/${ct.id}`}
+                        title={`contact ${ct.email ?? ct.id}`}
+                        confirmEmailChange
+                        fields={[
+                          { name: 'first_name', label: 'First name', value: ct.first_name },
+                          { name: 'last_name', label: 'Last name', value: ct.last_name },
+                          { name: 'email', label: 'Email', value: ct.email, type: 'email' },
+                          { name: 'title', label: 'Title / role', value: ct.title },
+                          { name: 'phone', label: 'Phone', value: ct.phone, type: 'tel' },
+                          { name: 'status', label: 'Status', value: ct.status, type: 'select', options: EDITABLE_CONTACT_STATUSES },
+                        ]}
+                      />
                     </span>
                   </li>
                 ))}
@@ -220,7 +248,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             )}
           </Section>
 
-          <Section title="Status history" meta={`${d.history.length}`}>
+          <Section title="History" meta={`${d.history.length}`}>
             {d.history.length ? (
               <ol className="divide-y divide-line-soft">
                 {d.history.map((h) => (
@@ -272,8 +300,10 @@ function verificationMeta(d: LeadDetail): string {
 
 function historyLine(field: string, from: string | null, to: string | null): string {
   const label = (v: string | null) => (v && field === 'stage' && v in STAGE_LABELS ? STAGE_LABELS[v as Stage] : v ?? '')
-  const name = field === 'verification_status' ? 'Email status' : field === 'stage' ? 'Stage' : 'Status'
-  return from === null ? `${name} set to ${label(to)}` : `${name}: ${label(from)} → ${label(to)}`
+  const name = FIELD_LABELS[field] ?? field.replace(/_/g, ' ')
+  if (from === null) return `${name} set to ${label(to)}`
+  if (to === null) return `${name} cleared (was ${label(from)})`
+  return `${name}: ${label(from)} → ${label(to)}`
 }
 
 function Section({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {

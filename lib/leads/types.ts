@@ -60,6 +60,9 @@ export interface ContactRow {
   last_name: string | null
   suggested_first_name: string | null
   title: string | null
+  /** A person's direct line (migration 0007), raw as typed plus E.164. */
+  phone: string | null
+  phone_e164: string | null
   is_role_address: boolean | null
   email_source: string | null
   name_source: string | null
