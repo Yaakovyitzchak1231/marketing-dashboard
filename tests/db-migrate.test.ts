@@ -49,7 +49,7 @@ describe('migrationPlan (when the build migrates)', () => {
 })
 
 describe('applyMigrations', () => {
-  it('applies every migration in filename order (0001 .. 0005), then nothing on a re-run', async () => {
+  it('applies every migration in filename order (0001 .. 0006), then nothing on a re-run', async () => {
     const files = migrationFiles(REAL)
     expect(files[0]).toBe('0001_lead_platform.sql')
     expect(files).toEqual([...files].sort())
