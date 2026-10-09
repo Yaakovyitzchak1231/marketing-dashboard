@@ -10,6 +10,8 @@ vi.mock('@/lib/db', () => ({ getDb: () => holder.db, dbConfigured: () => Boolean
 import { POST } from '@/app/api/ops/import/lead-master/route'
 import { importLeadRows, sheetStatus } from '@/lib/leads/import'
 import { csvObjects } from '@/lib/leads/csv'
+import { reasonFor } from '@/lib/instantly/add-leads'
+import { nextContactStatus } from '@/lib/verify/waterfall'
 
 const TOKEN = 'tab-token-0123456789abcdefghijkl'
 const CSV = readFileSync(join(__dirname, 'fixtures', 'lead_master_sample.csv'), 'utf8')
@@ -130,5 +132,19 @@ describe('POST /api/ops/import/lead-master?mode=sync_status', () => {
   it('the normal import gives new contacts the newer statuses too', async () => {
     await importLeadRows(db, [{ email: 'owner@newstore.example', status: 'role-based-hold', company_name: 'New Store', website: 'https://newstore.example' }], { actor: 'tab' })
     expect((await statusOf('owner@newstore.example')).status).toBe('role-based-hold')
+  })
+})
+
+describe('held statuses stay held, never thrown out', () => {
+  const base = { email_norm: 'info@store.example', verification_status: 'valid', do_not_contact: false, personalization: null, company: 'Store', website: null, phone: null, touched: false }
+  it('Add to Instantly excludes them as on hold (not rejected), even when the email verified valid', () => {
+    expect(reasonFor({ ...base, status: 'role-based-hold' } as Parameters<typeof reasonFor>[0], new Set())).toBe('on_hold')
+    expect(reasonFor({ ...base, status: 'needs-check' } as Parameters<typeof reasonFor>[0], new Set())).toBe('on_hold')
+    expect(reasonFor({ ...base, status: 'valid-ready' } as Parameters<typeof reasonFor>[0], new Set())).toBeNull()
+  })
+  it('a verification verdict never moves them', () => {
+    expect(nextContactStatus('role-based-hold', 'valid')).toBe('role-based-hold')
+    expect(nextContactStatus('role-based-hold', 'invalid')).toBe('role-based-hold')
+    expect(nextContactStatus('needs-check', 'valid')).toBe('needs-check')
   })
 })
