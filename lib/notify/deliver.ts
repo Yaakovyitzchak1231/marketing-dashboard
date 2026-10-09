@@ -263,7 +263,7 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       let res: Response | null = null
       let err = ''
       try {
-        res = await fetchImpl(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8_000) })
+        res = await fetchImpl(url, { method: 'POST', headers, body, redirect: 'manual', signal: AbortSignal.timeout(8_000) })
       } catch (e) {
         err = `unreachable: ${(e as Error).message}`
       }

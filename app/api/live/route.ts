@@ -13,7 +13,9 @@ export const maxDuration = 60
 
 const ME = 'owner'
 const WINDOW_MS = 50_000
-const POLL_MS = 1_500
+// 10 s keeps Neon's compute and the function cheap while a page is open; the browser stops
+// listening after 15 idle minutes (components/ops/live.ts), so nothing stays awake all day.
+const POLL_MS = 10_000
 
 export async function GET(req: Request) {
   const db = getDb()
@@ -42,7 +44,7 @@ export async function GET(req: Request) {
             send(`event: change\ndata: ${JSON.stringify({ unread: r.unread, last_event_id: r.ev, first: last === '' })}\n\n`)
             last = sig
           }
-          if (Date.now() - lastDispatch > 10_000) {
+          if (Date.now() - lastDispatch >= 10_000) {
             lastDispatch = Date.now()
             await dispatchDue(db).catch(() => undefined)
           }

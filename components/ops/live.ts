@@ -2,8 +2,11 @@
 
 /**
  * One shared live connection per browser tab (EventSource on /api/live). Components
- * subscribe; the connection opens while the tab is visible and closes when it is hidden.
+ * subscribe; the connection opens while the tab is visible and closes when it is hidden,
+ * or after 15 minutes with no change and no input from the person (it resumes on focus,
+ * click, key or scroll), so an idle tab does not keep the server and database awake.
  */
+export const IDLE_MS = 15 * 60_000
 export interface LiveChange {
   unread: number
   last_event_id: number | null
@@ -15,13 +18,22 @@ const listeners = new Set<Listener>()
 let es: EventSource | null = null
 let lastChange: LiveChange | null = null
 let failures = 0
+let lastActive = Date.now()
+let idleTimer: ReturnType<typeof setInterval> | null = null
+
+function markActive() {
+  lastActive = Date.now()
+  if (!es && listeners.size) open()
+}
 
 function open() {
   if (es || typeof window === 'undefined' || typeof EventSource === 'undefined') return
   if (document.visibilityState !== 'visible') return
+  lastActive = Date.now()
   es = new EventSource('/api/live')
   es.addEventListener('change', (e) => {
     failures = 0
+    lastActive = Date.now()
     try {
       lastChange = JSON.parse((e as MessageEvent).data) as LiveChange
       for (const l of listeners) l(lastChange)
@@ -48,9 +60,15 @@ function wire() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       failures = 0
-      open()
+      markActive()
     } else close()
   })
+  for (const ev of ['focus', 'pointerdown', 'keydown', 'scroll'] as const) {
+    window.addEventListener(ev, markActive, { passive: true })
+  }
+  if (!idleTimer) idleTimer = setInterval(() => {
+    if (es && Date.now() - lastActive > IDLE_MS) close()
+  }, 60_000)
 }
 
 export function subscribeLive(l: Listener): () => void {

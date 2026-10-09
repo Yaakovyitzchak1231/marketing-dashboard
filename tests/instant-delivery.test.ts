@@ -99,18 +99,43 @@ describe('webhook channel', () => {
     let status = 500
     const { f } = fakeFetch((c) => (c.url.includes('flaky') ? new Response('no', { status }) : new Response('ok')))
     await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV })
-    let d = (await deliveriesOf(n.id))[0]
+    let d = (await deliveriesOf(n.id)).find((x) => x.kind === 'webhook')!
     expect(d).toMatchObject({ status: 'pending', attempts: 1, last_error: 'answered 500' })
     // Not due again until the backoff passes.
     const again = await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV })
     expect(again.picked).toBe(0)
     status = 404
     await dispatchDue(db, { fetchImpl: f, now: new Date(WEEKDAY.getTime() + 60_000), env: MAIL_ENV })
-    d = (await deliveriesOf(n.id))[0]
+    d = (await deliveriesOf(n.id)).find((x) => x.kind === 'webhook')!
     expect(d).toMatchObject({ status: 'failed', last_error: 'answered 404' })
     const ev = await db.query<{ summary: string }>("select summary from lp.events where kind = 'delivery.failed' order by id desc limit 1")
     expect(ev.rows[0].summary).toContain('Flaky (webhook)')
     expect(MAX_ATTEMPTS).toBeGreaterThan(3)
+  })
+})
+
+describe('new agents', () => {
+  it('get a default pull channel, so their feed works before any push channel is added', async () => {
+    await addActor(db, 'owner', { id: 'fresh-agent', display_name: 'Fresh' })
+    const ch = await db.query<{ kind: string }>("select kind from lp.delivery_channels where actor_id = 'fresh-agent'")
+    expect(ch.rows.map((r) => r.kind)).toEqual(['pull'])
+    await createTask(db, 'owner', { title: 'Hello fresh', assigned_to: 'fresh-agent' })
+    const items = await feed(db, 'fresh-agent', { limit: 10 })
+    expect(items.some((e) => e.summary.includes('Hello fresh'))).toBe(true)
+    await addActor(db, 'owner', { id: 'a-person', display_name: 'Person', kind: 'human' })
+    const none = await db.query("select 1 from lp.delivery_channels where actor_id = 'a-person'")
+    expect(none.rows).toHaveLength(0)
+  })
+
+  it('webhook delivery does not follow redirects', async () => {
+    await addActor(db, 'owner', { id: 'redir', display_name: 'Redir' })
+    await addChannel(db, 'owner', { actor_id: 'redir', kind: 'webhook', url: 'https://redir.example/hook' })
+    await createTask(db, 'owner', { title: 'No redirects', assigned_to: 'redir' })
+    const { f, calls } = fakeFetch(() => new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/' } }))
+    await dispatchDue(db, { fetchImpl: f, now: WEEKDAY, env: MAIL_ENV, limit: 500 })
+    const hook = calls.find((c) => c.url === 'https://redir.example/hook')!
+    expect(hook.init.redirect).toBe('manual')
+    expect(calls.some((c) => c.url.includes('169.254'))).toBe(false)
   })
 })
 

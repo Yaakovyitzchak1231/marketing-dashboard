@@ -97,5 +97,12 @@ export async function addActor(
     `insert into lp.events (actor, kind, summary, entity_type, entity_id) values ($1, 'agent.added', $2, 'actor', $3)`,
     [by, `Added ${a.kind === 'human' ? 'person' : 'agent'} ${name} (${id})`, id],
   )
+  if ((a.kind ?? 'agent') === 'agent') {
+    // Every new agent can read its feed (GET /api/ops/feed) from the start; push channels are added on its page.
+    await q.query(
+      `insert into lp.delivery_channels (actor_id, kind, label, config, created_by) values ($1, 'pull', 'Checks its feed (default)', '{}'::jsonb, $2)`,
+      [id, by],
+    )
+  }
   return { id }
 }
