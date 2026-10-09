@@ -5,9 +5,9 @@
  */
 import type { Queryable } from '@/lib/db/types'
 
-export type Segment = 'jeweler' | 'ai_agency' | 'other'
-export const SEGMENTS: Segment[] = ['jeweler', 'ai_agency', 'other']
-export const SEGMENT_LABEL: Record<Segment, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', other: 'Other' }
+export type Segment = 'jeweler' | 'ai_agency' | 'ai_builder' | 'other'
+export const SEGMENTS: Segment[] = ['jeweler', 'ai_agency', 'ai_builder', 'other']
+export const SEGMENT_LABEL: Record<Segment, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', ai_builder: 'AI builders', other: 'Other' }
 
 export interface CampaignMeta {
   campaign_id: string
@@ -55,6 +55,7 @@ export function angleHintFromName(name: string): string | null {
 
 export function segmentHintFromName(name: string): Segment | null {
   if (/jewel/i.test(name)) return 'jeweler'
-  if (/\b(ai|agenc|builder)/i.test(name)) return 'ai_agency'
+  if (/builder/i.test(name)) return 'ai_builder'
+  if (/\b(ai|agenc)/i.test(name)) return 'ai_agency'
   return null
 }

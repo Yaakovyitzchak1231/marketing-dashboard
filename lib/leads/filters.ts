@@ -16,9 +16,9 @@ export const VIEW_LABELS: Record<LeadView, string> = {
   verify: 'Needs verification',
 }
 
-export const SEGMENTS = ['jeweler', 'ai_agency', 'other'] as const
+export const SEGMENTS = ['jeweler', 'ai_agency', 'ai_builder', 'other'] as const
 export type Segment = (typeof SEGMENTS)[number]
-export const SEGMENT_LABELS: Record<Segment, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', other: 'Other' }
+export const SEGMENT_LABELS: Record<Segment, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', ai_builder: 'AI builders', other: 'Other' }
 
 export const STAGE_LABELS: Record<Stage, string> = {
   new: 'New',

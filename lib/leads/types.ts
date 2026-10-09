@@ -31,7 +31,7 @@ export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number]
 export interface CompanyRow {
   id: number
   name: string
-  segment: 'jeweler' | 'ai_agency' | 'other'
+  segment: 'jeweler' | 'ai_agency' | 'ai_builder' | 'other'
   vertical: string | null
   website: string | null
   website_domain: string | null
@@ -46,6 +46,10 @@ export interface CompanyRow {
   stage: Stage
   research_status: ResearchStatus
   last_researched_at: Date | null
+  /** Owner research marked exhausted (0010): when and by whom. */
+  owner_research_exhausted_at?: Date | null
+  owner_research_exhausted_by?: string | null
+  owner_research_note?: string | null
   notes: string | null
   created_at: Date
   updated_at: Date

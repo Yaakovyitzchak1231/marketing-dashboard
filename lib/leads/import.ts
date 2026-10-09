@@ -86,9 +86,10 @@ function clean(v: string | undefined): string | null {
   return s ? s : null
 }
 
-function segmentFor(vertical: string | null): 'jeweler' | 'ai_agency' | 'other' {
+function segmentFor(vertical: string | null): 'jeweler' | 'ai_agency' | 'ai_builder' | 'other' {
   const v = (vertical ?? '').toLowerCase()
-  if (/\bai\b|agency|builder|automation/.test(v)) return 'ai_agency'
+  if (/builder/.test(v)) return 'ai_builder'
+  if (/\bai\b|agency|automation/.test(v)) return 'ai_agency'
   return 'jeweler'
 }
 
@@ -173,10 +174,11 @@ async function addEnrichment(q: Queryable, companyId: number, contactId: number 
   const r = await q.query(
     `insert into lp.enrichment (company_id, contact_id, field, value, confidence, evidence_url, method, actor_id)
      values ($1, $2, $3, $4, $5, $6, 'sheet_import', $7)
-     on conflict (company_id, field, lower(value)) do nothing returning id`,
+     on conflict (company_id, field, lower(value)) do update set last_checked_at = now(), last_checked_by = excluded.actor_id
+     returning id, (xmax = 0) as inserted`,
     [companyId, contactId, field, value.slice(0, 4000), conf, extra.evidence_url ?? null, actor],
   )
-  if (r.rows.length) stats.enrichment_added++
+  if ((r.rows[0] as { inserted?: boolean } | undefined)?.inserted) stats.enrichment_added++
 }
 
 export async function importLeadRows(
