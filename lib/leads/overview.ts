@@ -16,7 +16,7 @@ export interface OverviewData {
   /** Companies with at least one unverified email; and the unverified emails themselves. */
   needsVerificationCompanies: number
   unverifiedContacts: number
-  /** Emails verified valid, not do-not-contact, and not yet in Instantly / sent / replied / bounced / rejected. */
+  /** Emails verified valid, not do-not-contact, not on hold, and not yet in Instantly / sent / replied / bounced / rejected. */
   readyToSend: number
   /** Companies with at least one Instantly event (campaign_touches). */
   inCampaigns: number
@@ -44,7 +44,7 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
          (select count(distinct company_id)::int from lp.contacts where email_norm is not null and verification_status = 'unverified' and company_id is not null) as needs_verif_co,
          (select count(*)::int from lp.contacts where email_norm is not null and verification_status = 'unverified') as unverified,
          (select count(*)::int from lp.contacts where email_norm is not null and verification_status = 'valid' and not do_not_contact
-             and status not in ('in-Instantly', 'sent', 'replied', 'bounced', 'rejected', 'do-not-contact')) as ready,
+             and status not in ('in-Instantly', 'sent', 'replied', 'bounced', 'rejected', 'do-not-contact', 'role-based-hold', 'needs-check')) as ready,
          (select count(distinct tc.co)::int from ${TOUCH_COMPANY_REL} tc) as in_campaigns`,
     ),
     db.query<{ active: number; queued: number; approvals: number }>(
