@@ -94,7 +94,7 @@ export function ActorLink({ id, name }: { id: string | null; name: string | null
 }
 
 export const inputCls =
-  'w-full rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none'
+  'w-full rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
 export const btnCls =
   'inline-flex items-center justify-center rounded-card border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink hover:border-ink-faint'
 export const primaryBtnCls =

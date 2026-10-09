@@ -53,7 +53,7 @@ export function PauseControl({
           maxLength={500}
           aria-label="Reason"
           placeholder="Reason (optional, shown to the agent)"
-          className="min-w-0 flex-1 rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+          className="min-w-0 flex-1 rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
         />
       )}
       <button type="submit" className={BUTTON_PRIMARY}>

@@ -87,7 +87,7 @@ export function FindForm({
   }
 
   const label = 'block text-[12px] font-medium text-ink-muted'
-  const input = 'mt-1 w-full rounded-md border border-line bg-canvas px-2.5 py-1.5 text-[13.5px] text-ink outline-none focus:border-accent'
+  const input = 'mt-1 w-full rounded-md border border-line bg-canvas px-2.5 py-1.5 text-[13.5px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-accent'
 
   return (
     <form onSubmit={submit} className="grid gap-4 p-4 sm:p-5">
