@@ -207,7 +207,13 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
   }
 
   // Workspace tracking = tracking of the campaigns that actually sent in the range.
-  const sentIds = (rangeRows ?? []).filter((r) => (num(r.emails_sent_count) ?? 0) > 0).map((r) => r.campaign_id)
+  // Optimization: use a single pass instead of filter/map chaining
+  const sentIds: string[] = []
+  if (rangeRows) {
+    for (const r of rangeRows) {
+      if ((num(r.emails_sent_count) ?? 0) > 0) sentIds.push(r.campaign_id)
+    }
+  }
   const basis = sentIds.length ? sentIds : ids
   const totalTracking = {
     open: combinedTracking(basis.map((id) => trackingOf(id).open)),
@@ -235,10 +241,14 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
   }
 
   // ---- Phase 1.5: the shape of phase 2, from what phase 1 already returned ---------
-  const earliestCreated = listed
-    .map((c) => (c.timestamp_created ? Date.parse(c.timestamp_created) : NaN))
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b)[0]
+  // Single pass to find the minimum: avoids map/filter/sort intermediate arrays.
+  let earliestCreated: number | undefined
+  for (const c of listed) {
+    const t = c.timestamp_created ? Date.parse(c.timestamp_created) : NaN
+    if (Number.isFinite(t) && (earliestCreated === undefined || t < earliestCreated)) {
+      earliestCreated = t
+    }
+  }
   const dailyStart = range.start ?? (earliestCreated !== undefined ? dateInZone(new Date(earliestCreated), timeZone) : addDays(range.end, -(ALL_TIME_FALLBACK_DAYS - 1)))
 
   // Campaigns worth a per-campaign call: those with activity in the range (when we know it).
@@ -249,7 +259,11 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
   if (!accountsPage) fail('accounts', (accountsR as PromiseRejectedResult).reason)
   else if (accountsPage.truncated) errors.push({ source: 'accounts', message: `Only the first ${accountsPage.items.length} sending accounts were read; there are more.` })
   const accounts = accountsPage?.items ?? []
-  const accountEmails = accounts.map((a) => a.email).filter(Boolean)
+  // Optimization: collect emails in one pass, avoiding intermediate arrays
+  const accountEmails: string[] = []
+  for (const a of accounts) {
+    if (a.email) accountEmails.push(a.email)
+  }
 
   let accountWindows = chunkRange(range.start ?? dailyStart, range.end, ACCOUNT_WINDOW_DAYS)
   if (accountWindows.length > MAX_ACCOUNT_WINDOWS) {
@@ -432,7 +446,13 @@ export async function loadAccounts(ctx: DashboardContext): Promise<Stage<SenderA
 /** Replied leads still waiting on you, newest reply first. */
 export async function loadReplies(ctx: DashboardContext): Promise<Stage<RepliedLead[]>> {
   const errors: SourceError[] = []
-  const threadContacts = [...new Set(ctx.threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
+  // Single pass into a Set: avoids map/filter intermediate arrays.
+  const threadContactsSet = new Set<string>()
+  for (const e of ctx.threads) {
+    const lead = e.lead?.toLowerCase()
+    if (lead) threadContactsSet.add(lead)
+  }
+  const threadContacts = [...threadContactsSet]
   let leads: ApiLead[] | null = []
   if (threadContacts.length) {
     try {
