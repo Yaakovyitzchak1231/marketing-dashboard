@@ -2,7 +2,7 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { getDb } from '@/lib/db'
-import { isFallbackOwner, resolveRole, type Role } from './roles'
+import { AuthError, isFallbackOwner, resolveRole, type Role } from './roles'
 
 /**
  * The signed-in user's email, read from the Supabase session cookie that
@@ -60,8 +60,10 @@ export async function currentActorId(): Promise<string> {
       )
       if (r.rows[0]) return r.rows[0].id
     } catch {
-      // fall through to the default below
+      // fall through: fail closed below
     }
   }
-  return 'owner'
+  // Fail closed (Hermes review): never write a change as 'owner' for someone we
+  // could not identify. Nothing is saved; the action shows this message.
+  throw new AuthError(email ? "Couldn't confirm your account, so nothing was saved. Try again." : 'Not signed in.')
 }

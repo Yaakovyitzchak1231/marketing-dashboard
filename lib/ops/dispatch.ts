@@ -71,6 +71,7 @@ import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
 import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
 import { MERGE_OPS } from '../merge/ops.ts'
 import { RETENTION_OPS } from '../retention/ops.ts'
+import { checkOpRole } from './actor-role.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -518,6 +519,7 @@ export const OPS: Record<string, Op> = {
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
   const o = Object.prototype.hasOwnProperty.call(OPS, op) ? OPS[op] : undefined
   if (!o) throw new OpsError(`unknown op '${op}'. GET /api/ops lists them.`, 404)
+  await checkOpRole(db, actor, op)
   return o.run(db, actor, args ?? {})
 }
 
