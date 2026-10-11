@@ -12,6 +12,7 @@ import { EditFields } from '@/components/leads/EditFields'
 import { EDITABLE_CONTACT_STATUSES, FIELD_LABELS } from '@/lib/leads/edit-fields'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
+import { ForgetContactButton } from '@/components/leads/ForgetContactButton'
 import { SEGMENT_LABELS, STAGE_LABELS } from '@/lib/leads/filters'
 import type { Stage, VerificationStatus } from '@/lib/leads/types'
 import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
@@ -137,6 +138,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                           .join(' · ')}
                       </div>
                       <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
+                      <div className="mt-1"><ForgetContactButton contactId={ct.id} email={ct.email} /></div>
                     </div>
                     <span className="flex items-center gap-1.5">
                       {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}

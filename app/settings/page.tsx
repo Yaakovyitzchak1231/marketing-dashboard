@@ -17,6 +17,9 @@ import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/se
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import { listRetentionPolicies } from '@/lib/retention/store'
+import { RetentionPolicyRow } from '@/components/settings/RetentionPolicyRow'
+import { RunSweepButton } from '@/components/settings/RunSweepButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +33,7 @@ export default async function SettingsPage() {
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db)])
+  const [settingsRows, secretRows, actors, integrations, retentionPolicies] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db), listRetentionPolicies(db)])
   const settingsByKey = new Map(settingsRows.map((s) => [s.key, s]))
   const secretsByKey = new Map(secretRows.map((s) => [s.key, s]))
   const groups = settingsByGroup()
@@ -211,6 +214,19 @@ export default async function SettingsPage() {
           </Card>
         </section>
       ) : null}
+
+      <section className="mb-6">
+        <SectionHeader title="Data" meta="How long raw campaign events are kept, and removing a person's data on request" />
+        <Card className="p-4">
+          {retentionPolicies.map((p) => (
+            <RetentionPolicyRow key={p.event_category} category={p.event_category} keepDays={p.keep_days} description={p.description} />
+          ))}
+          <RunSweepButton />
+          <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+            Leave a field blank to keep that kind of event forever. To remove one person&apos;s info entirely, use “Forget this person” on their lead page.
+          </p>
+        </Card>
+      </section>
 
       <section className="mb-6">
         <SectionHeader title="Agents" meta="Which task kinds each agent picks up" />

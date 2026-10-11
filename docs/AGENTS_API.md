@@ -187,3 +187,45 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+
+## 8. Duplicate detection & merge, and data retention
+
+**Merge** (`lib/merge/ops.ts`) finds likely-duplicate companies or contacts and
+collapses one into the other. Candidates are recomputed live from
+`lib/leads/normalize.ts` against the raw fields (not read off the stored,
+already-unique-indexed columns), so near-duplicates that drifted from the
+current normalizer still turn up. A merge moves every dependent row (contacts,
+campaign touches, sources, enrichment, comments, tasks, verification results)
+to the kept id, applies the human's field-by-field choices, soft-deletes the
+loser (`merged_into`), and writes `lp.merge_log` + `lp.status_history`. A
+merged row is excluded from every dedupe unique index and from normal lists.
+
+| op | args | what |
+|---|---|---|
+| `merge_candidates` | `{entity: company\|contact, limit?}` | Likely-duplicate pairs: same recomputed website domain, phone, name+address key (companies) or email (contacts). |
+| `merge` | `{entity: company\|contact, keep, merge, choices?: {field: "keep"\|"merge"\|value}}` | **Owner only.** Collapses `merge` into `keep`. Unlisted fields default to `keep`'s value (falling back to `merge`'s when `keep`'s is empty). Rejects a self-merge or an id that is already a merge loser. |
+
+UI: `app/leads/duplicates` — a side-by-side compare per candidate pair, pick
+which side's value wins per field, then Merge.
+
+**Retention & "Forget this person"** (`lib/retention/ops.ts`): `lp.retention_policies`
+says how long raw `lp.campaign_touches` rows are kept per `event_type` (null
+`keep_days` = forever; opens/clicks default to 540 days, everything else to
+forever). `forget_contact` wipes PII from a contact in place (the row and its
+company membership survive as an anonymized tombstone), scrubs the PII copies
+elsewhere (campaign-touch email, verification-result email, enrichment,
+sources) and clears that contact's own edit history, then suppresses the
+address by a **sha256 hash** — never the plaintext — so the Lead Master import
+(and any future import) never recreates them.
+
+| op | args | what |
+|---|---|---|
+| `list_retention_policies` | `{}` | Every category and its `keep_days`. |
+| `set_retention_policy` | `{event_category, keep_days: number\|null}` | **Owner only.** `null` = forever. |
+| `forget_contact` | `{contact_id, confirm}` | **Owner only.** `confirm` must be the contact's own (normalized) email, or `"forget"` when it has none — a typed confirmation, not a one-click delete. |
+| `retention_sweep` | `{}` | **Owner or `system` (the job runner) only.** Deletes `lp.campaign_touches` rows past their category's `keep_days`. Registered as a job definition (`name: 'retention_sweep'`, disabled, no schedule) the way `lib/jobs` registers any job; the OVH runner needs a handler for `kind: 'retention_sweep'` to fire it on a schedule — until then, Settings → Data has a "Run sweep now" button that calls the op directly. |
+
+UI: a lead's contact row has "Forget this person" (typed confirmation);
+Settings → Data lists every category with an editable `keep_days` field and
+the manual sweep button.

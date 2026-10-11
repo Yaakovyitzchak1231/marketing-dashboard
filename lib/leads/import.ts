@@ -23,6 +23,7 @@
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { isRoleAddress, nameAddressKey, normalizeDomain, normalizeEmail, normalizePhone } from './normalize.ts'
+import { isForgottenEmail } from '../retention/store.ts'
 
 export const CONTACT_STATUSES = new Set([
   'new', 'verifying', 'valid-ready', 'catch-all-hold', 'guessed-hold', 'role-based-hold', 'needs-check',
@@ -79,6 +80,7 @@ export interface ImportStats {
   verifications_added: number
   touches_added: number
   enrichment_added: number
+  skipped_forgotten: number
 }
 
 function clean(v: string | undefined): string | null {
@@ -191,7 +193,7 @@ export async function importLeadRows(
   const sourceRef = opts.sourceRef ?? 'lead_master'
   const stats: ImportStats = {
     rows: rows.length, skipped_no_email: 0, skipped_bad_email: 0, companies_created: 0, companies_matched: 0,
-    contacts_created: 0, contacts_existing: 0, verifications_added: 0, touches_added: 0, enrichment_added: 0,
+    contacts_created: 0, contacts_existing: 0, verifications_added: 0, touches_added: 0, enrichment_added: 0, skipped_forgotten: 0,
   }
   const keys = await loadKeys(db)
   const size = opts.batchSize ?? 500
@@ -209,6 +211,12 @@ export async function importLeadRows(
           stats.skipped_bad_email++
           continue
         }
+        // A person who asked to be forgotten (plan 1.12) is never re-created by an import,
+        // even though their old plaintext address was removed everywhere -- the hash still matches.
+        if (await isForgottenEmail(q, email)) {
+          stats.skipped_forgotten++
+          continue
+        }
         const companyId = await upsertCompany(q, keys, row, actor, stats)
         const status = sheetStatus(row.status) ?? 'new'
         const mv = clean(row.mv_result)?.toLowerCase() ?? null
@@ -218,7 +226,7 @@ export async function importLeadRows(
           `insert into lp.contacts (company_id, email, email_norm, first_name, last_name, suggested_first_name, is_role_address,
               email_source, name_source, name_confidence, name_evidence_url, status, verification_status, verified_at, verified_by, personalization, do_not_contact)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-           on conflict (email_norm) where email_norm is not null do nothing returning id`,
+           on conflict (email_norm) where email_norm is not null and merged_into is null do nothing returning id`,
           [
             companyId, rawEmail, email, clean(row.first_name), clean(row.last_name), clean(row.suggested_first_name), isRoleAddress(email),
             clean(row.email_source), clean(row.name_source), clean(row.name_confidence), clean(row.name_evidence_url), status,
@@ -293,3 +301,4 @@ export async function importLeadRows(
   }
   return stats
 }
+

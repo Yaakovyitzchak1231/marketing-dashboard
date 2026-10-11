@@ -59,6 +59,8 @@ import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
 import { INTEGRATION_OPS } from '../integrations/ops.ts'
+import { MERGE_OPS } from '../merge/ops.ts'
+import { RETENTION_OPS } from '../retention/ops.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -479,6 +481,10 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
+  // Duplicate detection & merge (lib/merge/ops.ts): merge_candidates, merge.
+  ...MERGE_OPS,
+  // Data retention & delete-a-person (lib/retention/ops.ts): retention policies, forget_contact, retention_sweep.
+  ...RETENTION_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
