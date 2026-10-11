@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { enqueueResearch } from '@/lib/engine/jobs'
+import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,5 +22,7 @@ export async function POST(req: Request) {
   const ids = Array.isArray(body.company_ids) ? body.company_ids.map(Number) : []
   if (!ids.length) return NextResponse.json({ error: 'company_ids is required' }, { status: 400 })
   const who = typeof body.assigned_to === 'string' && body.assigned_to ? body.assigned_to : 'tab'
-  return NextResponse.json(await enqueueResearch(db, 'owner', ids, who))
+  const result = await enqueueResearch(db, 'owner', ids, who)
+  kickDelivery(db)
+  return NextResponse.json(result)
 }

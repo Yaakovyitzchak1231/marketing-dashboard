@@ -4,7 +4,7 @@ import { SeoNav } from '@/components/seo/SeoNav'
 
 export default function SeoLayout({ children }: { children: ReactNode }) {
   return (
-    <PageShell title="SEO / AI visibility" meta="Google, plus the answers ChatGPT, Claude, Gemini and Perplexity give buyers. Free checks; models run only when their key is set.">
+    <PageShell title="SEO / AI visibility" meta="Search visibility, sampled AI answers and evidence-backed improvements. Provider checks run on request; publishing stays under your control.">
       <SeoNav />
       {children}
     </PageShell>

@@ -67,8 +67,8 @@ async function handle(req: NextRequest, ctx: Ctx, method: 'GET' | 'POST') {
 
   try {
     const data = await runOp(db, agent, op, args)
-    // Anything this call notified goes out right after the response (webhook, email, ntfy ping).
-    if (method === 'POST') kickDelivery(db)
+    // Reads also kick pending retries, without delaying the feed response on a provider.
+    kickDelivery(db)
     return NextResponse.json({ ok: true, op, data }, { headers: NO_STORE })
   } catch (e) {
     if (e instanceof OpsError) return fail(e.status, e.message)

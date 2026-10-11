@@ -1,0 +1,185 @@
+name: Docs maintainer
+
+# After every PR merged into main: verify the docs against the code, keep
+# docs/ARCHITECTURE.md current, and flag orphaned code or inconsistencies.
+# Needs the ANTHROPIC_API_KEY repository secret.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Merged PR number to audit
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: docs-maintainer
+  cancel-in-progress: false
+
+jobs:
+  docs:
+    # Skip the PRs this workflow opens itself.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       !startsWith(github.event.pull_request.head.ref, 'docs/maintenance-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Collect merged PR context
+        id: ctx
+        run: |
+          gh pr view "$PR_NUMBER" --json state,mergeCommit,files > "$RUNNER_TEMP/pr.json"
+          state=$(jq -r .state "$RUNNER_TEMP/pr.json")
+          if [ "$state" != "MERGED" ]; then
+            echo "::error::PR #$PR_NUMBER is $state, not merged"
+            exit 1
+          fi
+          echo "merge_sha=$(jq -r .mergeCommit.oid "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+          mkdir -p .docs-maintainer
+          jq -r '.files[].path' "$RUNNER_TEMP/pr.json" > .docs-maintainer/changed-files.txt
+
+      - name: Audit docs with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          claude_args: |
+            --model claude-haiku-5-5
+            --max-turns 40
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git ls-files:*),Bash(grep:*),Bash(find:*),Bash(ls:*),Bash(test:*),Bash(wc:*)"
+          prompt: |
+            You are the post-merge Docs Maintainer for ${{ github.repository }}.
+            PR #${{ env.PR_NUMBER }} was just merged into main as commit
+            ${{ steps.ctx.outputs.merge_sha }}. The working tree is main at that point.
+            The files the PR changed are listed in `.docs-maintainer/changed-files.txt`;
+            `git show --stat ${{ steps.ctx.outputs.merge_sha }}` shows the diff.
+
+            `AGENTS.md` is binding. Its first rule applies to documentation too:
+            never state a fact about the code that you did not verify in the code.
+
+            ## Task 1 — Verify README.md and project docs
+            Scope: `README.md`, `docs/*.md`, `collector/README.md`, `ops/**/README.md`,
+            `.env.example`.
+            - For every doc that mentions a file, route, script, env var, table or
+              command touched by the PR, check the claim against the code.
+            - Check that `package.json` scripts and file paths named in docs exist.
+            - Fix only statements that are verifiably wrong or missing. Keep the
+              existing tone and structure; do not rewrite prose for style.
+            - Refer to env vars by name only; never write a secret value.
+            - Do not edit `AGENTS.md`; report outdated rules under Flags instead.
+
+            ## Task 2 — Maintain docs/ARCHITECTURE.md
+            Create it if missing, otherwise update it in place. It must be readable
+            by a new developer and by an AI agent. Sections, in this order:
+            1. Purpose — two or three sentences.
+            2. Data flow — a short `mermaid` flowchart of the live data path, derived
+               from the code. Mark legacy paths as legacy.
+            3. Directory map — table: path | what lives there | key entry points.
+               Cover every top-level directory from `git ls-files`; go one level
+               deeper for `app/`, `lib/`, `components/`, `engine/`.
+            4. Key contracts — the central types, middleware and config files, one
+               line each.
+            5. Commands — from `package.json`.
+            6. Last verified — commit ${{ steps.ctx.outputs.merge_sha }}.
+            Derive every entry from the actual tree. Keep it under about 200 lines.
+
+            ## Task 3 — Flag orphans and inconsistencies (report only)
+            Start with the PR's files, then do a light repo-wide pass:
+            - `.ts`/`.tsx` modules under `lib/`, `components/`, `engine/` that nothing
+              imports (exclude Next.js route files, configs, tests, and scripts
+              referenced by `package.json`). Confirm with grep before flagging.
+            - Exports added or changed by the PR that have no callers.
+            - Docs or code referring to files, functions, env vars or routes that no
+              longer exist.
+            - Contradictions between docs, `AGENTS.md` and code.
+            - Breaks of the AGENTS.md data rules visible in the diff (NULL coerced to
+              0, averaged rates, invented figures).
+            Do not delete, move or refactor any code. Edit documentation files only.
+
+            ## Output
+            Write `.docs-maintainer/report.md` (Markdown) with exactly two sections:
+            - `## Docs changes` — one bullet per edited file: what changed and the
+              evidence (file:line or command). Write "None." if nothing changed.
+            - `## Flags` — one bullet per finding: file:line, what you observed, the
+              command you ran, and a suggested owner from the AGENTS.md ownership
+              table. Write "No orphans or inconsistencies found." plus the checks you
+              ran if there are none.
+            Do not commit, push, or open PRs; the workflow does that.
+
+      - name: Open docs PR and comment on the merged PR
+        env:
+          MERGE_SHA: ${{ steps.ctx.outputs.merge_sha }}
+        run: |
+          report="$RUNNER_TEMP/report.md"
+          if [ -s .docs-maintainer/report.md ]; then
+            cp .docs-maintainer/report.md "$report"
+          else
+            echo "_The docs maintainer produced no report; see the workflow run log._" > "$report"
+          fi
+          rm -rf .docs-maintainer
+
+          # Only documentation paths may change; revert anything else.
+          git add -A
+          git diff --cached --name-only | while read -r f; do
+            case "$f" in
+              README.md|docs/*.md|collector/README.md|ops/*README.md|.env.example) ;;
+              *)
+                echo "::warning::Reverting non-documentation change: $f"
+                git reset -q -- "$f"
+                git checkout -q -- "$f" 2>/dev/null || rm -f -- "$f"
+                ;;
+            esac
+          done
+
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if git diff --cached --quiet; then
+            pr_line="No documentation changes were needed."
+          else
+            branch="docs/maintenance-pr-$PR_NUMBER"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git switch -c "$branch"
+            git commit -q -m "docs: sync documentation after #$PR_NUMBER"
+            git push -q --force origin "$branch"
+            {
+              echo "Automated documentation sync after #$PR_NUMBER (merge \`$MERGE_SHA\`)."
+              echo
+              cat "$report"
+              echo
+              echo "Run: $run_url"
+            } > "$RUNNER_TEMP/pr-body.md"
+            url=$(gh pr list --head "$branch" --state open --json url -q '.[0].url')
+            if [ -z "$url" ]; then
+              url=$(gh pr create --base main --head "$branch" \
+                --title "docs: post-merge sync for #$PR_NUMBER" \
+                --body-file "$RUNNER_TEMP/pr-body.md")
+            fi
+            pr_line="Docs PR: $url"
+          fi
+
+          {
+            echo "### Docs maintainer"
+            echo
+            cat "$report"
+            echo
+            echo "$pr_line"
+            echo
+            echo "Run: $run_url"
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
