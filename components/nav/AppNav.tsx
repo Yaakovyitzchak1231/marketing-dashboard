@@ -19,6 +19,7 @@ export const NAV_ITEMS = [
   { href: '/seo', label: 'SEO / AI' },
   { href: '/team', label: 'Team' },
   { href: '/agents', label: 'Agents' },
+  { href: '/tools', label: 'Tools' },
   { href: '/activity', label: 'Activity' },
   { href: '/reports', label: 'Reports' },
 ] as const

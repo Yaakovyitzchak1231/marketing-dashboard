@@ -51,6 +51,7 @@ import { STANDING_RULES } from '../rules/standing.ts'
 import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
+import { INTEGRATION_OPS } from '../integrations/ops.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -454,6 +455,8 @@ export const OPS: Record<string, Op> = {
   },
   // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
   ...CAMPAIGN_OPS,
+  // Tools hub (lib/integrations/ops.ts): the tools Yaakov runs, their health and numbers.
+  ...INTEGRATION_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
