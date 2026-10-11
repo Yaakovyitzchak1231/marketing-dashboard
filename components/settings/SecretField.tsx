@@ -50,12 +50,13 @@ export function SecretField({
   testable: boolean
   settingsKeyReady: boolean
   replaceAction: FormAction
-  clearAction: (f: FormData) => void | Promise<void>
+  clearAction: FormAction
   testAction: FormAction
 }) {
   const [replacing, setReplacing] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [replaceState, replaceFormAction, replacePending] = useActionState<FormResult | null, FormData>(replaceAction, null)
+  const [clearState, clearFormAction, clearPending] = useActionState<FormResult | null, FormData>(clearAction, null)
   const [testState, testFormAction, testPending] = useActionState<FormResult | null, FormData>(testAction, null)
   const summary = status.set
     ? secretSummary({ source: 'db', last4: status.last4, at: status.updated_at, by: status.updated_by, timeZone })
@@ -115,11 +116,11 @@ export function SecretField({
       ) : null}
 
       {confirmClear ? (
-        <form action={clearAction} className="mt-2 flex flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn-soft px-2.5 py-1.5">
+        <form action={clearFormAction} className="mt-2 flex flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn-soft px-2.5 py-1.5">
           <input type="hidden" name="key" value={settingKey} />
           <input type="hidden" name="confirm" value="yes" />
           <span className="text-[12px] text-warn">Remove this secret? Anything that uses it falls back to env, if set, or stops working.</span>
-          <button type="submit" className={primaryBtnCls} onClick={() => setConfirmClear(false)}>
+          <button type="submit" disabled={clearPending} className={primaryBtnCls} onClick={() => setConfirmClear(false)}>
             Clear it
           </button>
           <button type="button" className={btnCls} onClick={() => setConfirmClear(false)}>
@@ -131,6 +132,11 @@ export function SecretField({
       {replaceState ? (
         <p className={`mt-1.5 text-[12px] ${replaceState.ok ? 'text-good' : 'text-bad'}`} role="status">
           {replaceState.message}
+        </p>
+      ) : null}
+      {clearState ? (
+        <p className={`mt-1.5 text-[12px] ${clearState.ok ? 'text-good' : 'text-bad'}`} role="status">
+          {clearState.message}
         </p>
       ) : null}
       {testState ? (

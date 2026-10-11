@@ -4,7 +4,7 @@
  */
 import type { Db } from '../db/types'
 import { OpsError } from '../ops/core'
-import { RetentionError, forgetContact, listRetentionPolicies, retentionSweep, setRetentionPolicy } from './store'
+import { RetentionError, forgetContact, listRetentionPolicies, retentionPreview, retentionSweep, setRetentionPolicy } from './store'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -22,9 +22,6 @@ function wrap(run: Op['run']): Op['run'] {
 
 function requireOwner(actor: string): void {
   if (actor !== 'owner') throw new OpsError('only the owner can do this (it removes someone\'s data)', 403)
-}
-function requireOwnerOrSystem(actor: string): void {
-  if (actor !== 'owner' && actor !== 'system') throw new OpsError("only the owner or the system actor can run the retention sweep", 403)
 }
 
 const RAW: Record<string, Op> = {
@@ -46,11 +43,15 @@ const RAW: Record<string, Op> = {
       return forgetContact(db, actor, { contact_id: Number(a.contact_id), confirm: String(a.confirm ?? '') })
     },
   },
+  retention_preview: {
+    args: '{}  -- what a retention sweep would delete now, per category (touches; timeline_events only if opted in). Deletes nothing.',
+    run: (db) => retentionPreview(db),
+  },
   retention_sweep: {
-    args: '{}  -- deletes events past their category\'s keep_days; owner or system (the job runner) only',
-    run: (db, actor) => {
-      requireOwnerOrSystem(actor)
-      return retentionSweep(db, actor)
+    args: '{confirm: true, include_timeline?: boolean}  -- owner only; deletes raw events past their category\'s keep_days, and timeline history too only with include_timeline. Without confirm nothing is deleted (409): the owner reviews retention_preview and confirms each run.',
+    run: (db, actor, a) => {
+      requireOwner(actor)
+      return retentionSweep(db, actor, { confirm: a.confirm === true || a.confirm === 'true', include_timeline: a.include_timeline === true || a.include_timeline === 'true' })
     },
   },
 }

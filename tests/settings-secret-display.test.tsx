@@ -8,8 +8,7 @@ import type { FormResult } from '@/app/actions/settings'
 afterEach(() => cleanup())
 
 const noopForm = async (): Promise<FormResult> => ({ ok: true })
-const noopVoid = async () => {}
-const base = { settingKey: 'mail.api_key', label: 'Mail API key', testable: false, settingsKeyReady: true, replaceAction: noopForm, clearAction: noopVoid, testAction: noopForm }
+const base = { settingKey: 'mail.api_key', label: 'Mail API key', testable: false, settingsKeyReady: true, replaceAction: noopForm, clearAction: noopForm, testAction: noopForm }
 
 describe('SecretField: last 4 + when set, everywhere', () => {
   it('saved secret: "Set · …a1b2" and the date and time it was set', () => {

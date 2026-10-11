@@ -69,12 +69,17 @@ export async function replaceSecretAction(_prev: FormResult | null, f: FormData)
   }
 }
 
-export async function clearSecretAction(f: FormData) {
+export async function clearSecretAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
   const key = s(f, 'key')
-  if (s(f, 'confirm') !== 'yes') return
-  requireRole(await currentRole(), 'owner')
-  await clearSecret(db(), await currentActorId(), key, { via: 'ui' })
-  revalidatePath('/settings')
+  if (s(f, 'confirm') !== 'yes') return { ok: false, message: 'Nothing was cleared (not confirmed).' }
+  try {
+    requireRole(await currentRole(), 'owner')
+    await clearSecret(db(), await currentActorId(), key, { via: 'ui' })
+    revalidatePath('/settings')
+    return { ok: true, message: 'Cleared.' }
+  } catch (e) {
+    return fail(e)
+  }
 }
 
 /** Runs the registry's test() for one secret and reports plain words; never echoes the value. */
