@@ -4,6 +4,11 @@
 -- stage and contact status: any entity type the dashboard or an agent edits gets a
 -- row per changed field, naming who changed it (lp.actor for the transaction) and
 -- through which door (via). It becomes append-only, like lp.events.
+--
+-- One deliberate escape hatch: a maintenance transaction that runs
+--   select set_config('lp.maintenance', 'on', true)
+-- may delete rows (data retention, "forget this person", test fixtures). Nothing
+-- in the app sets it during normal edits, and updates are never allowed.
 
 alter table lp.status_history drop constraint if exists status_history_entity_type_check;
 alter table lp.status_history add constraint status_history_entity_type_check
@@ -22,6 +27,9 @@ create index if not exists status_history_actor_idx on lp.status_history (change
 
 create or replace function lp.status_history_append_only() returns trigger language plpgsql as $$
 begin
+  if tg_op = 'DELETE' and current_setting('lp.maintenance', true) = 'on' then
+    return old;
+  end if;
   raise exception 'lp.status_history is append-only';
 end $$;
 drop trigger if exists status_history_no_update on lp.status_history;

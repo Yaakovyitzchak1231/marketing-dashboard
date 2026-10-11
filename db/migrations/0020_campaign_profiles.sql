@@ -13,12 +13,57 @@
 --                              approves or rejects them. Only 'approved' items are
 --                              used by the monitors, connectors and signal jobs.
 --
--- lp.campaigns.pool also stops being a fixed list (it was jeweler / ai_agency /
--- ai_builder / other): any lowercase slug is accepted now. Existing values are
--- unchanged.
+--   lp.pools                   pools (industries / audiences) are ROWS now, not a
+--                              fixed list in CHECK constraints. The four existing
+--                              values are seeded; adding a campaign for a new
+--                              industry adds a pool row. lp.companies.segment,
+--                              lp.campaign_meta.segment, lp.rule_sets.segment and
+--                              lp.campaigns.pool all reference it.
+--
+-- Profile items suggested by the AI are checked before they are shown (a feed
+-- returns recent items, a page loads, a subreddit exists, a directory is reachable
+-- and robots.txt allows it): verify_status / verify_detail / verified_at.
 
-alter table lp.campaigns drop constraint if exists campaigns_pool_check;
-alter table lp.campaigns add constraint campaigns_pool_check check (pool ~ '^[a-z][a-z0-9_]{0,40}$');
+create table if not exists lp.pools (
+  id          text primary key check (id ~ '^[a-z][a-z0-9_]{0,40}$'),
+  label       text not null check (length(label) between 1 and 80),
+  description text check (description is null or length(description) <= 1000),
+  sort        integer not null default 100,
+  active      boolean not null default true,   -- false = not offered for new campaigns; rows keep it
+  created_by  text references lp.actors(id),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+drop trigger if exists pools_updated on lp.pools;
+create trigger pools_updated before update on lp.pools for each row execute function lp.touch_updated_at();
+insert into lp.pools (id, label, sort) values
+  ('jeweler',    'Jewelers',    10),
+  ('ai_agency',  'AI agencies', 20),
+  ('ai_builder', 'AI builders', 30),
+  ('other',      'Other',       90)
+on conflict (id) do nothing;
+-- Any value already stored (in case one slipped past an old constraint) gets a row.
+insert into lp.pools (id, label)
+select distinct v, initcap(replace(v, '_', ' ')) from (
+  select pool as v from lp.campaigns
+  union select segment from lp.companies
+  union select segment from lp.campaign_meta
+  union select segment from lp.rule_sets
+) x where v is not null and v ~ '^[a-z][a-z0-9_]{0,40}$'
+on conflict (id) do nothing;
+
+alter table lp.campaigns     drop constraint if exists campaigns_pool_check;
+alter table lp.companies     drop constraint if exists companies_segment_check;
+alter table lp.campaign_meta drop constraint if exists campaign_meta_segment_check;
+alter table lp.rule_sets     drop constraint if exists rule_sets_segment_check;
+alter table lp.campaigns     drop constraint if exists campaigns_pool_fk;
+alter table lp.companies     drop constraint if exists companies_segment_fk;
+alter table lp.campaign_meta drop constraint if exists campaign_meta_segment_fk;
+alter table lp.rule_sets     drop constraint if exists rule_sets_segment_fk;
+alter table lp.campaigns     add constraint campaigns_pool_fk      foreign key (pool)    references lp.pools(id) on update cascade;
+alter table lp.companies     add constraint companies_segment_fk   foreign key (segment) references lp.pools(id) on update cascade;
+alter table lp.campaign_meta add constraint campaign_meta_segment_fk foreign key (segment) references lp.pools(id) on update cascade;
+alter table lp.rule_sets     add constraint rule_sets_segment_fk   foreign key (segment) references lp.pools(id) on update cascade;
 
 create table if not exists lp.campaign_profiles (
   campaign_id      bigint primary key references lp.campaigns(id) on delete cascade,
@@ -59,7 +104,9 @@ create table if not exists lp.campaign_profile_items (
                  'signal_rule',      -- buying-signal rule; config: {"type":"tech_change|hiring|filing|page_change|review|funding|new_location", ...}
                  'fingerprint',      -- tech fingerprint to detect on a lead's site; config: {"patterns":[...]}
                  'social_channel',   -- e.g. LinkedIn page, X handle; config: {"network","handle"}
-                 'negative_keyword'  -- words that exclude a lead or article
+                 'negative_keyword', -- words that exclude a lead or article
+                 'search_phrase',    -- find-leads search query (maps/web), e.g. "independent jeweler"
+                 'place_category'    -- business category for map/directory searches
                )),
   name         text not null check (length(name) between 1 and 200),
   value        text check (value is null or length(value) <= 2000),     -- URL, domain, query ... per kind
@@ -67,6 +114,9 @@ create table if not exists lp.campaign_profile_items (
   status       text not null default 'approved' check (status in ('suggested', 'approved', 'rejected', 'archived')),
   source       text not null default 'human' check (source in ('human', 'ai', 'agent', 'import', 'copied')),
   rationale    text check (rationale is null or length(rationale) <= 1000),  -- why the AI suggested it
+  verify_status text not null default 'unchecked' check (verify_status in ('unchecked', 'ok', 'failed', 'not_applicable')),
+  verify_detail text check (verify_detail is null or length(verify_detail) <= 1000), -- e.g. "12 items, newest Oct 9" / "robots.txt disallows /members"
+  verified_at  timestamptz,
   sort         integer not null default 100,
   created_by   text references lp.actors(id),
   updated_by   text references lp.actors(id),

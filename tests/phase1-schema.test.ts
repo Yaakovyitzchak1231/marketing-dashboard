@@ -58,9 +58,16 @@ describe('phase 1 foundation schema', () => {
       ).rejects.toThrow()
     })
 
-    it('is append-only', async () => {
+    it('is append-only, except deletes in a maintenance transaction', async () => {
       await db.query(`insert into lp.status_history (entity_type, entity_id, field) values ('setting', 1, 'x')`)
       await expect(db.query(`update lp.status_history set field = 'y'`)).rejects.toThrow(/append-only/)
+      await expect(db.query(`delete from lp.status_history`)).rejects.toThrow(/append-only/)
+      await db.tx(async (q) => {
+        await q.query(`select set_config('lp.maintenance', 'on', true)`)
+        await q.query(`delete from lp.status_history where entity_type = 'setting'`)
+      })
+      // The hatch was transaction-local: outside it, deletes are refused again.
+      await db.query(`insert into lp.status_history (entity_type, entity_id, field) values ('setting', 2, 'x')`)
       await expect(db.query(`delete from lp.status_history`)).rejects.toThrow(/append-only/)
     })
   })
@@ -144,12 +151,19 @@ describe('phase 1 foundation schema', () => {
   })
 
   describe('0020 campaign profiles', () => {
-    it('accepts any industry slug as a pool, not just the original four', async () => {
+    it('keeps pools as rows: a new industry is a new pool row, unknown pools are refused', async () => {
+      const { rows } = await db.query<{ id: string }>(`select id from lp.pools order by sort`)
+      expect(rows.map((r) => r.id)).toEqual(['jeweler', 'ai_agency', 'ai_builder', 'other'])
+      await expect(campaign('Dental clinics', 'dental_clinics')).rejects.toThrow()
+      await db.query(`insert into lp.pools (id, label) values ('dental_clinics', 'Dental clinics')`)
       await campaign('Dental clinics', 'dental_clinics')
-      await expect(campaign('Bad', 'Not A Slug')).rejects.toThrow()
+      await db.query(`insert into lp.companies (name, segment) values ('Smile Dental', 'dental_clinics')`)
+      await expect(db.query(`insert into lp.companies (name, segment) values ('X', 'nope')`)).rejects.toThrow()
+      await expect(db.query(`insert into lp.pools (id, label) values ('Not A Slug', 'x')`)).rejects.toThrow()
     })
 
     it('stores a profile and its approvable items per campaign', async () => {
+      await db.query(`insert into lp.pools (id, label) values ('restaurants', 'Restaurants')`)
       const c = await campaign('Restaurants', 'restaurants')
       await db.query(
         `insert into lp.campaign_profiles (campaign_id, industry, icp, utm, kpis) values ($1, 'Restaurants', '{"geographies":["US"]}', '{"source":"cold_email"}', '[{"metric":"reply_rate","target":0.05}]')`,
@@ -162,8 +176,13 @@ describe('phase 1 foundation schema', () => {
            ($1, 'signal_rule', 'Hiring a GM', null, 'approved', 'human', null)`,
         [c],
       )
+      await db.query(
+        `update lp.campaign_profile_items set verify_status = 'ok', verify_detail = '20 items, newest Oct 9', verified_at = now() where kind = 'feed' and campaign_id = $1`,
+        [c],
+      )
+      await db.query(`insert into lp.campaign_profile_items (campaign_id, kind, name) values ($1, 'search_phrase', 'family restaurant')`, [c])
       const { rows } = await db.query<{ kind: string; status: string }>(
-        `select kind, status from lp.campaign_profile_items where campaign_id = $1 order by id`,
+        `select kind, status from lp.campaign_profile_items where campaign_id = $1 and kind <> 'search_phrase' order by id`,
         [c],
       )
       expect(rows).toEqual([
@@ -180,6 +199,23 @@ describe('phase 1 foundation schema', () => {
         `select (select count(*) from lp.campaign_profiles)::int + (select count(*) from lp.campaign_profile_items)::int as n`,
       )
       expect(left.rows[0].n).toBe(0)
+    })
+  })
+
+  describe('0021 integrations (tools hub)', () => {
+    it('stores tools as rows and snapshots with honest nulls, per campaign', async () => {
+      const c = await campaign('Any campaign')
+      await db.query(
+        `insert into lp.integrations (id, name, kind, url, api_url, reachable_from, settings_prefix) values ('listmonk', 'Listmonk', 'listmonk', 'http://100.64.0.1:18510', 'http://127.0.0.1:18510', 'tailnet', 'integrations.listmonk')`,
+      )
+      await db.query(`insert into lp.integration_snapshots (integration_id, campaign_id, metric, value, dims) values ('listmonk', $1, 'listmonk.subscribers', 42, '{"list":"Q4"}')`, [c])
+      await db.query(`insert into lp.integration_snapshots (integration_id, metric, value) values ('listmonk', 'listmonk.bounces', null)`)
+      const { rows } = await db.query<{ metric: string; value: number | null }>(`select metric, value from lp.integration_snapshots order by id`)
+      expect(rows).toEqual([
+        { metric: 'listmonk.subscribers', value: 42 },
+        { metric: 'listmonk.bounces', value: null },
+      ])
+      await expect(db.query(`insert into lp.integrations (id, name, kind, url) values ('bad', 'Bad', 'link', 'javascript:alert(1)')`)).rejects.toThrow()
     })
   })
 })

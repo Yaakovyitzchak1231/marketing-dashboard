@@ -179,6 +179,8 @@ describe('verification runs (PGlite)', () => {
     await db.query('delete from lp.companies')
     await db.query('delete from lp.locks')
     await db.query('delete from lp.approvals')
+    // status_history is append-only since 0017; test cleanup uses the maintenance hatch.
+    await db.query("select set_config('lp.maintenance', 'on', false)")
     await db.query('delete from lp.status_history')
   })
 

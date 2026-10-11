@@ -78,6 +78,10 @@ create index if not exists lead_events_occurred_idx on lp.lead_events (occurred_
 -- history: the FK's "on delete set null" is an UPDATE, so allow exactly that change.
 create or replace function lp.lead_events_append_only() returns trigger language plpgsql as $$
 begin
+  -- Same maintenance escape hatch as lp.status_history (retention, forget-a-person).
+  if tg_op = 'DELETE' and current_setting('lp.maintenance', true) = 'on' then
+    return old;
+  end if;
   if tg_op = 'UPDATE'
      and new.id = old.id and new.type = old.type and new.occurred_at = old.occurred_at
      and new.props = old.props and new.source = old.source
