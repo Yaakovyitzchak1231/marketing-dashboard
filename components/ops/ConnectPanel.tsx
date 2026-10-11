@@ -8,6 +8,8 @@ import { sendMessageAction } from '@/app/actions/ops'
 import { OnceForm } from './OnceForm'
 import { Ago, btnCls, inputCls, primaryBtnCls } from './bits'
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
+import { formatSetAt, maskedTail } from '@/lib/settings/mask'
+import { resolveTimezone } from '@/lib/dashboard/dates'
 
 const KIND_TEXT: Record<string, string> = {
   webhook: 'Webhook: a signed POST to its URL the moment something happens',
@@ -144,9 +146,10 @@ export async function ConnectPanel({
           <Card className="divide-y divide-line-soft">
             {keys.map((k) => (
               <div key={k.id} className={`flex items-center gap-2 px-3 py-2 text-[12px] ${k.revoked_at ? 'text-ink-faint' : 'text-ink'}`}>
-                <span className="font-mono">…{k.hint}</span>
+                <span className="font-mono">{maskedTail(k.hint)}</span>
                 <span className="min-w-0 flex-1 truncate text-ink-faint">
                   {k.label ? `${k.label} · ` : ''}
+                  {`created ${formatSetAt(k.created_at, resolveTimezone(process.env.DASHBOARD_TZ)) ?? '(time not recorded)'} · `}
                   {k.revoked_at ? <>revoked <Ago at={k.revoked_at} now={now} /></> : k.last_used_at ? <>used <Ago at={k.last_used_at} now={now} /></> : 'never used'}
                 </span>
                 {!k.revoked_at ? (

@@ -152,6 +152,7 @@ export async function runFindLeads(db: Db, taskId: number, params: FindLeadsPara
 
   try {
     if (resumed) await logEvent(db, { actor: deps.agent, kind: 'engine.resumed', summary: `${label}: picked up where it stopped`, entity_type: 'task', entity_id: taskId, task_id: taskId })
+    if (!resumed) await addNote(db, run.id, `Search config: ${p.config_source}${p.campaign_id ? ` (campaign ${p.campaign_id})` : ''} — ${p.search_phrases.length} search phrase(s), ${p.place_categories.length} category(ies), ${p.negative_keywords.length} negative keyword(s).`)
     if (params.proxies && !proxies.size) await addNote(db, run.id, 'Proxies were requested but ENGINE_PROXIES is not set on the runner, so requests go direct.')
     if (useProxies) await addNote(db, run.id, `Rotating through ${proxies.size} prox${proxies.size === 1 ? 'y' : 'ies'}.`)
 
@@ -161,7 +162,7 @@ export async function runFindLeads(db: Db, taskId: number, params: FindLeadsPara
     const keptNow = async () => (await computeCounters(db, run.id)).kept
     const placeIn = async (pl: MapsPlace & { metro?: string | null }, meta: Record<string, unknown>, trustCategories: boolean): Promise<void> => {
       const key = placeKey(pl)
-      const cls = classifyPlace(pl, p.segment, { requireCategory: !trustCategories })
+      const cls = classifyPlace(pl, p.segment, { requireCategory: !trustCategories, config: { place_categories: p.place_categories, negative_keywords: p.negative_keywords } })
       const data: Record<string, unknown> = { place: pl, found_by: meta }
       if (!cls.keep) {
         await insertPlace(db, run.id, key, 'dropped', data, cls.reason)
@@ -497,7 +498,7 @@ async function buildOne(db: Db, taskId: number, it: EngineItem, p: FindLeadsPara
       {
         name: place.name,
         segment: p.segment,
-        vertical: p.segment === 'jeweler' ? 'jewelry' : 'ai_agency',
+        vertical: p.segment === 'jeweler' ? 'jewelry' : p.segment === 'ai_agency' ? 'ai_agency' : p.segment.replace(/_/g, ' '),
         website: crawl?.final_url && hostOf(crawl.final_url).endsWith(domain) ? crawl.final_url : place.website,
         phone: phone10(place.phone) ? place.phone : null,
         address_line: place.address,

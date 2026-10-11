@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { getDb } from '@/lib/db'
 import { listFindJobs, measuredEta, type FindJob } from '@/lib/engine/jobs'
-import { AI_AGENCY_QUERIES, JEWELER_QUERIES, describeGeography } from '@/engine/params'
+import { describeGeography, defaultSearchConfigFor } from '@/engine/params'
+import { listPools } from '@/lib/pools/store'
 import { DROP_REASON_WORDS } from '@/engine/parse/filter'
-import { FindForm } from '@/components/find/FindForm'
+import { FindForm, type FindPool } from '@/components/find/FindForm'
 import { CancelJob } from '@/components/find/CancelJob'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { Ago, DbNotConnected, PageFrame, TaskStatus } from '@/components/ops/bits'
@@ -128,7 +129,6 @@ function JobRow({ job, now }: { job: FindJob; now: Date }) {
 
 export default async function FindPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = (await searchParams) ?? {}
-  const initialSegment = sp.segment === 'ai_agency' ? 'ai_agency' : 'jeweler'
   const db = getDb()
   if (!db) {
     return (
@@ -137,6 +137,9 @@ export default async function FindPage({ searchParams }: { searchParams: Promise
       </PageFrame>
     )
   }
+  const dbPools = await listPools(db)
+  const pools: FindPool[] = dbPools.map((p) => ({ id: p.id, label: p.label, queries: defaultSearchConfigFor(p.id)?.search_phrases ?? [] }))
+  const initialSegment = typeof sp.segment === 'string' && pools.some((p) => p.id === sp.segment) ? sp.segment : undefined
   const jobs = await listFindJobs(db)
   const now = new Date()
   const anyLive = jobs.some((j) => ['queued', 'claimed', 'running'].includes(j.status))
@@ -146,7 +149,7 @@ export default async function FindPage({ searchParams }: { searchParams: Promise
       <section className="mb-6">
         <SectionHeader title="New job" />
         <Card>
-          <FindForm jewelerQueries={JEWELER_QUERIES} agencyQueries={AI_AGENCY_QUERIES} initialSegment={initialSegment} />
+          <FindForm pools={pools} initialSegment={initialSegment} />
         </Card>
       </section>
       <section className="mb-6">

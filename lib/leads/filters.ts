@@ -16,9 +16,14 @@ export const VIEW_LABELS: Record<LeadView, string> = {
   verify: 'Needs verification',
 }
 
-export const SEGMENTS = ['jeweler', 'ai_agency', 'ai_builder', 'other'] as const
-export type Segment = (typeof SEGMENTS)[number]
-export const SEGMENT_LABELS: Record<Segment, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', ai_builder: 'AI builders', other: 'Other' }
+/**
+ * A segment/pool is any slug in lp.pools (lib/pools/store.ts) — campaign-agnostic.
+ * SEGMENT_LABELS below is a best-effort label map for the four original pools,
+ * used only where there is no DB round trip; real labels come from lp.pools.
+ */
+export type Segment = string
+export const SEGMENT_LABELS: Record<string, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', ai_builder: 'AI builders', other: 'Other' }
+const SEGMENT_RE = /^[a-z][a-z0-9_]{0,40}$/
 
 export const STAGE_LABELS: Record<Stage, string> = {
   new: 'New',
@@ -95,7 +100,7 @@ export function parseLeadQuery(p: Params): LeadQuery {
     q: one(p.q)?.slice(0, 200),
     state: state === NONE ? NONE : state && /^[A-Za-z]{2,3}$/.test(state) ? state.toUpperCase() : undefined,
     stage: oneOf(one(p.stage), STAGES),
-    segment: oneOf(one(p.segment), SEGMENTS),
+    segment: (() => { const s = one(p.segment); return s && SEGMENT_RE.test(s) ? s : undefined })(),
     verification: oneOf(one(p.verification), VERIFICATION_STATUSES),
     hasEmail: yesNo(one(p.email)),
     ownerKnown: yesNo(one(p.owner)),

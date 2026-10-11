@@ -7,6 +7,9 @@ import { getDb } from '@/lib/db'
 import { envStatus, FEATURE_TITLES, type SetupFeature } from '@/lib/setup/env'
 import { readDbStatus } from '@/lib/setup/db-status'
 import { readDeliveryHealth } from '@/lib/notify/health'
+import { recordEnvSecretsSeen } from '@/lib/settings/env-seen'
+import { formatSetAt, last4Of, maskedTail } from '@/lib/settings/mask'
+import { resolveTimezone } from '@/lib/dashboard/dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +29,10 @@ export default async function SetupPage() {
   const connection = getDb()
   const [db, delivery] = await Promise.all([readDbStatus(connection), readDeliveryHealth(connection)])
   const total = migrationCount()
+  // Last 4 + first-seen time for every set key (only those 4 characters are rendered; the value never is).
+  const setKeys = FEATURES.flatMap((f) => envStatus(f).filter((k) => k.set).map((k) => k.key))
+  const seen = connection ? await recordEnvSecretsSeen(connection, setKeys) : new Map<string, { last4: string | null; firstSeenAt: string | null }>()
+  const tz = resolveTimezone(process.env.DASHBOARD_TZ)
   return (
     <PageShell title="Settings" meta="Keys live in Vercel. This page shows whether each one is set, never its value.">
       <div className="mx-auto max-w-[760px] space-y-4">
@@ -78,9 +85,14 @@ export default async function SetupPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <code className={CODE}>{k.key}</code>
                         <Pill tone={k.required ? 'accent' : 'neutral'}>{k.required ? 'Required' : 'Optional'}</Pill>
-                        <Pill tone={k.set ? 'good' : k.required ? 'warn' : 'neutral'}>{k.set ? 'Set' : 'Missing'}</Pill>
+                        <Pill tone={k.set ? 'good' : k.required ? 'warn' : 'neutral'}>{k.set ? `Set · ${maskedTail(seen.get(k.key)?.last4 ?? last4Of(process.env[k.key]))}` : 'Missing'}</Pill>
                       </div>
                       <p className="mt-1 text-ink-muted">{k.purpose}</p>
+                      {k.set ? (
+                        <p className="mt-0.5 text-[12px] text-ink-faint">
+                          {seen.get(k.key)?.firstSeenAt ? `First seen ${formatSetAt(seen.get(k.key)?.firstSeenAt ?? null, tz)} (Vercel env carries no set date)` : 'Set in Vercel env; the date it was set is not recorded'}
+                        </p>
+                      ) : null}
                       {k.set ? null : (
                         <ol className="mt-1.5 list-decimal space-y-1 pl-5 text-ink">
                           {k.steps.map((s, i) => (

@@ -5,7 +5,8 @@ import { BUTTON, BUTTON_PRIMARY, PageShell, DbNotConnected } from '@/components/
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { shortDate } from '@/components/leads/pills'
 import { listCampaigns, listStatuses } from '@/lib/campaigns/store'
-import { POOLS, POOL_LABELS } from '@/lib/campaigns/types'
+import { listPools } from '@/lib/pools/store'
+import { POOL_SLUG_RE } from '@/lib/campaigns/types'
 import { INPUT, LABEL, Notice } from '@/components/campaigns/ui'
 import { addStatusAction, archiveCampaignAction, createCampaignAction, toggleStatusAction } from '@/app/actions/campaigns'
 
@@ -36,7 +37,9 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     )
   }
   const showArchived = one(sp.archived) === '1'
-  const pool = (POOLS as readonly string[]).includes(one(sp.pool)) ? one(sp.pool) : null
+  const pools = await listPools(db)
+  const poolLabel: Record<string, string> = Object.fromEntries(pools.map((p) => [p.id, p.label]))
+  const pool = POOL_SLUG_RE.test(one(sp.pool)) && pools.some((p) => p.id === one(sp.pool)) ? one(sp.pool) : null
   const [campaigns, statuses, allStatuses] = await Promise.all([
     listCampaigns(db, { includeArchived: showArchived, pool }),
     listStatuses(db),
@@ -80,7 +83,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                   <Link href={`/campaigns/${c.id}`} className="font-medium text-ink hover:text-accent">{c.name}</Link>
                   {c.goal ? <p className="mt-0.5 line-clamp-1 text-[12px] text-ink-faint">{c.goal}</p> : null}
                 </td>
-                <td className="px-3 py-2.5 text-ink-muted">{POOL_LABELS[c.pool]}</td>
+                <td className="px-3 py-2.5 text-ink-muted">{poolLabel[c.pool] ?? c.pool}</td>
                 <td className="px-3 py-2.5"><Pill tone={c.status === 'active' ? 'good' : c.status_archived ? 'neutral' : c.status === 'paused' ? 'warn' : 'accent'}>{c.status_label}</Pill></td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{c.lead_count.toLocaleString('en-US')}</td>
                 <td className="px-3 py-2.5 text-ink-muted">{c.owner_name ?? c.owner ?? '—'}</td>
@@ -117,7 +120,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         <div className="min-w-0 space-y-6">
           <div className="flex flex-wrap gap-1.5">
             <Link className={chip(!pool)} href={qs({ pool: null })}>All pools</Link>
-            {POOLS.map((p) => <Link key={p} className={chip(pool === p)} href={qs({ pool: p })}>{POOL_LABELS[p]}</Link>)}
+            {pools.map((p) => <Link key={p.id} className={chip(pool === p.id)} href={qs({ pool: p.id })}>{p.label}</Link>)}
             <Link className={chip(showArchived)} href={qs({ archived: showArchived ? null : '1' })}>{showArchived ? 'Hide archived' : 'Show archived'}</Link>
           </div>
           <section aria-labelledby="c-h">
@@ -137,8 +140,8 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
               <form action={createCampaignAction} className="space-y-3">
                 <label className={LABEL}>Name<input name="name" required maxLength={120} className={INPUT} placeholder="e.g. Maryland jewelers, fall" /></label>
                 <label className={LABEL}>Pool
-                  <select name="pool" className={INPUT} defaultValue="jeweler">
-                    {POOLS.map((p) => <option key={p} value={p}>{POOL_LABELS[p]}</option>)}
+                  <select name="pool" className={INPUT} defaultValue={pools[0]?.id ?? 'jeweler'}>
+                    {pools.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </label>
                 <label className={LABEL}>Goal<input name="goal" maxLength={500} className={INPUT} placeholder="optional" /></label>

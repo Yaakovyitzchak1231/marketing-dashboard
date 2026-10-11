@@ -78,7 +78,10 @@ describe('campaigns workspace (real Postgres via PGlite)', () => {
     await expect(updateCampaign(db, 'owner', c.id, { owner: 'nobody' })).rejects.toThrow(/No teammate/)
     await expect(updateCampaign(db, 'owner', c.id, { rule_set_id: 99999 })).rejects.toThrow(/No rule set 99999/)
     expect(() => parseCampaignPatch({ instantly_id: 'x' })).toThrow(CampaignError)
-    expect(() => parseCampaignPatch({ pool: 'whales' })).toThrow(/Pool must be/)
+    // 'whales' is a validly-shaped slug (any lowercase slug can be a pool now); parseCampaignPatch no longer rejects it by a fixed list -- only a badly-shaped slug fails here.
+    expect(() => parseCampaignPatch({ pool: 'Not A Pool!' })).toThrow(/Pool must be/)
+    // Whether 'whales' is a REAL pool is a DB question now (DB-driven behavior): updateCampaign checks lp.pools.
+    await expect(updateCampaign(db, 'owner', c.id, { pool: 'whales' })).rejects.toThrow(/Unknown pool/)
     await expect(updateCampaign(db, 'owner', 99999, { name: 'x' })).rejects.toMatchObject({ status: 404 })
   })
 

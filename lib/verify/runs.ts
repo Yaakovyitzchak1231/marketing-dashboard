@@ -14,6 +14,7 @@
  */
 import type { Db, Queryable } from '@/lib/db/types'
 import { logEvent } from '@/lib/ops/events'
+import { emitLeadEvent } from '@/lib/events/emit'
 import { createPrechecker, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
 import { estimateCost, getPricing, usd4, type CostEstimate, type Pricing } from './pricing'
 import { selectCandidates, cleanFilter, mvPending, type LeadFilter, DEFAULT_RECHECK_DAYS } from './select'
@@ -354,6 +355,7 @@ interface ContactNow {
   verification_status: string
   verified_at: string | Date | null
   verified_by: string | null
+  company_id: number | null
 }
 
 type ContactResult =
@@ -392,7 +394,7 @@ export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOpti
 
     // Current contact rows + the precheck recorded at preview.
     const { rows: contacts } = await db.query<ContactNow>(
-      `select id, email_norm, status, verification_status, verified_at, verified_by from lp.contacts where id = any($1::bigint[])`,
+      `select id, email_norm, status, verification_status, verified_at, verified_by, company_id from lp.contacts where id = any($1::bigint[])`,
       [ids],
     )
     const byId = new Map(contacts.map((c) => [Number(c.id), c]))
@@ -452,6 +454,14 @@ export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOpti
             `update lp.contacts set verification_status = $2, verified_at = now(), verified_by = $3, status = $4 where id = $1`,
             [cid, outcome.final, outcome.decided_by, newStatus],
           )
+          await emitLeadEvent(t, {
+            type: 'verified',
+            contact_id: cid,
+            company_id: c.company_id ?? null,
+            source: 'verify',
+            actor,
+            props: { result: outcome.final, provider: outcome.decided_by },
+          })
         }
         if (outcome.cost_usd > 0) {
           await t.query(`update lp.verification_runs set spent_usd = spent_usd + $2 where id = $1`, [id, outcome.cost_usd])

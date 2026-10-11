@@ -7,6 +7,7 @@
 import type { Db, Queryable } from '@/lib/db/types'
 import { createTask, OpsError, updateTask } from '@/lib/ops/core'
 import { findJobTitle, normalizeFindParams, type FindLeadsParams } from '@/engine/params'
+import { resolveCampaignSearchConfig } from '@/engine/searchConfig'
 
 export interface FindJob {
   id: number
@@ -53,8 +54,14 @@ export async function getFindJob(q: Queryable, id: number): Promise<FindJob | nu
 }
 
 export async function createFindJob(db: Db, actor: string, raw: unknown): Promise<FindJob> {
-  const params = normalizeFindParams(raw)
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const rawCampaignId = Number(o.campaign_id)
+  const campaignId = Number.isInteger(rawCampaignId) && rawCampaignId > 0 ? rawCampaignId : null
+  // APPROVED campaign-profile items win over the pool's built-in default list
+  // (engine/searchConfig.ts); a run not started for a campaign keeps today's
+  // behavior (explicit queries, else the pool's built-in default).
+  const resolved = campaignId ? await resolveCampaignSearchConfig(db, campaignId) : undefined
+  const params = normalizeFindParams(raw, resolved)
   const assigned = typeof o.assigned_to === 'string' && o.assigned_to.trim() ? o.assigned_to.trim() : 'tab'
   const t = await createTask(db, actor, {
     kind: 'find_leads',

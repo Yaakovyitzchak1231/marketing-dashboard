@@ -4,8 +4,13 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { LeadListRow } from '@/lib/leads/queries'
 import type { SortKey } from '@/lib/leads/filters'
+import { STAGE_LABELS } from '@/lib/leads/filters'
+import { STAGES } from '@/lib/leads/types'
 import { StagePill, VerificationPill, ResearchPill, place } from './pills'
 import { BulkBar } from './BulkBar'
+import { InlineEditCell } from '@/components/edit/InlineEditCell'
+
+const STAGE_OPTIONS = STAGES.map((s) => ({ value: s, label: STAGE_LABELS[s] }))
 
 export interface SortLink {
   key: SortKey
@@ -90,9 +95,12 @@ export function LeadsTable({
                   <input type="checkbox" aria-label={`Select ${r.name}`} checked={sel.has(r.id)} onChange={() => toggle(r.id)} className="mt-0.5 accent-accent" />
                 </td>
                 <td className="max-w-[260px] px-3 py-2 align-top">
-                  <Link href={`/leads/${r.id}`} prefetch={false} className="font-medium text-ink hover:text-accent">
-                    {r.name}
-                  </Link>
+                  <div className="flex items-baseline gap-2">
+                    <InlineEditCell type="company" id={r.id} field="name" value={r.name} label={`Name for ${r.name}`} className="font-medium text-ink" />
+                    <Link href={`/leads/${r.id}`} prefetch={false} className="text-[11px] text-ink-faint hover:text-accent">
+                      Open →
+                    </Link>
+                  </div>
                   <div className="truncate text-[12px] text-ink-faint">
                     {[r.website_domain, r.owner_name].filter(Boolean).join(' · ') || <span className="text-unavailable">No site or owner yet</span>}
                   </div>
@@ -104,7 +112,7 @@ export function LeadsTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 align-top text-ink-muted">{place(r.city, r.state) ?? <Dash />}</td>
                 <td className="px-3 py-2 align-top">
-                  <StagePill stage={r.stage} />
+                  <InlineEditCell type="company" id={r.id} field="stage" value={r.stage} label={`Stage for ${r.name}`} options={STAGE_OPTIONS} />
                 </td>
                 <td className="max-w-[220px] truncate px-3 py-2 align-top text-ink-muted">
                   {r.primary_email ?? <Dash />}

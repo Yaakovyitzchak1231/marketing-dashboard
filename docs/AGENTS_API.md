@@ -73,7 +73,7 @@ so handling must be idempotent per `delivery_id`. (Webhook 2xx counts as deliver
 
 Server: `https://<dashboard>/api/ops/mcp`, header `Authorization: Bearer <agent key>`.
 Tools: `whoami`, `get_events`, `ack_events`, `list_my_tasks`, `get_task`, `claim_task`, `post_update`,
-`complete_task`, `fail_task`, `handoff_task`, `send_message`.
+`complete_task`, `fail_task`, `handoff_task`, `send_message`, `track_event`.
 
 Claude Code: `claude mcp add --transport http dashboard https://<dashboard>/api/ops/mcp --header "Authorization: Bearer <key>"`.
 Hermes (`config.yaml`): `mcp_servers.dashboard: {url: https://<dashboard>/api/ops/mcp, headers: {Authorization: "Bearer <key>"}, enabled: true}`
@@ -89,3 +89,101 @@ results back). See its README for install and undo.
 
 Tab's channel is email to its mailbox (seeded by migration 0013); a new mail wakes Tab within seconds,
 and Tab works the task through this API with its own key.
+
+
+## 7. Tools hub (lib/integrations/ops.ts)
+
+The tools Yaakov runs next to the dashboard (Warmbly, Listmonk, Miniflux,
+changedetection.io, Umami on his OVH server; the build tracker sheet and the
+plan doc) are rows in `lp.integrations`, never hard-coded links. The OVH
+background runner (`docs/RUNNER-integrations.md`) polls each tool's own API
+and writes health + numbers here; the dashboard never calls a tool directly.
+
+| op | args | notes |
+|---|---|---|
+| `list_integrations` | `{active_only?}` | every tool/link row, sorted |
+| `get_integration` | `{id}` | one row |
+| `put_integration` | `{id, name, kind, description?, url?, api_url?, reachable_from?, settings_prefix?, visibility?, sort?, active?}` | owner only |
+| `report_integration_health` | `{id, status (ok\|degraded\|down\|unknown), detail?}` | the runner (`system`) or owner |
+| `put_integration_snapshots` | `{id, snapshots: [{metric, value, dims?, data?, campaign_id?}], job_run_id?}` | batch; the runner (`system`) or owner; `value: null` means the tool didn't say |
+| `latest_integration_metrics` | `{id?, campaign_id?}` | the latest snapshot per (integration, metric, campaign) |
+| `campaign_for_newsletter_list` | `{list}` | `{campaign_id}` via `lp.campaign_profiles.newsletter_list`, or `{campaign_id: null}` |
+| `campaign_for_utm_campaign` | `{utm_campaign}` | `{campaign_id}` via `lp.campaign_profiles.utm.campaign`, or `{campaign_id: null}` |
+
+The dashboard shows this at `/tools`: a card per active tool (link, health,
+latest numbers, optionally filtered to one campaign), docs/sheets as plain
+link cards.
+## 7. Background jobs (the runner on Yaakov's OVH server)
+
+`lp.jobs` is the schedule; `lp.job_runs` is the log. A small runner service (not deployed yet — see
+`docs/RUNNER.md`) polls the ops API as its own agent, `system`, and runs each due job's handler.
+
+| What | op | Who |
+|---|---|---|
+| list jobs | `list_jobs {campaign_id?, kind?, enabled?}` | anyone |
+| one job | `get_job {name}` | anyone |
+| create/update a job | `put_job {name, kind, description?, schedule_cron?, timezone?, campaign_id?, payload?, enabled?, timeout_s?}` | owner or `system` |
+| enable/disable | `set_job_enabled {name, enabled}` | owner or `system` |
+| run once, now | `run_job_now {name}` | owner or `system` |
+| claim due work | `claim_jobs {runner, limit?}` | `system` only |
+| report how a run ended | `finish_job_run {run_id, status: ok\|failed\|skipped\|timeout, output?, error?}` | `system` only |
+| mark stuck runs | `reap_stale_jobs {}` | owner or `system` |
+| run history | `job_runs {name?, limit?}` | anyone |
+
+`schedule_cron` is a standard 5-field cron expression (minute hour day-of-month month day-of-week);
+`timezone` is any IANA name (default `America/New_York`); `next_run_at` is computed from cron on every
+save, enable, and finish. A job with no `schedule_cron` only ever runs via `run_job_now`.
+
+Job kinds are handler files in `runner/handlers/` on the runner box, auto-registered by filename —
+`heartbeat`, `http_ping` (payload `{url}`), and `ops_call` (payload `{op, args}` — runs any other ops
+API op on a schedule; this is how a per-campaign monitor or a tools-hub poller is expected to run,
+without its own handler file).
+## 7. Lead events: tracking what happens to a lead
+
+`lp.lead_events` is the structured stream every lead's timeline reads from — one append-only row per
+thing that happened: an email sent or opened, a reply, a tag added, a verification result, a custom
+event from an agent. It's separate from `lp.events` (the human-readable activity feed) and from
+`lp.campaign_touches` (the raw Instantly webhook record, kept as-is); the Instantly webhook writes
+to both `campaign_touches` and `lead_events` in the same transaction.
+
+A type must already be registered in `lp.event_types` before an event can use it — `register_event_type`
+adds one without a deploy. 21 types ship seeded (email_sent, email_opened, email_link_clicked,
+reply_received, auto_reply_received, email_bounced, lead_unsubscribed, lead_interested,
+lead_not_interested, meeting_booked, campaign_completed, stage_changed, status_changed, field_changed,
+tag_added, tag_removed, added_to_campaign, pushed_to_instantly, suppressed, verified, custom) —
+`list_event_types` lists what's active now. `stage_changed` and `status_changed` are written by a
+database trigger off `lp.status_history`, so don't emit those yourself from a writer that already
+changes a company's stage or a contact's status; everything else is emitted by hand at the point of
+the write (`lib/events/emit.ts`'s `emitLeadEvent` / `emitLeadEvents`, used inside a transaction).
+
+| op | args | what |
+|---|---|---|
+| `track_event` | `{type, company_id? \| contact_id? \| email, props?, occurred_at?, dedupe_key?, campaign_id?, instantly_campaign_id?, step?, source?}` | Record one event. Give company_id, contact_id or email (email resolves to a contact/company when one matches). Unknown type -> 400; a repeated dedupe_key -> `{inserted:false}`, not an error. |
+| `track_events` | `{events: [...]}` (same shape, at most 500) | One multi-row insert. Returns one `{ok, ...}` result per item, same order — a bad item (unknown type, missing identity) fails only that item, not the batch. |
+| `recent_lead_events` | `{company_id? \| contact_id? \| campaign_id?, type?, since?, limit?}` | A lead's (or a campaign's) timeline, newest first. At least one filter is required. |
+| `list_event_types` | `{category?, active_only?}` | The event type registry (for building a UI or picking a type before `track_event`). |
+| `register_event_type` | `{key, label, category, props_schema?}` | Add a new type (slug key, e.g. `review_posted`). Any authenticated actor may register one; it only opens the door for `track_event` to use the key — it never emits an event on its own. |
+
+A `track_event` worth sending from an agent: a custom milestone (`type: 'custom', props: {instantly_type: '...'}` isn't
+needed outside the Instantly webhook — for your own events, `register_event_type` a real key first,
+e.g. `review_posted`, `form_submitted`, `website_visited`), or a signal you detected (a price page
+changed, a job posting went up) once Phase "Prospecting & signals" lands.
+## 7. Campaign profiles
+
+Every campaign gets a profile (industry, ICP, keywords, competitors, feeds,
+directories, signal rules, fingerprints, UTM, KPIs) — see `docs/campaign-profiles.md`
+for the full shape and the "how it works for any new campaign" walkthrough. Agents
+reach it through the same ops door as everything else (`POST /api/ops {op, ...}`).
+
+| op | args |
+|---|---|
+| `get_campaign_profile` | `{campaign_id}` → `{profile, items (grouped by kind), exists}`. Creates nothing on read. |
+| `update_campaign_profile` | `{campaign_id, industry?, vertical?, description?, icp?, value_prop?, newsletter_list?, utm?, kpis?, setup_status?}` |
+| `add_profile_items` | `{campaign_id, items: [{kind, name, value?, config?, status?, source?, rationale?, sort?}]}` — kinds: `keyword, topic, competitor, feed, forum, directory, trade_show, signal_rule, fingerprint, social_channel, negative_keyword, search_phrase, place_category`. Deduped case-insensitively per (campaign, kind, name). |
+| `set_profile_item_status` | `{ids: [...], status: suggested\|approved\|rejected\|archived}` |
+| `update_profile_item` | `{id, name?, value?, config?, rationale?, sort?}` |
+| `suggest_campaign_profile` | `{campaign_id, industry, notes?, example_sites?}` — AI-assisted setup; saves everything as `status:'suggested', source:'ai'`, **never auto-approved**; every suggestion with an HTTP-checkable value is verified before it's returned. `{configured:false, reason}` when no free/OSS AI provider is set up. |
+| `copy_campaign_profile` | `{from, to}` — copies the profile's scalars and items (new items get `source:'copied'`); skips anything the destination already has. |
+| `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
+| `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
+| `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |

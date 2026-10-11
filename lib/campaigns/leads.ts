@@ -11,6 +11,8 @@
  */
 import type { Queryable } from '../db/types.ts'
 import { logEvent } from '../ops/events.ts'
+import { checkEmails, type SuppressionReason } from '../suppressions/store.ts'
+import { emitLeadEvents } from '../events/emit.ts'
 import { getCampaign } from './store.ts'
 import {
   CampaignError,
@@ -84,13 +86,13 @@ export async function addLeadsByFilter(db: Tx, actor: string, campaignId: number
     const pv = await previewPick(q, campaignId, pick)
     if (pv.matching - pv.already > MAX_ADD_BY_FILTER) throw new CampaignError(`That filter matches ${pv.matching} leads; add at most ${MAX_ADD_BY_FILTER} at a time.`)
     const w = pickWhere(pick, 3)
-    const r = await q.query(
+    const r = await q.query<{ company_id: number }>(
       `insert into lp.campaign_leads (campaign_id, company_id, added_via, added_by, updated_by)
        select $1, co.id, 'filter', $2, $2 from lp.companies co where ${w.sql}
-       on conflict (campaign_id, company_id) do nothing`,
+       on conflict (campaign_id, company_id) do nothing returning company_id`,
       [campaignId, actor, ...w.params],
     )
-    const added = Number(r.rowCount ?? 0)
+    const added = r.rows.length
     await logEvent(q, {
       actor,
       kind: 'campaign.leads_added',
@@ -99,6 +101,19 @@ export async function addLeadsByFilter(db: Tx, actor: string, campaignId: number
       entity_id: campaignId,
       data: { via: 'filter', filter: pick, added, already: pv.already, matching: pv.matching },
     })
+    if (r.rows.length) {
+      await emitLeadEvents(
+        q,
+        r.rows.map((x) => ({
+          type: 'added_to_campaign',
+          company_id: Number(x.company_id),
+          campaign_id: campaignId,
+          source: 'dashboard',
+          actor,
+          props: { via: 'filter' },
+        })),
+      )
+    }
     return { added, already: pv.already, matching: pv.matching, missing: [] }
   }, actor)
 }
@@ -127,6 +142,19 @@ export async function addLeadsByIds(db: Tx, actor: string, campaignId: number, i
         entity_id: campaignId,
         data: { via, company_ids: r.rows.map((x) => Number(x.company_id)), already, missing },
       })
+    }
+    if (r.rows.length) {
+      await emitLeadEvents(
+        q,
+        r.rows.map((x) => ({
+          type: 'added_to_campaign',
+          company_id: Number(x.company_id),
+          campaign_id: campaignId,
+          source: 'dashboard',
+          actor,
+          props: { via },
+        })),
+      )
     }
     return { added, already, missing }
   }, actor)
@@ -242,9 +270,13 @@ export async function updateCampaignLead(db: Tx, actor: string, campaignId: numb
       changes.push({ field: 'note', from: old.note, to: p.note })
       note = p.note
     }
+    let tagDiff: { added: string[]; removed: string[] } | null = null
     if (p.tags !== undefined && JSON.stringify([...p.tags].sort()) !== JSON.stringify([...(old.tags ?? [])].sort())) {
       changes.push({ field: 'tags', from: (old.tags ?? []).join(', ') || null, to: p.tags.join(', ') || null })
       await q.query('update lp.companies set tags = $2 where id = $1', [companyId, p.tags])
+      const before = new Set(old.tags ?? [])
+      const after = new Set(p.tags)
+      tagDiff = { added: p.tags.filter((t) => !before.has(t)), removed: (old.tags ?? []).filter((t) => !after.has(t)) }
     }
     if (!changes.length) return { changes }
     await q.query(
@@ -259,6 +291,12 @@ export async function updateCampaignLead(db: Tx, actor: string, campaignId: numb
       entity_id: campaignId,
       data: { company_id: companyId, changes },
     })
+    if (tagDiff && (tagDiff.added.length || tagDiff.removed.length)) {
+      await emitLeadEvents(q, [
+        ...tagDiff.added.map((tag) => ({ type: 'tag_added', company_id: companyId, campaign_id: campaignId, source: 'dashboard', actor, props: { tag } })),
+        ...tagDiff.removed.map((tag) => ({ type: 'tag_removed', company_id: companyId, campaign_id: campaignId, source: 'dashboard', actor, props: { tag } })),
+      ])
+    }
     return { changes }
   }, actor)
 }
@@ -282,6 +320,22 @@ export interface CampaignLeadRow {
   added_at: Date
   contacts: { id: number; email: string | null; status: string; verification_status: string; first_name: string | null; is_role_address: boolean | null }[]
   verdict: Verdict | null
+  /** Set when any contact's email or domain is suppressed for this campaign (or globally): shows as "Parked — suppressed (reason)". */
+  suppressed: { reason: SuppressionReason } | null
+}
+
+/** One suppression check (lib/suppressions) per row's contacts, batched in ONE query for the whole page. */
+async function suppressedByCompany(q: Queryable, campaignId: number, rows: { company_id: number; contacts: { email: string | null }[] }[]): Promise<Map<number, { reason: SuppressionReason }>> {
+  const emailToCompany = new Map<string, number>()
+  for (const r of rows) for (const c of r.contacts) if (c.email) emailToCompany.set(c.email, r.company_id)
+  const out = new Map<number, { reason: SuppressionReason }>()
+  if (!emailToCompany.size) return out
+  const checks = await checkEmails(q, [...emailToCompany.keys()], campaignId)
+  for (const [email, companyId] of emailToCompany) {
+    const c = checks[email]
+    if (c?.suppressed && !out.has(companyId)) out.set(companyId, { reason: c.by!.reason })
+  }
+  return out
 }
 
 export interface LeadListFilter {
@@ -340,20 +394,21 @@ export async function listCampaignLeads(
   )
   const ids = rows.map((r) => Number(r.company_id))
   const v = await verdictsFor(q, c, ids)
+  const normalizedRows = rows.map((r) => ({ ...r, company_id: Number(r.company_id), contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })) }))
+  const suppressed = await suppressedByCompany(q, campaignId, normalizedRows)
   return {
     campaign: c,
     ruleSet: v.ruleSet ?? ruleSet,
     total,
     page: Math.min(page, pages),
     pages,
-    rows: rows.map((r) => ({
+    rows: normalizedRows.map((r) => ({
       ...r,
-      company_id: Number(r.company_id),
       contact_id: r.contact_id == null ? null : Number(r.contact_id),
       tags: r.tags ?? [],
       overrides: r.overrides ?? {},
-      contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })),
-      verdict: v.verdicts.get(Number(r.company_id)) ?? null,
+      verdict: v.verdicts.get(r.company_id) ?? null,
+      suppressed: suppressed.get(r.company_id) ?? null,
     })),
   }
 }
@@ -374,13 +429,16 @@ export async function getCampaignLead(q: Queryable, campaignId: number, companyI
   const r = rows[0]
   if (!r) return null
   const v = await verdictsFor(q, c, [companyId])
+  const contacts = (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) }))
+  const suppressed = await suppressedByCompany(q, campaignId, [{ company_id: companyId, contacts }])
   return {
     ...r,
     company_id: Number(r.company_id),
     contact_id: r.contact_id == null ? null : Number(r.contact_id),
     tags: r.tags ?? [],
     overrides: r.overrides ?? {},
-    contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })),
+    contacts,
     verdict: v.verdicts.get(companyId) ?? null,
+    suppressed: suppressed.get(companyId) ?? null,
   }
 }

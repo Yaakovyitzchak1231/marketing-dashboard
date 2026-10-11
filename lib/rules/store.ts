@@ -10,7 +10,8 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { logEvent } from '../ops/events.ts'
 import { decideApproval, requestApproval, OpsError } from '../ops/core.ts'
-import { describeField, describeRequirement, parseRuleDoc, RulesError, SEGMENTS, type PersonalizationField, type Requirement, type RuleDoc } from './schema.ts'
+import { describeField, describeRequirement, FIELD_CATALOG, parseRuleDoc, RulesError, type FieldDef, type PersonalizationField, type Requirement, type RuleDoc } from './schema.ts'
+import { listPools, poolExists } from '../pools/store.ts'
 import { queueRecompute } from './recompute.ts'
 
 export type RuleScope = 'default' | 'pool' | 'campaign' | 'template'
@@ -39,12 +40,27 @@ function row(r: RuleSetRow): RuleSetRow {
 }
 
 export async function listRuleSets(q: Queryable, opts: { archived?: boolean } = {}): Promise<RuleSetRow[]> {
+  // Order pool rule sets by the pool's own sort column (lp.pools), not a fixed list —
+  // a pool created for a brand-new campaign still gets a sensible, stable position.
   const { rows } = await q.query<RuleSetRow>(
-    `select ${COLS} from lp.rule_sets ${opts.archived ? '' : 'where not archived'}
-      order by case scope when 'default' then 0 when 'pool' then 1 when 'campaign' then 2 else 3 end,
-               array_position(array['jeweler','ai_agency','ai_builder','other']::text[], segment), name, id`,
+    `select rs.${COLS.split(', ').join(', rs.')} from lp.rule_sets rs
+      left join lp.pools p on p.id = rs.segment
+      ${opts.archived ? '' : 'where not rs.archived'}
+      order by case rs.scope when 'default' then 0 when 'pool' then 1 when 'campaign' then 2 else 3 end,
+               coalesce(p.sort, 999), rs.name, rs.id`,
   )
   return rows.map(row)
+}
+
+/**
+ * FIELD_CATALOG with live options resolved for `company.segment` (dynamicOptions:
+ * 'pools' — real validity is the lp.pools FK, but a dropdown wants real choices).
+ * Everything else in the catalog is unchanged.
+ */
+export async function resolveFieldCatalog(q: Queryable): Promise<FieldDef[]> {
+  const pools = await listPools(q, { includeInactive: true })
+  const ids = pools.map((p) => p.id)
+  return FIELD_CATALOG.map((f) => (f.dynamicOptions === 'pools' ? { ...f, options: ids } : f))
 }
 
 export async function getRuleSet(q: Queryable, id: number): Promise<RuleSetRow | null> {
@@ -225,9 +241,12 @@ export async function createRuleSet(
   const campaignId = rawCampaign || null
   if (campaignId && !/^[A-Za-z0-9_:.-]{1,80}$/.test(campaignId)) throw new RulesError('campaign_id must be an Instantly campaign id (letters, digits, _ - : .).')
   const segment = input.segment == null || input.segment === '' ? null : String(input.segment)
-  if (segment && !(SEGMENTS as readonly string[]).includes(segment)) throw new RulesError(`segment must be one of ${SEGMENTS.join(', ')}.`)
   return db.tx(async (q) => {
     const who = await requireHuman(q, actor)
+    if (segment && !(await poolExists(q, segment))) {
+      const pools = await listPools(q)
+      throw new RulesError(`"${segment}" is not a pool yet. Pools: ${pools.map((p) => p.id).join(', ')}. Create it first (Pools).`)
+    }
     // No from_id: start from the pool's rules (or the default).
     const from = hasFrom ? await getRuleSet(q, fromId) : await effectiveRuleSet(q, { segment })
     if (!from) throw new RulesError('The rule set to start from does not exist.', 404)

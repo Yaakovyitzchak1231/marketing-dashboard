@@ -8,7 +8,8 @@
 import { hostOf, isPlatform, parseCityState, regDomain, STATE_ABBR, US_STATES } from './domains.ts'
 import type { MapsPlace } from './maps.ts'
 
-export type Segment = 'jeweler' | 'ai_agency'
+/** Any pool slug (campaign-agnostic). 'jeweler' and 'ai_agency' keep their own curated heuristics below as legacy defaults; any other pool is classified generically from the campaign's place_categories/negative_keywords (opts.config). */
+export type Segment = string
 
 export const CHAIN_DOMAINS = new Set([
   'kay.com', 'zales.com', 'jared.com', 'signetjewelers.com', 'helzberg.com', 'pandora.net', 'brilliantearth.com', 'shaneco.com',
@@ -67,7 +68,7 @@ export type FilterResult =
 export function classifyPlace(
   p: MapsPlace & { metro?: string | null },
   segment: Segment,
-  opts: { requireCategory?: boolean } = {},
+  opts: { requireCategory?: boolean; config?: { place_categories?: string[]; negative_keywords?: string[] } } = {},
 ): FilterResult {
   const requireCategory = opts.requireCategory !== false || (p.categories ?? []).length > 0
   const name = p.name ?? ''
@@ -79,6 +80,16 @@ export function classifyPlace(
   let state = fromAddr.state ?? (p.state ? STATE_ABBR[p.state] ?? p.state : null)
   if (state && !US_STATES.has(state)) return { keep: false, reason: 'non_us' }
 
+  // Generic, campaign-agnostic exclusion: the campaign's own negative keywords
+  // (from its approved profile items, or the pool's built-in default list).
+  // Applies to every pool, including jeweler/ai_agency, on top of their own
+  // curated checks below.
+  const neg = opts.config?.negative_keywords
+  if (neg && neg.length) {
+    const hay = `${name} ${cats.join(' ')} ${domain}`.toLowerCase()
+    if (neg.some((k) => k && hay.includes(String(k).toLowerCase()))) return { keep: false, reason: 'excluded_by_negative_keyword' }
+  }
+
   if (segment === 'jeweler') {
     if (CHAIN_NAME_RE.test(name)) return { keep: false, reason: 'chain_or_nonjeweler_name' }
     if (CHAIN_DOMAINS.has(domain)) return { keep: false, reason: 'chain_domain' }
@@ -89,9 +100,23 @@ export function classifyPlace(
         return { keep: false, reason: 'primary_category_not_jeweler' }
       }
     }
+  } else if (segment === 'ai_agency') {
+    if (requireCategory) {
+      if (!cats.length || !AGENCY_CAT_RE.test(cats.join(' '))) return { keep: false, reason: 'not_agency_category' }
+      if (AGENCY_BAD_RE.test(cats[0])) return { keep: false, reason: 'not_agency_primary' }
+    }
   } else if (requireCategory) {
-    if (!cats.length || !AGENCY_CAT_RE.test(cats.join(' '))) return { keep: false, reason: 'not_agency_category' }
-    if (AGENCY_BAD_RE.test(cats[0])) return { keep: false, reason: 'not_agency_primary' }
+    // A campaign-agnostic pool with no curated heuristics of its own: gate
+    // purely on the campaign's configured place categories (from its approved
+    // profile items). No categories configured -> accept any place that has
+    // at least one Maps category; we can't be pickier generically.
+    const wantedCats = opts.config?.place_categories ?? []
+    if (!cats.length) return { keep: false, reason: 'no_category_data' }
+    if (wantedCats.length) {
+      const wanted = wantedCats.map((c) => c.toLowerCase())
+      const matched = cats.some((c) => wanted.some((w) => c.toLowerCase().includes(w) || w.includes(c.toLowerCase())))
+      if (!matched) return { keep: false, reason: 'not_in_campaign_categories' }
+    }
   }
   if (!city || !state) {
     const [mc, ms] = String(p.metro ?? '').split(', ')
@@ -115,6 +140,9 @@ export const DROP_REASON_WORDS: Record<string, string> = {
   not_agency_primary: 'main Maps category is not an agency',
   no_website: 'no website',
   website_is_platform_page: 'website is a Facebook/Yelp/builder page',
+  excluded_by_negative_keyword: "matches the campaign's negative keywords",
+  no_category_data: 'Maps gave no category to check',
+  not_in_campaign_categories: "not one of the campaign's configured categories",
   multi_location_6plus: 'same website at 6+ locations (a chain)',
   already_in_leads: 'already in your leads',
   dup_in_this_job: 'duplicate within this job',

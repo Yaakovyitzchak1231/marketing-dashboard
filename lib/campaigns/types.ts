@@ -2,9 +2,17 @@
  * Campaigns workspace: the shapes and the input checks. Pure (no DB, no React)
  * so the pages, the ops API and the tests share one contract.
  */
-export const POOLS = ['jeweler', 'ai_agency', 'ai_builder', 'other'] as const
-export type Pool = (typeof POOLS)[number]
-export const POOL_LABELS: Record<Pool, string> = {
+/**
+ * A pool is any slug in lp.pools (lib/pools/store.ts) — campaign-agnostic, not a
+ * fixed list. POOLS/POOL_LABELS below are kept ONLY as best-effort labels for the
+ * four pools this app shipped with (log lines, places with no DB round trip);
+ * the real set and real labels come from lp.pools (listPools / the pools ops).
+ * Whether a value is a real pool is a DB question — see the campaigns_pool_fk
+ * foreign key and lib/pools/store.ts's mapPoolFkError, not a check against this list.
+ */
+export type Pool = string
+export const POOL_SLUG_RE = /^[a-z][a-z0-9_]{0,40}$/
+export const POOL_LABELS: Record<string, string> = {
   jeweler: 'Jewelers',
   ai_agency: 'AI agencies',
   ai_builder: 'AI builders',
@@ -115,8 +123,9 @@ export function parseCampaignPatch(body: unknown, opts: { create?: boolean } = {
   if ('goal' in b) out.goal = text('goal', b.goal, false)
   if ('notes' in b) out.notes = text('notes', b.notes, false)
   if ('pool' in b) {
-    if (!(POOLS as readonly unknown[]).includes(b.pool)) throw new CampaignError(`Pool must be one of: ${POOLS.join(', ')}.`)
-    out.pool = b.pool as Pool
+    const p = String(b.pool ?? '').trim().toLowerCase()
+    if (!POOL_SLUG_RE.test(p)) throw new CampaignError('Pool must be a pool id (lowercase letters, digits, _; e.g. jeweler, dental_clinics). Create it first if it is new.')
+    out.pool = p
   }
   if ('owner' in b) {
     const o = b.owner
@@ -240,7 +249,7 @@ export function parsePick(v: unknown): LeadPick {
     return t || null
   }
   const pool = s('pool')
-  if (pool && !(POOLS as readonly string[]).includes(pool)) throw new CampaignError(`Pool must be one of: ${POOLS.join(', ')}.`)
+  if (pool && !POOL_SLUG_RE.test(pool)) throw new CampaignError('Pool must be a pool id (lowercase letters, digits, _).')
   const state = s('state', 50)
   const tag = s('tag', 40)
   return {

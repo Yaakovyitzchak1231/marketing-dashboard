@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { KanbanColumn, LeadGroup, LeadPage } from '@/lib/leads/queries'
-import { LEAD_VIEWS, VIEW_LABELS, NONE, STAGE_LABELS, SEGMENTS, SEGMENT_LABELS, leadsHref, activeFilterCount, type LeadQuery } from '@/lib/leads/filters'
+import { LEAD_VIEWS, VIEW_LABELS, NONE, STAGE_LABELS, leadsHref, activeFilterCount, type LeadQuery } from '@/lib/leads/filters'
 import { STAGES, VERIFICATION_STATUSES, type Stage } from '@/lib/leads/types'
 import { Card, EmptyNote } from '@/components/dashboard/primitives'
 import { BUTTON } from '@/components/app/PageShell'
@@ -38,7 +38,7 @@ export function ViewTabs({ q }: { q: LeadQuery }) {
 const SELECT = 'w-full rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink sm:w-auto sm:max-w-[200px]'
 
 /** Plain GET form: works without JavaScript, every filter lives in the URL. */
-export function FilterBar({ q, states, campaigns }: { q: LeadQuery; states: string[]; campaigns: string[] }) {
+export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuery; states: string[]; campaigns: string[]; segments?: { id: string; label: string }[] }) {
   const f = q.filters
   const yn = (v: boolean | undefined) => (v === undefined ? '' : v ? 'yes' : 'no')
   // Filters beyond search and the job link, so an active filter keeps the panel open.
@@ -71,7 +71,7 @@ export function FilterBar({ q, states, campaigns }: { q: LeadQuery; states: stri
         <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Sel name="state" label="State" value={f.state} options={[[NONE, 'No state'], ...states.map((s) => [s, s] as [string, string])]} />
           <Sel name="stage" label="Stage" value={f.stage} options={STAGES.map((s) => [s, STAGE_LABELS[s]])} />
-          <Sel name="segment" label="Segment" value={f.segment} options={SEGMENTS.map((s) => [s, SEGMENT_LABELS[s]])} />
+          <Sel name="segment" label="Pool" value={f.segment} options={segments.map((s) => [s.id, s.label])} />
           <Sel
             name="verification"
             label="Email status"
