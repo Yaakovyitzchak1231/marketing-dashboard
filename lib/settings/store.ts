@@ -6,7 +6,6 @@
  * only "set …<last4>" / "not set" — the plaintext never touches the log.
  */
 import type { Db, Queryable } from '../db/types.ts'
-import { getDb } from '../db/index.ts'
 import { decryptSecret, encryptSecret, settingsKeyConfigured, type EncryptedSecretRow } from './crypto.ts'
 import { integrationSpecFor, settingSpec, SETTINGS_REGISTRY, type SettingSpec } from './registry.ts'
 
@@ -228,7 +227,16 @@ export interface ResolvedConfig {
  */
 export async function resolveConfig(key: string, env: Record<string, string | undefined> = process.env): Promise<ResolvedConfig> {
   const spec = settingSpec(key)
-  const q = getDb()
+  // lib/db/index.ts is a server-only module; load it on first use so this store (and
+  // lib/ops/dispatch.ts, which imports SETTINGS_OPS) stays importable anywhere,
+  // the same pattern dispatch.ts uses for the Instantly gate.
+  let q: Queryable | null = null
+  try {
+    const { getDb } = await import('../db/index.ts')
+    q = getDb()
+  } catch {
+    q = null
+  }
   const fromDb = q ? (spec?.secret ? await readSecret(q, key).catch(() => null) : await getSetting(q, key).catch(() => null)) : null
   if (fromDb !== null && fromDb !== undefined && fromDb !== '') return { value: fromDb, source: 'db' }
   const envName = spec?.envFallback

@@ -9,7 +9,8 @@
  *
  * Nothing in this module ever logs a plaintext value.
  */
-import 'server-only'
+// Server-side only by construction (node:crypto); no `import 'server-only'` here so
+// lib/ops/dispatch.ts -> SETTINGS_OPS stays importable in tests and scripts.
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 
 const KEY_BYTES = 32
