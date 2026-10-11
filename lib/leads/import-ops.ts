@@ -30,7 +30,8 @@ function mappingArg(v: unknown): Record<string, string> {
 
 export const IMPORT_OPS: Record<string, Op> = {
   import_csv: {
-    args: '{csv: string, mapping: {csv_column: target_field}, pool?, campaign_id?, dry_run?}  ' +
+    args: '{csv: string, mapping: {csv_column: target_field}, pool?, campaign_id?, dry_run?, overwrite?}  ' +
+      '-- overwrite (default false): replace names/titles/custom values an existing lead already has (each change is audited); otherwise only empty fields are filled  ' +
       '-- target_field: email|first_name|last_name|title|phone|company_name|website|company_phone|city|state|contact_custom.<key>|company_custom.<key>',
     run: wrap((db, actor, a) => {
       const text = String(a.csv ?? '')
@@ -43,6 +44,7 @@ export const IMPORT_OPS: Record<string, Op> = {
         actor,
         via: 'ops_api',
         dryRun: a.dry_run === true || a.dry_run === 'true',
+        overwrite: a.overwrite === true || a.overwrite === 'true',
       })
     }),
   },

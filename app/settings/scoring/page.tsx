@@ -115,6 +115,10 @@ export default async function ScoringSettingsPage({ searchParams }: { searchPara
                         <textarea name="rules_json" rows={6} defaultValue={JSON.stringify(m.rules, null, 2)} className={`${inputCls} font-mono text-[12px]`} />
                         <label className="text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint">Thresholds: [{'{'}key, label, min{'}'}, ...]</label>
                         <textarea name="thresholds_json" rows={2} defaultValue={JSON.stringify(m.thresholds, null, 2)} className={`${inputCls} font-mono text-[12px]`} />
+                        <label className="text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-faint" htmlFor={`max_points_${m.id}`}>
+                          Score cap (empty = no cap)
+                        </label>
+                        <input id={`max_points_${m.id}`} name="max_points" type="number" min={1} step={1} inputMode="numeric" defaultValue={m.max_points ?? ''} className={`${inputCls} tabular-nums sm:max-w-[10rem]`} />
                         <div>
                           <button type="submit" className={primaryBtnCls}>
                             Save

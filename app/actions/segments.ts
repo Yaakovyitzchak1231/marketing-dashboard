@@ -7,6 +7,8 @@
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { DefinitionError, validateDefinition } from '@/lib/segments/definition'
 import { allFields, type FieldDef } from '@/lib/segments/fields'
 import { compileSegment, countSegment, matchingIds, sampleRows, type SegmentCounts } from '@/lib/segments/compile'
@@ -15,11 +17,9 @@ import {
   archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment, type Segment,
 } from '@/lib/segments/store'
 import { getSegmentAiConfig, isSegmentAiConfigured, segmentFromText, SegmentAiError, type SegmentFromTextOutcome } from '@/lib/segments/ai'
-import { listPresets, getPreset, type SegmentPreset } from '@/lib/segments/presets'
+import { listPresets, getPreset, presetSegmentInput, type SegmentPreset } from '@/lib/segments/presets'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { emitLeadEvents } from '@/lib/events/emit'
-
-const ME = 'owner'
 
 type Fail = { ok: false; error: string }
 
@@ -30,6 +30,7 @@ function db() {
 }
 
 function fail(e: unknown): Fail {
+  if (e instanceof AuthError) return { ok: false, error: e.message }
   if (e instanceof SegmentError || e instanceof DefinitionError || e instanceof SegmentAiError) return { ok: false, error: e.message }
   console.error('segment action failed', (e as Error).message)
   return { ok: false, error: 'That could not be saved right now.' }
@@ -75,6 +76,8 @@ export async function aiConfiguredAction(): Promise<{ ok: true; configured: bool
 
 export async function segmentFromTextAction(text: string): Promise<{ ok: true; result: SegmentFromTextOutcome } | Fail> {
   try {
+    // Spends AI credits, so it is a write for role purposes even though it saves nothing.
+    await actorFor('editor')
     const cfg = await getSegmentAiConfig()
     const result = await segmentFromText(text, { config: cfg })
     return { ok: true, result }
@@ -123,6 +126,7 @@ export async function createSegmentAction(input: {
   campaign_id?: number | null
 }): Promise<{ ok: true; data: Segment } | Fail> {
   try {
+    const ME = await actorFor('editor')
     const d = db()
     const data = await d.tx((q) => createSegment(q, ME, { ...input }, 'ui'), ME)
     touch()
@@ -134,27 +138,11 @@ export async function createSegmentAction(input: {
 
 export async function createFromPresetAction(presetKey: string, campaignId: number | null): Promise<{ ok: true; data: Segment } | Fail> {
   try {
+    const ME = await actorFor('editor')
     const preset = getPreset(presetKey)
     if (!preset) return { ok: false, error: `No starter template "${presetKey}".` }
     const d = db()
-    const data = await d.tx(
-      (q) =>
-        createSegment(
-          q,
-          ME,
-          {
-            name: preset.label,
-            description: preset.description,
-            entity: preset.definition.entity,
-            definition: preset.definition,
-            campaign_id: campaignId,
-            is_preset: true,
-            preset_key: preset.key,
-          },
-          'ui',
-        ),
-      ME,
-    )
+    const data = await d.tx((q) => createSegment(q, ME, presetSegmentInput(preset, campaignId), 'ui'), ME)
     touch()
     return { ok: true, data }
   } catch (e) {
@@ -167,6 +155,7 @@ export async function updateSegmentAction(
   patch: { name?: string; description?: string | null; campaign_id?: number | null; definition?: unknown },
 ): Promise<{ ok: true; data: Segment } | Fail> {
   try {
+    const ME = await actorFor('editor')
     const d = db()
     const data = await d.tx((q) => updateSegment(q, ME, id, patch, 'ui'), ME)
     touch(id)
@@ -178,6 +167,7 @@ export async function updateSegmentAction(
 
 export async function archiveSegmentAction(id: number): Promise<{ ok: true; data: Segment } | Fail> {
   try {
+    const ME = await actorFor('editor')
     const d = db()
     const data = await d.tx((q) => archiveSegment(q, ME, id, 'ui'), ME)
     touch(id)
@@ -190,6 +180,7 @@ export async function archiveSegmentAction(id: number): Promise<{ ok: true; data
 /** Static list membership (2.2's "Static lists show their members with remove"). */
 export async function removeStaticMemberAction(segmentId: number, entity: 'company' | 'contact', memberId: number): Promise<{ ok: true } | Fail> {
   try {
+    const ME = await actorFor('editor')
     const d = db()
     const seg = await getSegment(d, segmentId)
     if (!seg) return { ok: false, error: `No segment ${segmentId}.` }

@@ -57,20 +57,28 @@ export const SCORING_OPS: Record<string, Op> = {
         campaign_id: a.campaign_id == null ? null : posInt(a.campaign_id, 'campaign_id'),
         rules: a.rules,
         thresholds: a.thresholds,
-        max_points: a.max_points == null ? null : Number(a.max_points),
+        // Left out = keep the stored cap (an update that only sends rules used to wipe it).
+        max_points: a.max_points === undefined ? undefined : a.max_points === null || a.max_points === '' ? null : Number(a.max_points),
         active: a.active == null ? undefined : a.active === true || a.active === 'true',
       }),
     ),
   },
   recompute_scores: {
-    args: '{model_id?, company_id?, contact_id?}  -- re-evaluates events, expires stale points, re-sums; omit all args to recompute everyone under every active model',
-    run: wrap((db, actor, a) =>
-      recomputeScores(db, actor, {
+    args: '{model_id?, company_id?, contact_id?, summary?}  -- re-evaluates events, expires stale points, re-sums; omit all args to recompute everyone under every active model (committed in batches of 250). summary: true returns counts instead of one row per lead (what the score_refresh job uses)',
+    run: wrap(async (db, actor, a) => {
+      const results = await recomputeScores(db, actor, {
         model_id: a.model_id == null ? null : posInt(a.model_id, 'model_id'),
         company_id: a.company_id == null ? null : posInt(a.company_id, 'company_id'),
         contact_id: a.contact_id == null ? null : posInt(a.contact_id, 'contact_id'),
-      }),
-    ),
+      })
+      if (a.summary !== true && a.summary !== 'true') return results
+      return {
+        leads_scored: results.length,
+        models: new Set(results.map((r) => r.model_id)).size,
+        changed: results.filter((r) => r.score !== r.previous_score).length,
+        threshold_crossings: results.filter((r) => r.threshold_crossed).length,
+      }
+    }),
   },
   lead_scores: {
     args: '{company_id}  -> every active model\'s current score for this lead',

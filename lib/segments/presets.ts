@@ -4,7 +4,8 @@
  * SegmentDefinition (the exact shape lib/segments/definition.ts validates) --
  * "Start from a template" (app/actions/segments.ts createFromPresetAction)
  * just calls createSegment with it, so the result is a normal, fully
- * editable segment (is_preset true, preset_key set).
+ * editable segment (is_preset true; preset_key left NULL so a template can
+ * be used any number of times -- see presetSegmentInput).
  *
  * Hot-by-score is only offered when a score field is actually registered in
  * the field registry (lead scoring, plan 2.8, lands in a parallel PR) -- it
@@ -167,6 +168,25 @@ export function listPresets(): SegmentPreset[] {
     })
   }
   return presets
+}
+
+/**
+ * The createSegment input for "Start from a template" (review fix, #80).
+ * A user's copy is marked is_preset (the "template" pill) but leaves
+ * preset_key NULL: migration 0024's segments_preset_key_uq index allows only
+ * ONE live row per preset_key, so stamping the key on every copy made the
+ * second use of the same template (for any campaign) fail with 23505.
+ */
+export function presetSegmentInput(preset: SegmentPreset, campaignId: number | null) {
+  return {
+    name: preset.label,
+    description: preset.description,
+    entity: preset.definition.entity,
+    definition: preset.definition,
+    campaign_id: campaignId,
+    is_preset: true,
+    preset_key: null,
+  }
 }
 
 export function getPreset(key: string): SegmentPreset | null {
