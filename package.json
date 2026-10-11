@@ -17,7 +17,8 @@
     "push:lead-master": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/push-lead-master.ts",
     "lint:strict": "eslint . --ext .js,.jsx,.mjs,.ts,.tsx --max-warnings=0",
     "engine": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON engine/cli.ts",
-    "export:lead-master": "node --experimental-strip-types scripts/export-lead-master.ts"
+    "export:lead-master": "node --experimental-strip-types scripts/export-lead-master.ts",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
