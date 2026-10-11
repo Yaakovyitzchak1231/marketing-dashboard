@@ -42,8 +42,7 @@ export async function saveScoreModelRulesAction(f: FormData) {
       campaign_id: s(f, 'campaign_id') ? Number(s(f, 'campaign_id')) : null,
       rules: JSON.parse(rulesText || '[]'),
       thresholds: JSON.parse(thresholdsText || '[]'),
-      // The form has no max_points field today: leave the stored cap alone unless one is posted.
-      max_points: f.has('max_points') ? (s(f, 'max_points') ? Number(s(f, 'max_points')) : null) : undefined,
+      max_points: s(f, 'max_points') ? Number(s(f, 'max_points')) : null,
     })
   } catch (e) {
     const m = msg(e)

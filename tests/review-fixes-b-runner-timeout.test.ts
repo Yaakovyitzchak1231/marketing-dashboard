@@ -18,8 +18,10 @@ describe('long job ops get the time they need', () => {
     expect(calls.find((c) => c.op === 'finish_job_run')?.opts).toBeUndefined()
   })
 
-  it('the ops route allows 300 s', async () => {
+  it('the ops route and the MCP ops route both allow 300 s', async () => {
     const mod = await import('@/app/api/ops/[[...path]]/route')
     expect(mod.maxDuration).toBe(300)
+    const mcp = await import('@/app/api/ops/mcp/route')
+    expect(mcp.maxDuration).toBe(300)
   })
 })

@@ -96,18 +96,8 @@ export interface UpsertScoreModelInput {
 
 /** Create or update a score model. Validates rules/thresholds shape before writing. */
 export async function upsertScoreModel(db: Db, actor: string, input: UpsertScoreModelInput): Promise<ScoreModelRow> {
-  // Shape errors come back as ScoringError (a clear 400 / in-page message), not a 500
-  // (review fix, #74: the settings form crashed on bad rules).
-  let rules: ScoreRule[]
-  let parsedThresholds: ScoreThreshold[] | undefined
-  try {
-    rules = parseRules(input.rules)
-    parsedThresholds = input.thresholds === undefined ? undefined : parseThresholds(input.thresholds ?? [])
-  } catch (e) {
-    if (e instanceof ScoringError) throw e
-    throw new ScoringError(e instanceof Error ? e.message : String(e))
-  }
-  const thresholds = parsedThresholds ?? []
+  const rules = parseRules(input.rules)
+  const thresholds = parseThresholds(input.thresholds ?? [])
   if (input.entity !== 'company' && input.entity !== 'contact') throw new ScoringError('entity must be "company" or "contact"')
   if (input.kind !== 'engagement' && input.kind !== 'fit') throw new ScoringError('kind must be "engagement" or "fit"')
   const name = input.name?.trim()
@@ -120,16 +110,7 @@ export async function upsertScoreModel(db: Db, actor: string, input: UpsertScore
       const { rows } = await q.query<ScoreModelRawRow>(
         `update lp.score_models set name=$1, rules=$2::jsonb, thresholds=$3::jsonb, max_points=$4, active=$5
          where id=$6 returning ${MODEL_COLS}`,
-        // Omitted thresholds / max_points keep their current values (review fix, #74: each settings
-        // save wrote null over a cap set through the API, and thresholds reset to []).
-        [
-          name,
-          JSON.stringify(rules),
-          JSON.stringify(parsedThresholds ?? existing.thresholds),
-          input.max_points === undefined ? existing.max_points : input.max_points,
-          input.active ?? existing.active,
-          input.id,
-        ],
+        [name, JSON.stringify(rules), JSON.stringify(thresholds), input.max_points ?? null, input.active ?? existing.active, input.id],
       )
       await q.query(
         `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by, via, note)
