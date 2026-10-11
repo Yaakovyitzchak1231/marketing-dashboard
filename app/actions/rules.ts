@@ -6,6 +6,7 @@
  * rule change not made by a human (0010). Every change is logged old -> new and
  * re-scores that rule set in the background.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
@@ -15,8 +16,6 @@ import { kickRecompute } from '@/lib/rules/kick'
 import { ruleDocFromForm } from '@/lib/rules/form'
 import { RulesError } from '@/lib/rules/schema'
 import { OpsError } from '@/lib/ops/core'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -35,6 +34,7 @@ function back(path: string, q: Record<string, string>): never {
 }
 
 export async function saveRulesAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = Number(s(f, 'rule_set_id'))
   const path = `/rules/${id}`
   const { doc, intent } = ruleDocFromForm((k) => s(f, k))
@@ -55,6 +55,7 @@ export async function saveRulesAction(f: FormData) {
 }
 
 export async function createRulesAction(f: FormData) {
+  const ME = await actorFor('editor')
   let id = 0
   try {
     const d = db()
@@ -78,6 +79,7 @@ export async function createRulesAction(f: FormData) {
 }
 
 export async function archiveRulesAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = Number(s(f, 'rule_set_id'))
   if (s(f, 'confirm') !== 'yes') back(`/rules/${id}`, { error: 'Tick the box to confirm removing these rules.' })
   try {
@@ -92,6 +94,7 @@ export async function archiveRulesAction(f: FormData) {
 }
 
 export async function recomputeRulesAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = Number(s(f, 'rule_set_id'))
   const d = db()
   const rs = await getRuleSet(d, id)
@@ -104,6 +107,7 @@ export async function recomputeRulesAction(f: FormData) {
 }
 
 export async function decideProposalAction(f: FormData) {
+  const ME = await actorFor('editor')
   const approval = Number(s(f, 'approval_id'))
   const id = Number(s(f, 'rule_set_id'))
   const decision = s(f, 'decision')

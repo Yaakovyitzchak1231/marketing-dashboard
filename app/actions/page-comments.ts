@@ -2,10 +2,11 @@
 
 /**
  * The comment layer's door to the database ("comment on this", migration 0015). Runs as the
- * signed-in human ('owner'); the login gate in middleware.ts protects every server action.
+ * signed-in person (editor or owner, by their own actor id); the login gate in middleware.ts protects every server action.
  * Every action answers {ok, ...} instead of throwing, so the browser can keep its own copy of a
  * draft and say "saved on this device" when the server is unreachable.
  */
+import { actorFor } from '@/lib/auth/act'
 import { getDb } from '@/lib/db'
 import { kickDelivery } from '@/lib/notify/kick'
 import { OpsError } from '@/lib/ops/core'
@@ -14,7 +15,6 @@ import {
   type DraftInput, type PageCommentView, type SendResult,
 } from '@/lib/page-comments/core'
 
-const ME = 'owner'
 
 type Fail = { ok: false; error: string }
 const NOT_CONNECTED: Fail = { ok: false, error: 'The database is not connected, so this is saved on this device only.' }
@@ -26,6 +26,9 @@ function fail(e: unknown): Fail {
 }
 
 export async function listMyCommentsAction(): Promise<{ ok: true; comments: PageCommentView[]; recipients: { id: string; display_name: string }[] } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {
@@ -37,6 +40,9 @@ export async function listMyCommentsAction(): Promise<{ ok: true; comments: Page
 }
 
 export async function saveCommentDraftAction(input: DraftInput): Promise<{ ok: true; comment: PageCommentView } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {
@@ -47,6 +53,9 @@ export async function saveCommentDraftAction(input: DraftInput): Promise<{ ok: t
 }
 
 export async function discardCommentDraftAction(clientId: string): Promise<{ ok: true; discarded: boolean } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {
@@ -57,6 +66,9 @@ export async function discardCommentDraftAction(clientId: string): Promise<{ ok:
 }
 
 export async function sendCommentsAction(clientIds: string[]): Promise<{ ok: true; results: SendResult[] } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return { ok: false, error: 'The database is not connected, so nothing can be sent yet. Your drafts are kept.' }
   try {
@@ -70,6 +82,9 @@ export async function sendCommentsAction(clientIds: string[]): Promise<{ ok: tru
 }
 
 export async function replyCommentAction(id: number, body: string): Promise<{ ok: true } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {
@@ -82,6 +97,9 @@ export async function replyCommentAction(id: number, body: string): Promise<{ ok
 }
 
 export async function resolveCommentAction(id: number, resolved: boolean): Promise<{ ok: true; comment: PageCommentView } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {

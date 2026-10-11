@@ -4,6 +4,7 @@
  * Buttons on the SEO / AI visibility screens. Each runs as the signed-in
  * owner, logs to Activity, and sends the browser back with a plain message.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
@@ -13,8 +14,6 @@ import { applyChange, undoChange, type ApplyInput } from '@/lib/seo/changes'
 import { visibilitySummary, type ProviderId } from '@/lib/seo/visibility'
 import { kickDelivery } from '@/lib/notify/kick'
 import { createCitationTask } from '@/lib/seo/citations'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -55,6 +54,7 @@ async function attempt(f: FormData, fallback: string, fn: () => Promise<string>)
 }
 
 export async function addSiteAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/sites', async () => {
     const site = await addSite(db(), ME, {
       name: s(f, 'name'),
@@ -69,6 +69,7 @@ export async function addSiteAction(f: FormData) {
 }
 
 export async function toggleSiteAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/sites', async () => {
     const id = n(f, 'site_id')!
     const active = s(f, 'active') === '1'
@@ -79,6 +80,7 @@ export async function toggleSiteAction(f: FormData) {
 
 /** "Re-run audit" and "Done, re-check". site_id = one site; none = every active site. */
 export async function runAuditAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/audit', async () => {
     const d = db()
     const id = n(f, 'site_id')
@@ -94,6 +96,7 @@ export async function runAuditAction(f: FormData) {
 }
 
 export async function runVisibilityAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/visibility', async () => {
     const run = await runVisibility(db(), ME, s(f, 'provider') as ProviderId)
     return `AI answer check: TapDash ${visibilitySummary(run)}.`
@@ -101,6 +104,7 @@ export async function runVisibilityAction(f: FormData) {
 }
 
 export async function queueCitationAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/citations', async () => {
     const siteId = n(f, 'site_id'), resultId = n(f, 'result_id')
     const mode = s(f, 'mode')
@@ -113,6 +117,7 @@ export async function queueCitationAction(f: FormData) {
 }
 
 export async function addPromptAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/visibility', async () => {
     await addPrompt(db(), ME, s(f, 'prompt'), s(f, 'campaign') || null)
     return 'Question added.'
@@ -120,6 +125,7 @@ export async function addPromptAction(f: FormData) {
 }
 
 export async function togglePromptAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/visibility', async () => {
     await setPromptActive(db(), ME, n(f, 'prompt_id')!, s(f, 'active') === '1')
     return 'Saved.'
@@ -127,6 +133,7 @@ export async function togglePromptAction(f: FormData) {
 }
 
 export async function addCompetitorAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/visibility', async () => {
     await addCompetitor(db(), ME, s(f, 'name'), s(f, 'domain') || null)
     return 'Competitor added.'
@@ -134,6 +141,7 @@ export async function addCompetitorAction(f: FormData) {
 }
 
 export async function removeCompetitorAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/visibility', async () => {
     await removeCompetitor(db(), ME, n(f, 'competitor_id')!)
     return 'Removed.'
@@ -142,6 +150,7 @@ export async function removeCompetitorAction(f: FormData) {
 
 /** "Assign to" (Tab / Hermes / anyone) and "Mark done" / "Reopen" on a fix. */
 export async function updateFixAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/todos', async () => {
     const id = n(f, 'task_id')!
     const t = await getFixTask(db(), id)
@@ -170,6 +179,7 @@ export async function updateFixAction(f: FormData) {
 
 /** Apply a previewed WordPress change (the owner's confirm click). */
 export async function applyChangeAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/todos', async () => {
     const kind = s(f, 'kind')
     const siteId = n(f, 'site_id')!
@@ -187,6 +197,7 @@ export async function applyChangeAction(f: FormData) {
 }
 
 export async function undoChangeAction(f: FormData) {
+  const ME = await actorFor('editor')
   await attempt(f, '/seo/todos', async () => {
     const c = await undoChange(db(), ME, n(f, 'change_id')!)
     return `Undid change #${c.id}.`

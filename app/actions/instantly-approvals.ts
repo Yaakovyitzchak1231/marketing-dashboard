@@ -7,14 +7,13 @@
  * confirm click (confirm=yes) and then runs exactly the stored change; Reject
  * needs a reason. See lib/instantly/gate.ts.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { decideInstantlyApproval } from '@/lib/instantly/gate'
 import { writerFromEnv } from '@/lib/instantly/writer'
 import { clearInstantlyMemo } from '@/lib/instantly/client'
-
-const ME = 'owner'
 
 const s = (f: FormData, k: string) => {
   const v = f.get(k)
@@ -29,6 +28,7 @@ function withNote(path: string, tone: 'good' | 'bad', text: string): string {
 }
 
 export async function decideInstantlyApprovalAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = Number(s(f, 'approval_id'))
   const decision = s(f, 'decision') === 'approved' ? 'approved' : 'rejected'
   let tone: 'good' | 'bad' = 'bad'

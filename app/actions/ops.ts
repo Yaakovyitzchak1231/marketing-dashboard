@@ -2,9 +2,10 @@
 
 /**
  * The dashboard's door into the co-working layer. Same functions the agents
- * call through /api/ops, run as the signed-in human ('owner'). The login gate
+ * call through /api/ops, run as the signed-in person (editor or owner, by their own actor id). The login gate
  * in middleware.ts protects these (server actions post to page routes).
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
@@ -12,8 +13,6 @@ import {
   claimTask, comment, createTask, decideApproval, handoffTask, markRead, memoryDelete, memoryPut, releaseLock, sendMessage, updateTask,
 } from '@/lib/ops/core'
 import { kickDelivery } from '@/lib/notify/kick'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -30,6 +29,7 @@ const n = (f: FormData, k: string) => {
 }
 
 export async function createTaskAction(f: FormData) {
+  const ME = await actorFor('editor')
   const t = await createTask(db(), ME, {
     title: s(f, 'title'),
     body: s(f, 'body') || null,
@@ -48,6 +48,7 @@ export async function createTaskAction(f: FormData) {
 }
 
 export async function commentAction(f: FormData) {
+  const ME = await actorFor('editor')
   const taskId = n(f, 'task_id')
   await comment(db(), ME, { task_id: taskId, company_id: n(f, 'company_id'), body: s(f, 'body') })
   kickDelivery(db())
@@ -55,6 +56,7 @@ export async function commentAction(f: FormData) {
 }
 
 export async function handoffAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = n(f, 'task_id')!
   await handoffTask(db(), ME, id, { to: s(f, 'to'), note: s(f, 'note') })
   kickDelivery(db())
@@ -63,6 +65,7 @@ export async function handoffAction(f: FormData) {
 }
 
 export async function updateTaskAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = n(f, 'task_id')!
   const patch: Parameters<typeof updateTask>[3] = {}
   const status = s(f, 'status')
@@ -75,12 +78,14 @@ export async function updateTaskAction(f: FormData) {
 }
 
 export async function claimMyselfAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = n(f, 'task_id')!
   await claimTask(db(), ME, { task_id: id, lease_seconds: 3600 })
   revalidatePath(`/team/${id}`)
 }
 
 export async function decideApprovalAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = n(f, 'approval_id')!
   const decision = s(f, 'decision') === 'approved' ? 'approved' : 'rejected'
   await decideApproval(db(), ME, id, decision, s(f, 'note') || undefined)
@@ -90,23 +95,27 @@ export async function decideApprovalAction(f: FormData) {
 }
 
 export async function releaseLockAction(f: FormData) {
+  const ME = await actorFor('editor')
   await releaseLock(db(), ME, { resource: s(f, 'resource'), force: true })
   revalidatePath('/activity')
 }
 
 export async function memoryPutAction(f: FormData) {
+  const ME = await actorFor('editor')
   const scope = s(f, 'scope')
   await memoryPut(db(), ME, { scope, key: s(f, 'key'), notes: s(f, 'notes'), source: s(f, 'source') || 'edited by Yaakov in the dashboard' })
   revalidatePath(`/agents/${scope}`)
 }
 
 export async function memoryDeleteAction(f: FormData) {
+  const ME = await actorFor('editor')
   const scope = s(f, 'scope')
   await memoryDelete(db(), ME, { scope, key: s(f, 'key') })
   revalidatePath(`/agents/${scope}`)
 }
 
 export async function markReadAction() {
+  const ME = await actorFor('editor')
   await markRead(db(), ME)
   revalidatePath('/agents/owner')
   revalidatePath('/team')
@@ -114,6 +123,7 @@ export async function markReadAction() {
 
 /** Yaakov writes to an agent (or a person) directly; it goes out on their channels at once. */
 export async function sendMessageAction(f: FormData) {
+  const ME = await actorFor('editor')
   const to = s(f, 'to')
   const taskId = n(f, 'task_id')
   await sendMessage(db(), ME, { to, body: s(f, 'body'), task_id: taskId })

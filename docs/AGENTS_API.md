@@ -525,3 +525,14 @@ Deferred from this slice: the alert UI (configuring `alert_rule` is DB/ops-only 
 now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).
 
 <!-- retrigger: Vercel git_info_fail on first branch deploy -->
+
+## Tags: changing a tag is an explicit, counted choice (Oct 11, 2026)
+
+A tag is never silently changed on every lead.
+
+- `change_tag` `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}` changes the tag only on one lead, on the leads you list, or on a segment's leads. A static list uses its members; a dynamic segment uses its rules. `preview: true` returns `{count, scope}` and changes nothing. A change to more than one lead needs `expected_count` equal to that count, and a moved count is refused with 409. It writes one audit entry (who, old name, new name, how many leads) and no per-lead timeline rows.
+- `rename_tag` `{from, to, expected_count}` and `merge_tags` `{tags, into, expected_count}` change the tag on every lead. They are owner-only: an agent key gets 403, and agents use `change_tag`. They also need `expected_count`, and each writes one audit entry with no per-lead timeline rows.
+- `count_tagged` `{tags: [string,...]}` returns how many leads carry any of the tags now.
+
+Roles, also Oct 11: managing people and roles, agent keys, agents, the Tools hub and jobs is owner-only in the dashboard. No ops-API op changes people or roles, and the database refuses such a change from any non-owner (migration 0050).
+

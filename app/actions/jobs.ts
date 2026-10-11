@@ -1,17 +1,20 @@
 'use server'
 
 /**
- * Jobs screen, from the dashboard (the signed-in human, 'owner'). The same
- * functions agents reach through /api/ops (lib/jobs/ops.ts). A bad input
- * comes back to the page as ?error=... instead of an error screen.
+ * Jobs screen, from the dashboard. Owner-only (plan 1.14, Viktor's #87
+ * re-review): an ops_call job runs any op through /api/ops with the runner's
+ * own key, so saving, switching on or running a job is owner power. Each
+ * action checks the role itself (actorFor) and writes as the signed-in owner.
+ * The same functions agents reach through /api/ops (lib/jobs/ops.ts). A bad
+ * input comes back to the page as ?error=... instead of an error screen.
  */
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { OpsError } from '@/lib/ops/core'
 import { runNow, setEnabled, upsertJob } from '@/lib/jobs/store'
-
-const ME = 'owner'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 
 function db() {
   const d = getDb()
@@ -27,7 +30,7 @@ async function guarded(fn: () => Promise<void>) {
   try {
     await fn()
   } catch (e) {
-    if (e instanceof OpsError) redirect(`/jobs?error=${encodeURIComponent(e.message)}`)
+    if (e instanceof OpsError || e instanceof AuthError) redirect(`/jobs?error=${encodeURIComponent(e.message)}`)
     throw e
   }
   revalidatePath('/jobs')
@@ -36,6 +39,7 @@ async function guarded(fn: () => Promise<void>) {
 
 export async function saveJobAction(f: FormData) {
   await guarded(async () => {
+    const ME = await actorFor('owner')
     const campaignRaw = s(f, 'campaign_id')
     await upsertJob(db(), ME, {
       name: s(f, 'name'),
@@ -62,6 +66,7 @@ export async function saveJobAction(f: FormData) {
 
 export async function toggleJobAction(f: FormData) {
   await guarded(async () => {
+    const ME = await actorFor('owner')
     const name = s(f, 'name')
     const enabled = s(f, 'enabled') === 'true'
     await setEnabled(db(), ME, name, enabled, 'ui')
@@ -70,6 +75,7 @@ export async function toggleJobAction(f: FormData) {
 
 export async function runJobNowAction(f: FormData) {
   await guarded(async () => {
+    const ME = await actorFor('owner')
     await runNow(db(), ME, s(f, 'name'))
   })
 }
