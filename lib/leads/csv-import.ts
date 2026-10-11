@@ -13,6 +13,7 @@
  * Anything else (or an empty mapping value) is ignored.
  */
 import type { Db, Queryable } from '../db/types'
+import { FREE_PROVIDERS } from '../verify/precheck'
 import { nameAddressKey, normalizeDomain, normalizeEmail, normalizePhone } from './normalize'
 import { checkEmails } from '../suppressions/store'
 import { FieldError, type FieldDefRow, listFieldDefs, validateFieldValue } from '../fields/registry'
@@ -135,18 +136,41 @@ async function mergeCustom(q: Queryable, entity: 'contact' | 'company', id: numb
   await q.query(`update ${table} set custom = custom || $2::jsonb where id = $1`, [id, JSON.stringify(incoming)])
 }
 
+/** Follow lp.companies.merged_into to the company that survived a merge (review fix, #81/#76
+ *  re-review): a CSV row that matches a merged-away company's key, or an existing contact still
+ *  pointing at one, must attach to the survivor, never to the hidden row. */
+async function survivorCompany(q: Queryable, id: number): Promise<number> {
+  let cur = Number(id)
+  for (let hop = 0; hop < 10; hop++) {
+    const { rows } = await q.query<{ merged_into: number | null }>('select merged_into from lp.companies where id = $1', [cur])
+    const next = rows[0]?.merged_into
+    if (next == null) return cur
+    cur = Number(next)
+  }
+  return cur
+}
+
+/** The company domain to match a row on when it has an email but no company name, website or
+ *  company phone (Yaakov, Oct 11 3:43 PM): the email's domain, unless it's a free-mail provider
+ *  (gmail, yahoo, outlook...), which says nothing about the company. */
+export function companyDomainFromEmail(email: string | null): string | null {
+  const d = email?.split('@')[1]?.trim().toLowerCase() ?? ''
+  if (!d || !d.includes('.') || FREE_PROVIDERS.has(d)) return null
+  return d
+}
+
 async function findCompany(q: Queryable, domain: string | null, phone: string | null, nameAddr: string | null): Promise<number | null> {
   if (domain) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where website_domain = $1 and merged_into is null limit 1', [domain])
-    if (rows[0]) return rows[0].id
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where website_domain = $1 order by (merged_into is null) desc, id limit 1', [domain])
+    if (rows[0]) return survivorCompany(q, rows[0].id)
   }
   if (phone) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where phone_e164 = $1 and merged_into is null limit 1', [phone])
-    if (rows[0]) return rows[0].id
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where phone_e164 = $1 order by (merged_into is null) desc, id limit 1', [phone])
+    if (rows[0]) return survivorCompany(q, rows[0].id)
   }
   if (nameAddr) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where name_addr_key = $1 and merged_into is null limit 1', [nameAddr])
-    if (rows[0]) return rows[0].id
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where name_addr_key = $1 order by (merged_into is null) desc, id limit 1', [nameAddr])
+    if (rows[0]) return survivorCompany(q, rows[0].id)
   }
   return null
 }
@@ -164,6 +188,19 @@ async function processRows(
   const fieldDefs = new Map(fieldDefList.map((d) => [`${d.entity}:${d.key}`, d]))
   const pool = opts.pool?.trim() || null
   const campaignId = opts.campaign_id ?? null
+  // Review fix (#76 re-review): a bad pool or campaign used to fail the import with a raw
+  // database error. Check both up front and say exactly what's wrong (preview shows it too).
+  if (pool) {
+    const { rows: pools } = await db.query<{ id: string }>('select id from lp.pools order by sort, id')
+    if (!pools.some((p) => p.id === pool)) {
+      throw new CsvImportError(`Unknown pool "${pool}". Use one of: ${pools.map((p) => p.id).join(', ') || '(no pools set up)'}.`)
+    }
+  }
+  if (campaignId != null) {
+    if (!Number.isInteger(campaignId) || campaignId <= 0) throw new CsvImportError('campaign_id must be a positive whole number.')
+    const { rows: camp } = await db.query('select 1 from lp.campaigns where id = $1', [campaignId])
+    if (!camp.length) throw new CsvImportError(`No campaign ${campaignId}.`)
+  }
 
   const seenEmails = new Set<string>()
   const seenPhones = new Set<string>()
@@ -235,19 +272,23 @@ async function processRows(
       const companyPhone = mapped.company.company_phone ? normalizePhone(mapped.company.company_phone) : null
       const nameAddr = companyName ? nameAddressKey(companyName, null, mapped.company.city, mapped.company.state) : null
 
-      if (willUpdate) {
-        companyId = existing.rows[0].company_id
+      if (willUpdate && existing.rows[0].company_id != null) {
+        companyId = await survivorCompany(db, existing.rows[0].company_id)
       } else {
+        // No company details at all, but a business email: match on the email's domain
+        // (Yaakov, Oct 11); a new company, if needed, is keyed and named by that domain.
+        const emailDomain = !companyName && !domain && !companyPhone ? companyDomainFromEmail(email) : null
+        const keyDomain = domain ?? emailDomain
         // Look up by phone too (review fix, #76): a company-phone-only row used to skip the
         // lookup and insert a duplicate phone, which aborted the whole import on companies_phone_uq.
-        const found = companyName || domain || companyPhone ? await findCompany(db, domain, companyPhone, nameAddr) : null
+        const found = companyName || keyDomain || companyPhone ? await findCompany(db, keyDomain, companyPhone, nameAddr) : null
         if (found) {
           companyId = found
         } else {
           const { rows: cRows } = await db.query<{ id: number }>(
             `insert into lp.companies (name, website, website_domain, phone, phone_e164, city, state, name_addr_key, segment, created_by)
              values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, 'other'), $10) returning id`,
-            [companyName ?? '(unknown)', mapped.company.website || null, domain, mapped.company.company_phone || null, companyPhone, mapped.company.city || null, mapped.company.state || null, nameAddr, pool, opts.actor],
+            [companyName ?? emailDomain ?? '(unknown)', mapped.company.website || null, keyDomain, mapped.company.company_phone || null, companyPhone, mapped.company.city || null, mapped.company.state || null, nameAddr, pool, opts.actor],
           )
           companyId = cRows[0].id
         }
@@ -275,6 +316,11 @@ async function processRows(
           }
           params.push(val)
           sets.push(`${col} = $${params.length}`)
+        }
+        if (existing.rows[0].company_id == null) {
+          // An existing contact with no company gets the one this row resolved to.
+          params.push(companyId)
+          sets.push(`company_id = $${params.length}`)
         }
         if (phone && !email) {
           params.push(phone)
@@ -306,9 +352,10 @@ async function processRows(
       }
       await db.query('release savepoint csv_row')
     } catch (e) {
-      if ((e as { code?: string })?.code !== '23505') throw e
+      const code = (e as { code?: string })?.code
+      if (code !== '23505' && code !== '23503') throw e
       await db.query('rollback to savepoint csv_row')
-      push('invalid', 'Conflicts with a lead already saved (same company phone, website or email). Row skipped.')
+      push('invalid', code === '23503' ? 'Refers to something that does not exist (pool or campaign). Row skipped.' : 'Conflicts with a lead already saved (same company phone, website or email). Row skipped.')
       continue
     }
 

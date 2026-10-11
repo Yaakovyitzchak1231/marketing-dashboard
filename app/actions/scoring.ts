@@ -7,10 +7,10 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { ScoringError, recomputeScores, upsertScoreModel } from '@/lib/scoring/engine'
 import { getJob, runNow } from '@/lib/jobs/store'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -21,7 +21,7 @@ const s = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' ? v.trim() : ''
 }
-const msg = (e: unknown) => (e instanceof ScoringError ? e.message : e instanceof SyntaxError ? 'rules must be valid JSON' : null)
+const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof ScoringError ? e.message : e instanceof SyntaxError ? 'rules must be valid JSON' : null)
 
 function back(q: Record<string, string>): never {
   const u = new URLSearchParams(q)
@@ -30,6 +30,7 @@ function back(q: Record<string, string>): never {
 
 export async function saveScoreModelRulesAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     const id = Number(s(f, 'id'))
     const rulesText = s(f, 'rules_json')
     const thresholdsText = s(f, 'thresholds_json')
@@ -41,7 +42,8 @@ export async function saveScoreModelRulesAction(f: FormData) {
       campaign_id: s(f, 'campaign_id') ? Number(s(f, 'campaign_id')) : null,
       rules: JSON.parse(rulesText || '[]'),
       thresholds: JSON.parse(thresholdsText || '[]'),
-      max_points: s(f, 'max_points') ? Number(s(f, 'max_points')) : null,
+      // The form has no max_points field today: leave the stored cap alone unless one is posted.
+      max_points: f.has('max_points') ? (s(f, 'max_points') ? Number(s(f, 'max_points')) : null) : undefined,
     })
   } catch (e) {
     const m = msg(e)
@@ -59,6 +61,7 @@ export async function recomputeAllScoresAction() {
   // registered on this database does it fall back to running here, in committed batches.
   let queued = false
   try {
+    const ME = await actorFor('owner')
     const d = db()
     if (await getJob(d, 'score_refresh')) {
       await runNow(d, ME, 'score_refresh')
