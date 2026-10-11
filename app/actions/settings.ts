@@ -3,12 +3,15 @@
 /**
  * Server actions behind /settings: saving a non-secret value, replacing or
  * clearing a secret, testing a secret against its provider, and editing which
- * task kinds an agent takes. All run as the signed-in human ('owner'), the
- * same actor every other dashboard screen writes as.
+ * task kinds an agent takes. Settings, keys and the team are owner-only
+ * (plan 1.14); every write runs as the signed-in human's own actor id, so
+ * the audit log names who actually made the change.
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { OpsError } from '@/lib/ops/core'
+import { currentActorId, currentRole } from '@/lib/auth/session'
+import { requireRole } from '@/lib/auth/roles'
 import {
   clearSecret,
   listActorKinds,
@@ -22,8 +25,6 @@ import {
 } from '@/lib/settings/store'
 import { settingSpec } from '@/lib/settings/registry'
 import { clientFromConfig } from '@/lib/instantly/client'
-
-const ME = 'owner'
 
 export interface FormResult {
   ok: boolean
@@ -47,7 +48,8 @@ const fail = (e: unknown): FormResult => ({
 export async function saveSettingAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
   const key = s(f, 'key')
   try {
-    await putSetting(db(), ME, key, s(f, 'value'), { via: 'ui' })
+    requireRole(await currentRole(), 'owner')
+    await putSetting(db(), await currentActorId(), key, s(f, 'value'), { via: 'ui' })
     revalidatePath('/settings')
     return { ok: true, message: 'Saved.' }
   } catch (e) {
@@ -58,7 +60,8 @@ export async function saveSettingAction(_prev: FormResult | null, f: FormData): 
 export async function replaceSecretAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
   const key = s(f, 'key')
   try {
-    const row = await putSecret(db(), ME, key, s(f, 'value'), { via: 'ui' })
+    requireRole(await currentRole(), 'owner')
+    const row = await putSecret(db(), await currentActorId(), key, s(f, 'value'), { via: 'ui' })
     revalidatePath('/settings')
     return { ok: true, message: `Saved — ends in …${row.last4}.` }
   } catch (e) {
@@ -69,13 +72,19 @@ export async function replaceSecretAction(_prev: FormResult | null, f: FormData)
 export async function clearSecretAction(f: FormData) {
   const key = s(f, 'key')
   if (s(f, 'confirm') !== 'yes') return
-  await clearSecret(db(), ME, key, { via: 'ui' })
+  requireRole(await currentRole(), 'owner')
+  await clearSecret(db(), await currentActorId(), key, { via: 'ui' })
   revalidatePath('/settings')
 }
 
 /** Runs the registry's test() for one secret and reports plain words; never echoes the value. */
 export async function testSecretAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
   const key = s(f, 'key')
+  try {
+    requireRole(await currentRole(), 'owner')
+  } catch (e) {
+    return fail(e)
+  }
   const spec = settingSpec(key)
   if (!spec) return { ok: false, message: `Unknown setting "${key}".` }
   const status: SecretStatus = await secretStatus(db(), key)
@@ -100,7 +109,8 @@ export async function setAgentTakesKindsAction(_prev: FormResult | null, f: Form
     .map((k) => k.trim())
     .filter(Boolean)
   try {
-    const row: ActorKindsRow = await setActorTakesKinds(db(), ME, actorId, kinds, { via: 'ui' })
+    requireRole(await currentRole(), 'owner')
+    const row: ActorKindsRow = await setActorTakesKinds(db(), await currentActorId(), actorId, kinds, { via: 'ui' })
     revalidatePath('/settings')
     return { ok: true, message: row.takes_kinds.length ? `Takes: ${row.takes_kinds.join(', ')}.` : 'Takes any kind.' }
   } catch (e) {

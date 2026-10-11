@@ -17,6 +17,10 @@ import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/se
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import { addTeamMemberAction, changeTeamMemberRoleAction, removeTeamMemberAction } from '@/app/actions/team'
+import { TeamSection } from '@/components/settings/TeamSection'
+import { currentRole } from '@/lib/auth/session'
+import { listTeamMembers } from '@/lib/team/store'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +34,14 @@ export default async function SettingsPage() {
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db)])
+  const [settingsRows, secretRows, actors, integrations, teamMembers, role] = await Promise.all([
+    listSettings(db),
+    listSecretStatuses(db),
+    listActorKinds(db),
+    listIntegrationSettings(db),
+    listTeamMembers(db),
+    currentRole(),
+  ])
   const settingsByKey = new Map(settingsRows.map((s) => [s.key, s]))
   const secretsByKey = new Map(secretRows.map((s) => [s.key, s]))
   const groups = settingsByGroup()
@@ -211,6 +222,13 @@ export default async function SettingsPage() {
           </Card>
         </section>
       ) : null}
+
+      <section className="mb-6">
+        <SectionHeader title="Team" meta="Who can sign in to this dashboard, and what they can do" />
+        <Card className="p-4">
+          <TeamSection members={teamMembers} isOwner={role === 'owner'} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
+        </Card>
+      </section>
 
       <section className="mb-6">
         <SectionHeader title="Agents" meta="Which task kinds each agent picks up" />

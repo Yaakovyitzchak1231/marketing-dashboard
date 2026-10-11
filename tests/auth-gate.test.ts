@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
+// middleware.ts now reaches lib/db (plan 1.14's role lookup), which is
+// 'server-only' -- the real package throws unconditionally when imported
+// outside Next's webpack build, so tests stub it the same way
+// tests/settings-store.test.ts already does.
+vi.mock('server-only', () => ({}))
+
 /**
  * The auth gate.
  *
