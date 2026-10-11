@@ -8,11 +8,11 @@
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { csvObjects } from '@/lib/leads/csv'
 import { CsvImportError, runCsvImport, type ImportSummary } from '@/lib/leads/csv-import'
 import { FieldError } from '@/lib/fields/store'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -22,6 +22,7 @@ function db() {
 
 type Fail = { ok: false; error: string }
 function fail(e: unknown): Fail {
+  if (e instanceof AuthError) return { ok: false, error: e.message }
   if (e instanceof CsvImportError || e instanceof FieldError) return { ok: false, error: e.message }
   console.error('csv import failed', (e as Error).message)
   return { ok: false, error: "That didn't work. Try again." }
@@ -52,6 +53,7 @@ export interface ImportRequest {
 
 export async function previewImportAction(req: ImportRequest): Promise<({ ok: true } & ImportSummary) | Fail> {
   try {
+    const ME = await actorFor('editor')
     const rows = csvObjects(req.csv)
     const summary = await runCsvImport(db(), rows, {
       mapping: req.mapping, pool: req.pool ?? null, campaign_id: req.campaign_id ?? null, actor: ME, via: 'ui', dryRun: true,
@@ -64,6 +66,7 @@ export async function previewImportAction(req: ImportRequest): Promise<({ ok: tr
 
 export async function runImportAction(req: ImportRequest): Promise<({ ok: true } & ImportSummary) | Fail> {
   try {
+    const ME = await actorFor('editor')
     const rows = csvObjects(req.csv)
     const summary = await runCsvImport(db(), rows, {
       mapping: req.mapping, pool: req.pool ?? null, campaign_id: req.campaign_id ?? null, actor: ME, via: 'ui', dryRun: false,
@@ -92,6 +95,7 @@ export async function addLeadAction(f: FormData): Promise<({ ok: true } & Import
   const pool = s(f, 'pool') || null
   const campaignRaw = s(f, 'campaign_id')
   try {
+    const ME = await actorFor('editor')
     const summary = await runCsvImport(db(), [row], {
       mapping: identityMapping, pool, campaign_id: campaignRaw ? Number(campaignRaw) : null, actor: ME, via: 'ui', dryRun: false,
     })

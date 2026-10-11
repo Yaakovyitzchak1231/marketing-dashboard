@@ -1,15 +1,14 @@
 'use server'
 
 /**
- * The /suppressions page's buttons. Always acts as 'owner' (the signed-in
- * human; middleware.ts gates server actions behind login).
+ * The /suppressions page's buttons. Runs as the signed-in person (actorFor('editor'): editor
+ * or owner), so the audit log names who really did it.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { SuppressionError, addSuppression, importCsv, liftSuppression } from '@/lib/suppressions/store'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -28,6 +27,7 @@ function back(q: Record<string, string>): never {
 }
 
 export async function addSuppressionAction(f: FormData) {
+  const ME = await actorFor('editor')
   try {
     const campaignRaw = s(f, 'campaign_id')
     await addSuppression(db(), ME, {
@@ -49,6 +49,7 @@ export async function addSuppressionAction(f: FormData) {
 }
 
 export async function liftSuppressionAction(f: FormData) {
+  const ME = await actorFor('editor')
   try {
     await liftSuppression(db(), ME, { id: Number(s(f, 'id')) })
   } catch (e) {
@@ -61,6 +62,7 @@ export async function liftSuppressionAction(f: FormData) {
 }
 
 export async function importSuppressionsCsvAction(f: FormData) {
+  const ME = await actorFor('editor')
   try {
     const file = f.get('csv_file')
     const pasted = s(f, 'csv_text')

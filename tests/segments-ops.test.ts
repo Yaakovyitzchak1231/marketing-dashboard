@@ -23,8 +23,8 @@ describe('segment ops', () => {
     await db.close()
   })
 
-  it('list_fields returns the registry', async () => {
-    const fields = (await runOp(db, 'tab', 'list_fields', {})) as { key: string }[]
+  it('segment_fields returns the registry', async () => {
+    const fields = (await runOp(db, 'tab', 'segment_fields', {})) as { key: string }[]
     expect(fields.map((f) => f.key)).toContain('company.state')
     expect(fields.map((f) => f.key)).toContain('contact.verification_status')
   })

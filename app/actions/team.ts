@@ -42,6 +42,7 @@ export async function addTeamMemberAction(_prev: TeamFormResult | null, f: FormD
     const role = s(f, 'role') as Role
     const member = await addTeamMember(db(), actorId, { email: s(f, 'email'), displayName: s(f, 'display_name'), role })
     revalidatePath('/settings')
+    revalidatePath('/settings/users')
     return { ok: true, message: `Added. They sign in at /login with ${member.email}.`, member }
   } catch (e) {
     return fail(e)
@@ -54,6 +55,7 @@ export async function changeTeamMemberRoleAction(_prev: TeamFormResult | null, f
     const actorId = await currentActorId()
     await changeTeamMemberRole(db(), actorId, s(f, 'actor_id'), s(f, 'role') as Role)
     revalidatePath('/settings')
+    revalidatePath('/settings/users')
     return { ok: true, message: 'Role updated.' }
   } catch (e) {
     return fail(e)
@@ -66,6 +68,7 @@ export async function removeTeamMemberAction(_prev: TeamFormResult | null, f: Fo
     const actorId = await currentActorId()
     await removeTeamMember(db(), actorId, s(f, 'actor_id'))
     revalidatePath('/settings')
+    revalidatePath('/settings/users')
     return { ok: true, message: 'Removed.' }
   } catch (e) {
     return fail(e)

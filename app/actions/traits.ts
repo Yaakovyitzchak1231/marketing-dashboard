@@ -9,13 +9,13 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { OpsError } from '@/lib/ops/core'
 import { defineTrait, archiveTrait } from '@/lib/traits/store'
 import { ensureTraitFieldsRegistered } from '@/lib/traits/register'
 import { validateTraitDefinition } from '@/lib/traits/definition'
 import { computeTraitValues } from '@/lib/traits/compute'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -51,7 +51,7 @@ async function guarded(path: string, fn: () => Promise<void>) {
   try {
     await fn()
   } catch (e) {
-    if (e instanceof OpsError) redirect(`${path}?error=${encodeURIComponent(e.message)}`)
+    if (e instanceof OpsError || e instanceof AuthError) redirect(`${path}?error=${encodeURIComponent(e.message)}`)
     throw e
   }
   revalidatePath(path)
@@ -60,6 +60,7 @@ async function guarded(path: string, fn: () => Promise<void>) {
 
 export async function defineTraitAction(f: FormData) {
   await guarded('/segments/traits', async () => {
+    const ME = await actorFor('editor')
     const d = db()
     await defineTrait(d, ME, { key: s(f, 'key'), label: s(f, 'label'), entity: s(f, 'entity') || 'company', definition: definitionFromForm(f) }, 'ui')
     await ensureTraitFieldsRegistered(d)
@@ -68,6 +69,7 @@ export async function defineTraitAction(f: FormData) {
 
 export async function archiveTraitAction(f: FormData) {
   await guarded('/segments/traits', async () => {
+    const ME = await actorFor('editor')
     const d = db()
     await archiveTrait(d, ME, s(f, 'key'), 'ui')
     await ensureTraitFieldsRegistered(d)

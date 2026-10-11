@@ -1,15 +1,15 @@
 'use server'
 
 /**
- * Pause / resume agents from the dashboard. Only the signed-in human (the
- * login gate in middleware.ts protects server actions) can do this; agents have
- * no ops call for it, and the database refuses a pause not made by a human.
+ * Pause / resume agents from the dashboard. Owner-only (plan 1.14): each
+ * action checks the role itself (actorFor) and records the signed-in owner's
+ * own actor id. Agents have no ops call for it, and the database refuses a
+ * pause not made by a human.
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { pauseAgent, pauseAll, resumeAgent, resumeAll } from '@/lib/ops/pause'
-
-const ME = 'owner'
+import { actorFor } from '@/lib/auth/act'
 
 function db() {
   const d = getDb()
@@ -28,6 +28,7 @@ function refresh(id?: string) {
 }
 
 export async function pauseAgentAction(f: FormData) {
+  const ME = await actorFor('owner')
   const id = s(f, 'agent_id')
   if (s(f, 'confirm') !== 'yes') return
   await pauseAgent(db(), ME, id, s(f, 'reason') || null)
@@ -35,6 +36,7 @@ export async function pauseAgentAction(f: FormData) {
 }
 
 export async function resumeAgentAction(f: FormData) {
+  const ME = await actorFor('owner')
   const id = s(f, 'agent_id')
   if (s(f, 'confirm') !== 'yes') return
   await resumeAgent(db(), ME, id)
@@ -42,12 +44,14 @@ export async function resumeAgentAction(f: FormData) {
 }
 
 export async function pauseAllAction(f: FormData) {
+  const ME = await actorFor('owner')
   if (s(f, 'confirm') !== 'yes') return
   await pauseAll(db(), ME, s(f, 'reason') || null)
   refresh()
 }
 
 export async function resumeAllAction(f: FormData) {
+  const ME = await actorFor('owner')
   if (s(f, 'confirm') !== 'yes') return
   await resumeAll(db(), ME)
   refresh()

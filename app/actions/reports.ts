@@ -2,11 +2,12 @@
 
 /**
  * Server actions behind the Reports screens and the Instantly action buttons.
- * They run as the signed-in human ('owner') behind the login gate. Every
+ * They run as the signed-in person (editor or owner, by their own actor id) behind the login gate. Every
  * Instantly change here needs his explicit confirm click in the UI; agents
  * cannot reach these. Agents only queue Instantly changes through /api/ops
  * (instantly_* ops -> lib/instantly/gate.ts), which run after a human approves.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
@@ -21,8 +22,6 @@ import { clientFromEnv, clearInstantlyMemo } from '@/lib/instantly/client'
 import { listLeadsByEmail } from '@/lib/instantly/endpoints'
 import { finishExport, startExport } from '@/lib/export/lead-master'
 import { DEFAULT_EXPORT_TAB, tokenFromEnv, writeExportTab } from '@/lib/export/sheets'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -47,6 +46,7 @@ function withNote(path: string, tone: 'good' | 'bad', text: string): string {
 // ------------------------------------------------------------ campaign meta / costs
 
 export async function saveCampaignMetaAction(f: FormData) {
+  const ME = await actorFor('editor')
   await saveCampaignMeta(db(), ME, {
     campaign_id: s(f, 'campaign_id'),
     campaign_name: s(f, 'campaign_name') || null,
@@ -58,6 +58,7 @@ export async function saveCampaignMetaAction(f: FormData) {
 }
 
 export async function addCostAction(f: FormData) {
+  const ME = await actorFor('editor')
   const to = back(f, '/reports/costs')
   try {
     await upsertCost(db(), ME, {
@@ -85,6 +86,7 @@ export async function deleteCostAction(f: FormData) {
 // ------------------------------------------------------------ Instantly actions (his click + confirm)
 
 export async function campaignSwitchAction(f: FormData) {
+  const ME = await actorFor('editor')
   const to = back(f, '/reports/runway')
   const kind = s(f, 'kind') === 'resume' ? 'resume' : 'pause'
   if (s(f, 'confirm') !== 'yes') redirect(withNote(to, 'bad', 'Not confirmed; nothing changed.'))
@@ -98,6 +100,7 @@ export async function campaignSwitchAction(f: FormData) {
 }
 
 export async function previewAddLeadsAction(f: FormData) {
+  const ME = await actorFor('editor')
   const companyIds = s(f, 'company_ids')
     .split(',')
     .map((x) => Number(x))
@@ -120,6 +123,7 @@ export async function previewAddLeadsAction(f: FormData) {
 }
 
 export async function confirmAddLeadsAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = Number(s(f, 'action_id'))
   const to = `/leads/instantly?action=${id}`
   if (s(f, 'confirm') !== 'yes') redirect(withNote(to, 'bad', 'Not confirmed; nothing was sent.'))
@@ -135,6 +139,7 @@ export async function confirmAddLeadsAction(f: FormData) {
 // ------------------------------------------------------------ weekly: assign follow-up
 
 export async function assignFollowUpAction(f: FormData) {
+  const ME = await actorFor('editor')
   const to = back(f, '/reports/weekly')
   const agent = s(f, 'assigned_to')
   const title = s(f, 'title')
@@ -159,6 +164,7 @@ export async function assignFollowUpAction(f: FormData) {
 // ------------------------------------------------------------ Lead Master copy
 
 export async function runSheetExportAction() {
+  const ME = await actorFor('editor')
   const to = '/reports'
   const sheetId = process.env.LEAD_MASTER_SHEET_ID?.trim()
   const token = await tokenFromEnv(process.env).catch(() => null)

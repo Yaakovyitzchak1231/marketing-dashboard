@@ -5,9 +5,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { FieldError, archiveField, defineField, updateField } from '@/lib/fields/store'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -18,7 +18,7 @@ const s = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' ? v.trim() : ''
 }
-const msg = (e: unknown) => (e instanceof FieldError ? e.message : null)
+const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof FieldError ? e.message : null)
 
 function back(q: Record<string, string>): never {
   const u = new URLSearchParams(q)
@@ -27,6 +27,7 @@ function back(q: Record<string, string>): never {
 
 export async function defineFieldAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     const optionsRaw = s(f, 'options')
     await defineField(db(), ME, {
       entity: s(f, 'entity'),
@@ -48,6 +49,7 @@ export async function defineFieldAction(f: FormData) {
 
 export async function archiveFieldAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     await archiveField(db(), ME, { id: Number(s(f, 'id')), via: 'ui' })
   } catch (e) {
     const m = msg(e)
@@ -60,6 +62,7 @@ export async function archiveFieldAction(f: FormData) {
 
 export async function updateFieldAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     const optionsRaw = s(f, 'options')
     await updateField(db(), ME, {
       id: Number(s(f, 'id')),

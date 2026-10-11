@@ -292,6 +292,9 @@ export default async function SettingsPage() {
 
       <section className="mb-6">
         <SectionHeader title="Team" meta="Who can sign in to this dashboard, and what they can do" />
+        <p className="mb-2 text-[12.5px] text-ink-faint">
+          <Link href="/settings/users" prefetch={false} className="underline hover:text-ink">Open Users &amp; roles</Link>
+        </p>
         <Card className="p-4">
           {needsTeamMigration ? (
             <p className="text-[13px] text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>

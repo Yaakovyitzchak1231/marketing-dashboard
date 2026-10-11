@@ -1,11 +1,12 @@
 'use server'
 
 /**
- * Campaign profiles, from the dashboard (the signed-in human, 'owner'). The
+ * Campaign profiles, from the dashboard (the signed-in person, editor or owner, recorded by their own actor id). The
  * same functions agents reach through /api/ops (lib/campaign-profiles/ops.ts).
  * Every action answers {ok, ...} instead of throwing, so the wizard can show
  * a plain error line without a crash screen.
  */
+import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import {
@@ -29,8 +30,6 @@ import {
 import { getAiConfig, suggestCampaignProfile, verifyFeed, type SuggestOutcome } from '@/lib/campaign-profiles/suggest'
 import { verifyItem } from '@/lib/campaign-profiles/verify'
 import { getOrCreatePool, listPools, PoolError, type Pool } from '@/lib/pools/store'
-
-const ME = 'owner'
 
 type Fail = { ok: false; error: string }
 
@@ -60,6 +59,9 @@ export async function getProfileAction(campaignId: number): Promise<{ ok: true; 
 }
 
 export async function updateProfileAction(campaignId: number, patch: ProfilePatch): Promise<{ ok: true; data: ProfileWithItems['profile'] } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const data = await upsertProfile(db(), ME, campaignId, patch)
     touch(campaignId)
@@ -70,6 +72,9 @@ export async function updateProfileAction(campaignId: number, patch: ProfilePatc
 }
 
 export async function addProfileItemsAction(campaignId: number, items: ItemInput[]): Promise<{ ok: true; added: ProfileItem[]; already: { kind: ItemKind; name: string }[] } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const r = await addItems(db(), ME, campaignId, items, 'ui')
     touch(campaignId)
@@ -80,6 +85,9 @@ export async function addProfileItemsAction(campaignId: number, items: ItemInput
 }
 
 export async function setItemStatusAction(ids: number[], status: ItemStatus, campaignId: number): Promise<{ ok: true; items: ProfileItem[] } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const items = await setItemStatus(db(), ME, ids, status, 'ui')
     touch(campaignId)
@@ -90,6 +98,9 @@ export async function setItemStatusAction(ids: number[], status: ItemStatus, cam
 }
 
 export async function updateProfileItemAction(id: number, patch: { name?: string; value?: string | null; config?: Record<string, unknown>; rationale?: string | null; sort?: number }, campaignId: number): Promise<{ ok: true; item: ProfileItem } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const item = await updateItem(db(), ME, id, patch)
     touch(campaignId)
@@ -100,6 +111,9 @@ export async function updateProfileItemAction(id: number, patch: { name?: string
 }
 
 export async function suggestProfileAction(campaignId: number, industry: string, notes?: string | null, exampleSites?: string[]): Promise<{ ok: true; result: SuggestOutcome } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const result = await suggestCampaignProfile(db(), ME, { campaign_id: campaignId, industry, notes: notes ?? null, example_sites: exampleSites })
     touch(campaignId)
@@ -122,6 +136,9 @@ export async function verifyFeedAction(url: string): Promise<{ ok: true; result:
 }
 
 export async function copyProfileAction(fromCampaignId: number, toCampaignId: number): Promise<{ ok: true; data: CopyResult } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const data = await copyProfile(db(), ME, fromCampaignId, toCampaignId)
     touch(toCampaignId)
@@ -148,6 +165,9 @@ export async function listPoolsAction(): Promise<{ ok: true; pools: Pool[] } | F
 }
 
 export async function createPoolAction(label: string): Promise<{ ok: true; pool: Pool } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     return { ok: true, pool: await getOrCreatePool(db(), ME, { label }, 'ui') }
   } catch (e) {
@@ -156,6 +176,9 @@ export async function createPoolAction(label: string): Promise<{ ok: true; pool:
 }
 
 export async function recheckProfileItemAction(itemId: number, campaignId: number): Promise<{ ok: true; item: ProfileItem } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
   try {
     const { rows } = await db().query<Record<string, unknown>>(`select id, kind, name, value, config from lp.campaign_profile_items where id = $1`, [itemId])
     if (!rows[0]) throw new ProfileError(`No profile item ${itemId}.`, 404)

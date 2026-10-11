@@ -13,6 +13,15 @@ import type { Role } from '../auth/roles'
 
 export class TeamError extends Error {}
 
+const ROLES: readonly Role[] = ['owner', 'editor', 'viewer']
+
+/** A role from a form or a caller, checked: only owner / editor / viewer. */
+export function parseRole(value: unknown): Role {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (!(ROLES as readonly string[]).includes(v)) throw new TeamError('Pick a role: Owner, Editor or Viewer.')
+  return v as Role
+}
+
 export interface TeamMemberRow {
   id: string
   display_name: string
@@ -73,17 +82,29 @@ export async function addTeamMember(db: Db, actorId: string, input: { email: str
   const displayName = input.displayName.trim() || email
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new TeamError('That does not look like an email address.')
   if (!displayName) throw new TeamError('Add a name.')
+  const role = parseRole(input.role)
   return db.tx(async (q) => {
     await requireOwnerActor(q, actorId)
-    const existing = await q.query<{ id: string }>(`select id from lp.actors where email = $1`, [email])
-    if (existing.rows.length) throw new TeamError('That email is already on the team.')
+    const existing = await q.query<{ id: string; active: boolean }>(`select id, active from lp.actors where email = $1`, [email])
+    if (existing.rows[0]?.active) throw new TeamError('That email is already on the team.')
+    if (existing.rows[0]) {
+      // Removed earlier (removal only deactivates): bring them back with the new role.
+      const back = existing.rows[0].id
+      await q.query(`update lp.actors set active = true, role = $2, display_name = $3 where id = $1`, [back, role, displayName])
+      await auditActor(q, actorId, back, 'added', null, `${email} (${role})`)
+      const again = await q.query<TeamMemberRow>(
+        `select id, display_name, email, role, active, created_at::text as created_at from lp.actors where id = $1`,
+        [back],
+      )
+      return again.rows[0]
+    }
     const id = await uniqueActorId(q, slugFromEmail(email))
     await q.query(
       `insert into lp.actors (id, kind, display_name, harness, active, role, email)
        values ($1, 'human', $2, 'dashboard', true, $3, $4)`,
-      [id, displayName, input.role, email],
+      [id, displayName, role, email],
     )
-    await auditActor(q, actorId, id, 'added', null, `${email} (${input.role})`)
+    await auditActor(q, actorId, id, 'added', null, `${email} (${role})`)
     const row = await q.query<TeamMemberRow>(
       `select id, display_name, email, role, active, created_at::text as created_at from lp.actors where id = $1`,
       [id],
@@ -101,7 +122,8 @@ async function countOtherActiveOwners(q: Queryable, excludingId: string | null):
 }
 
 /** Change a team member's role. Can't demote the last active DB owner — the env fallback is permanent regardless, but the DB should never be left with zero owners of its own. */
-export async function changeTeamMemberRole(db: Db, actorId: string, targetId: string, role: Role): Promise<void> {
+export async function changeTeamMemberRole(db: Db, actorId: string, targetId: string, newRole: Role): Promise<void> {
+  const role = parseRole(newRole)
   return db.tx(async (q) => {
     await requireOwnerActor(q, actorId)
     const cur = await q.query<{ role: Role | null; active: boolean }>(

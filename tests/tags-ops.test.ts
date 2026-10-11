@@ -52,7 +52,7 @@ describe('tags as first-class (plan 2.9)', () => {
   })
 
   it('rename_tag updates every company row, is audited, and carries the old styling to the new name', async () => {
-    const result = await renameTag(db, 'claude', { from: 'vip', to: 'priority' })
+    const result = await renameTag(db, 'claude', { from: 'vip', to: 'priority', expected_count: 1 })
     expect(result.companies_updated).toBe(1) // only c2 has "vip" at this point
     const tags = await listTags(db)
     expect(tags.find((t) => t.tag === 'vip')).toBeUndefined()
@@ -73,7 +73,7 @@ describe('tags as first-class (plan 2.9)', () => {
     await addTag(db, 'claude', { company_id: c3, tag: 'warm_lead' })
     await addTag(db, 'claude', { company_id: c2, tag: 'hot_lead' }) // c2 already has "priority" too
 
-    const result = await mergeTags(db, 'claude', { tags: ['hot_lead', 'warm_lead'], into: 'engaged' })
+    const result = await mergeTags(db, 'claude', { tags: ['hot_lead', 'warm_lead'], into: 'engaged', expected_count: 3 })
     expect(result.companies_updated).toBe(3)
     const tags = await listTags(db)
     expect(tags.find((t) => t.tag === 'hot_lead')).toBeUndefined()
@@ -88,10 +88,11 @@ describe('tags as first-class (plan 2.9)', () => {
     expect(c2rows[0].tags.sort()).toEqual(['engaged', 'priority'])
   })
 
-  it('tag_trends counts tag_added events per week', async () => {
+  it('tag_trends counts tag_added events per week (single-lead adds; a rename/merge writes no per-lead events)', async () => {
     const trends = await tagTrends(db, 52)
-    const engaged = trends.filter((t) => t.tag === 'engaged')
-    expect(engaged.reduce((acc, t) => acc + t.added, 0)).toBe(3)
+    const sum = (tag: string) => trends.filter((t) => t.tag === tag).reduce((acc, t) => acc + t.added, 0)
+    expect(sum('hot_lead')).toBe(2)
+    expect(sum('engaged')).toBe(0)
   })
 
   it('ops door: list_tags / rename_tag / merge_tags / set_tag_style / tag_trends are wired, and reject bad input', async () => {

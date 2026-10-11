@@ -1,7 +1,8 @@
 'use server'
 
 /**
- * Tools hub, from the dashboard (the signed-in human, 'owner'). The same
+ * Tools hub, from the dashboard. Owner-only (plan 1.14): checked here
+ * (actorFor) and written as the signed-in owner's own actor id. The same
  * store functions the OVH runner and other agents reach through
  * /api/ops (lib/integrations/ops.ts). A bad input comes back to the page as
  * ?error=… instead of an error screen.
@@ -10,8 +11,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { IntegrationError, upsertIntegration, type IntegrationPatch, type ReachableFrom, type Visibility } from '@/lib/integrations/store'
-
-const ME = 'owner'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 
 function db() {
   const d = getDb()
@@ -28,7 +29,7 @@ async function guarded(fn: () => Promise<void>): Promise<void> {
   try {
     await fn()
   } catch (e) {
-    if (e instanceof IntegrationError) redirect(`/tools?error=${encodeURIComponent(e.message)}`)
+    if (e instanceof IntegrationError || e instanceof AuthError) redirect(`/tools?error=${encodeURIComponent(e.message)}`)
     throw e
   }
   revalidatePath('/tools')
@@ -37,6 +38,7 @@ async function guarded(fn: () => Promise<void>): Promise<void> {
 
 export async function upsertIntegrationAction(f: FormData) {
   await guarded(async () => {
+    const ME = await actorFor('owner')
     const id = s(f, 'id') || s(f, 'id_new')
     if (!id) throw new IntegrationError('id is required')
     const patch: IntegrationPatch = {

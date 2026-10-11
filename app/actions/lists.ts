@@ -9,9 +9,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { addCompaniesToList, removeCompanyFromList, ListsError } from '@/lib/segments/lists'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -35,7 +35,7 @@ async function guarded(path: string, fn: () => Promise<string | void>): Promise<
   try {
     to = await fn()
   } catch (e) {
-    if (e instanceof ListsError) back(path, { error: e.message })
+    if (e instanceof ListsError || e instanceof AuthError) back(path, { error: e.message })
     throw e
   }
   revalidatePath('/leads')
@@ -46,6 +46,7 @@ async function guarded(path: string, fn: () => Promise<string | void>): Promise<
 export async function addToListAction(f: FormData) {
   const returnTo = s(f, 'return_to') || '/leads'
   await guarded(returnTo, async () => {
+    const ME = await actorFor('editor')
     const companyIds = ids(f, 'company_id')
     const listId = s(f, 'list_id') ? Number(s(f, 'list_id')) : null
     const r = await addCompaniesToList(db(), ME, { listId, newListName: s(f, 'new_list_name') || null }, companyIds)
@@ -56,6 +57,7 @@ export async function addToListAction(f: FormData) {
 export async function removeFromListAction(f: FormData) {
   const returnTo = s(f, 'return_to') || '/leads'
   await guarded(returnTo, async () => {
+    const ME = await actorFor('editor')
     await removeCompanyFromList(db(), ME, Number(s(f, 'list_id')), Number(s(f, 'company_id')))
   })
 }

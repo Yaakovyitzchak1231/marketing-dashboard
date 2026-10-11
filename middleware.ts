@@ -164,15 +164,16 @@ export async function middleware(request: NextRequest) {
 
   // Viewers are read-only (plan 1.14): block every mutation centrally, here,
   // rather than trusting each server action / API route to check for itself.
-  // Two independent signals catch a write, fail-closed:
-  //  - any non-GET/HEAD request to /api/* (the self-authenticating machine
-  //    routes already returned above and never reach this point);
-  //  - any request carrying Next's `next-action` header, which marks an
-  //    invocation of a server action on a page route (the write paths behind
-  //    forms like Settings and Team never go through /api/* at all).
+  // Any non-GET/HEAD request is a write, on ANY path (the self-authenticating
+  // machine routes already returned above and never reach this point). Page
+  // routes count too: a plain no-JS form POST (multipart or urlencoded, with a
+  // $ACTION_ID_... field) runs a server action WITHOUT the `next-action`
+  // header, so checking only that header let a viewer call every older action
+  // that has no role check of its own. The header is still checked as a
+  // second signal.
   // A 403 here is also the right response for a server action: the client
   // runtime surfaces the thrown error text, it does not need a redirect.
-  if (role === 'viewer' && isMutatingRequest(request, pathname, isApi)) {
+  if (role === 'viewer' && isMutatingRequest(request)) {
     return NextResponse.json(
       { error: 'Viewers can look but not change things' },
       { status: 403 },
@@ -186,15 +187,16 @@ export async function middleware(request: NextRequest) {
 const SAFE_METHODS = new Set(['GET', 'HEAD'])
 
 /**
- * True for any request a viewer must not be allowed to make: a non-GET/HEAD
- * call to /api/* (leads, rules, verify, find, research, campaign-steps,
- * suppressions and anything else under /api -- this check is central so a
- * new write route needs no opt-in), or any request carrying the `next-action`
- * header Next.js attaches to a server-action invocation, wherever it lands.
+ * True for any request a viewer must not be allowed to make: any non-GET/HEAD
+ * request on any path -- /api/* write routes AND page routes, because a
+ * server action can be invoked by a plain form POST to a page with no
+ * `next-action` header (Next's no-JS progressive-enhancement path) -- or any
+ * request carrying the `next-action` header, wherever it lands. Central, so a
+ * new write route or server action needs no opt-in.
  */
-function isMutatingRequest(request: NextRequest, pathname: string, isApi: boolean): boolean {
+export function isMutatingRequest(request: NextRequest): boolean {
   const method = request.method.toUpperCase()
-  if (isApi && !SAFE_METHODS.has(method)) return true
+  if (!SAFE_METHODS.has(method)) return true
   if (request.headers.has('next-action')) return true
   return false
 }

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 
 const holder: { db: unknown } = { db: null }
+vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))

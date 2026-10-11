@@ -359,7 +359,7 @@ anything else with a plain error):
 "everyone except suppressed"). A condition is one of:
 
 - `{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]}` -- a field
-  from the registry (`company.*` / `contact.*`; `list_fields` below) with an operator
+  from the registry (`company.*` / `contact.*`; `segment_fields` below) with an operator
   for its type: text/array get `is, is_not, contains, not_contains, in, not_in, exists,
   not_exists`; number adds `gt, gte, lt, lte, between`; date adds `before, after,
   within_last_days, more_than_days_ago, between`; boolean is `is, is_not, exists,
@@ -383,7 +383,7 @@ Geography is `company.state` / `company.city` (plain field conditions) only --
 Custom fields (1.7), scores (2.8) and computed traits (2.7) plug into the SAME
 compiler with no changes there: call `registerField` (`lib/segments/fields.ts`) with
 a `sql` expression reading the new column (e.g. `"c.custom ->> 'ring_brand'"`) and the
-key shows up in `list_fields` and works in every condition kind above.
+key shows up in `segment_fields` and works in every condition kind above.
 
 **Three examples**, with their readback (`lib/segments/readback.ts`):
 1. `{"entity":"company","include":[{"conditions":[{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]},{"kind":"quality","op":"verified_sendable"},{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}]}],"exclude":[{"conditions":[{"kind":"campaign_membership","mode":"any_active_campaign"}]}]}`
@@ -395,7 +395,7 @@ key shows up in `list_fields` and works in every condition kind above.
 
 | op | args | what |
 |---|---|---|
-| `list_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
+| `segment_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
 | `list_segments` | `{include_archived?, campaign_id?}` | every live segment (or scoped to one campaign, plus un-scoped ones) |
 | `get_segment` | `{id}` | one segment, with its readback |
 | `create_segment` | `{name, entity, definition, description?, kind? ('dynamic' default), campaign_id?}` | validates the definition before writing; `definition.entity` must match `entity` |
@@ -525,3 +525,14 @@ Deferred from this slice: the alert UI (configuring `alert_rule` is DB/ops-only 
 now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).
 
 <!-- retrigger: Vercel git_info_fail on first branch deploy -->
+
+## Tags: changing a tag is an explicit, counted choice (Oct 11, 2026)
+
+A tag is never silently changed on every lead.
+
+- `change_tag` `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}` changes the tag only on one lead, on the leads you list, or on a segment's leads. A static list uses its members; a dynamic segment uses its rules. `preview: true` returns `{count, scope}` and changes nothing. A change to more than one lead needs `expected_count` equal to that count, and a moved count is refused with 409. It writes one audit entry (who, old name, new name, how many leads) and no per-lead timeline rows.
+- `rename_tag` `{from, to, expected_count}` and `merge_tags` `{tags, into, expected_count}` change the tag on every lead. They are owner-only: an agent key gets 403, and agents use `change_tag`. They also need `expected_count`, and each writes one audit entry with no per-lead timeline rows.
+- `count_tagged` `{tags: [string,...]}` returns how many leads carry any of the tags now.
+
+Roles, also Oct 11: managing people and roles, agent keys, agents, the Tools hub and jobs is owner-only in the dashboard. No ops-API op changes people or roles, and the database refuses such a change from any non-owner (migration 0050).
+
