@@ -264,3 +264,67 @@ here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
 (2.5), using a segment as a campaign source (2.6), computed traits and scoring as
 field-registry entries (2.7/2.8 -- the registry is ready for them), the "describe a
 segment" AI box (2.11), and the analytics UI on top of `segment_snapshot` (2.12).
+
+
+## Full lead profile (plan 2.10)
+
+One call returns the whole 360 view of a lead for an agent: everything
+`lib/leads/detail.ts` already reads (contacts, sources, enrichment,
+verification, campaign touches, status history, comments, tasks), plus
+milestones, a reachability strip, segment/list membership, this lead's
+campaigns, its suppression status, its attached file links, its score (when
+plan 2.8's `lp.scores` is merged on this deploy), and an engagement benchmark
+against its campaigns' averages -- every number straight from stored rows,
+never invented.
+
+Optional tables (`lp.segments`/`lp.segment_members`, `lp.scores`, `lp.files`)
+are read defensively: on a deploy that hasn't run their migration yet, that
+section of the response comes back `{available: false, needs_migration: "..."}`
+instead of throwing.
+
+| op | args | what |
+|---|---|---|
+| `lead_profile` | `{company_id}` | the whole profile in one call (shape below) |
+| `lead_files_add` | `{company_id, name, url, contact_id?, note?}` | add a file LINK to the lead's Notes & files card (no paid storage -- `url` points wherever the file already lives); audited |
+| `lead_files_remove` | `{id}` | remove a file link; audited |
+
+`lead_profile`'s response:
+
+```
+{
+  detail: { company, contacts, sources, enrichment, verification, touches, history, events, comments, tasks, actors },
+  milestones: { first_touch, first_open, first_reply, last_activity },   // ISO strings or null; from lp.lead_events + lp.campaign_touches only
+  reachability: [{ key, label, value, ok }],                              // verified_email, store_phone, owner_phone, linkedin
+  segments: { available, needs_migration, memberships: [{ id, name, kind, campaign_id }] },
+  campaigns: { available, needs_migration, memberships: [{ campaign_id, campaign_name, status, added_at }] },
+  files: { available, needs_migration, rows: [{ id, company_id, contact_id, name, url, note, uploaded_by, uploaded_by_name, created_at }] },
+  score: { available, needs_migration, row },                            // row is whatever plan 2.8's lp.scores has, once merged
+  suppression: { checked, suppressed, reason },
+  engagement: { available, benchmarks: [{ campaign_id, campaign_name, lead: {opens, replies, steps}, campaign_average: {opens, replies, steps} }] },
+  placeholders: { journeys: "Not built yet", deals: "Not built yet", conversions: "Not built yet" },
+}
+```
+
+**UI:** `app/leads/[id]/page.tsx` is now tabbed (`?tab=overview|timeline|engagement|details`,
+plain query params, no client JS to switch): Overview (header with stage/score/owner/
+suppression, milestones, reachability, Segments & lists, Campaigns, Tasks, Notes &
+files, Comments, and the Journeys/Deals/Conversions placeholders), Timeline (lead
+events with a category filter + search, plus campaign activity), Engagement (the
+benchmark), Details (the previous deep-dive: store facts, readiness, contacts,
+research findings, verification history, change history, sources) -- every existing
+feature (inline edit, comments, the history drawer, the "Forget" menu if present)
+still lives there, just regrouped.
+
+**Extends:** `lib/leads/detail.ts` (added `category` to each timeline event, from
+`lp.event_types`), `components/leads/LeadTimeline.tsx` (category + search filter,
+exported as the pure `filterEvents` for testing), `components/leads/CommentForm.tsx`
+and `components/comments/*` keep working unchanged.
+
+**Migration:** `0034_lead_files.sql` -- `lp.files` (file links only; id, company_id,
+contact_id nullable, name, url, note, uploaded_by, created_at), and the canonical
+`status_history_entity_type_check` superset (this is the migration that uses it,
+since file links need the `'file'` entity type).
+
+Deferred from this slice: the per-campaign deal pipeline (Deals is a placeholder
+until plan 3.x/4.x), journeys and conversions likewise (3.x), and the score card
+reads plan 2.8's `lp.scores` table read-only -- scoring itself is built elsewhere.
