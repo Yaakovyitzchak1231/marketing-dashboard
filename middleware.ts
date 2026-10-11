@@ -162,8 +162,41 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Viewers are read-only (plan 1.14): block every mutation centrally, here,
+  // rather than trusting each server action / API route to check for itself.
+  // Two independent signals catch a write, fail-closed:
+  //  - any non-GET/HEAD request to /api/* (the self-authenticating machine
+  //    routes already returned above and never reach this point);
+  //  - any request carrying Next's `next-action` header, which marks an
+  //    invocation of a server action on a page route (the write paths behind
+  //    forms like Settings and Team never go through /api/* at all).
+  // A 403 here is also the right response for a server action: the client
+  // runtime surfaces the thrown error text, it does not need a redirect.
+  if (role === 'viewer' && isMutatingRequest(request, pathname, isApi)) {
+    return NextResponse.json(
+      { error: 'Viewers can look but not change things' },
+      { status: 403 },
+    )
+  }
+
   // Authorized: continue, carrying any refreshed session cookies.
   return response
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD'])
+
+/**
+ * True for any request a viewer must not be allowed to make: a non-GET/HEAD
+ * call to /api/* (leads, rules, verify, find, research, campaign-steps,
+ * suppressions and anything else under /api -- this check is central so a
+ * new write route needs no opt-in), or any request carrying the `next-action`
+ * header Next.js attaches to a server-action invocation, wherever it lands.
+ */
+function isMutatingRequest(request: NextRequest, pathname: string, isApi: boolean): boolean {
+  const method = request.method.toUpperCase()
+  if (isApi && !SAFE_METHODS.has(method)) return true
+  if (request.headers.has('next-action')) return true
+  return false
 }
 
 export const config = {

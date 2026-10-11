@@ -20,9 +20,28 @@ import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTake
 import { addTeamMemberAction, changeTeamMemberRoleAction, removeTeamMemberAction } from '@/app/actions/team'
 import { TeamSection } from '@/components/settings/TeamSection'
 import { currentRole } from '@/lib/auth/session'
-import { listTeamMembers } from '@/lib/team/store'
+import { listTeamMembers, type TeamMemberRow } from '@/lib/team/store'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * listTeamMembers() reads lp.actors.role, which migration 0029 adds. Previews
+ * never run migrations (PHASE2_COMMON.md), so a PR #78 preview hits this page
+ * against a database that still has lp.actors without that column -- without
+ * this guard that throws inside the page's Promise.all and the whole Settings
+ * screen crashes to the error boundary. An honest "needs migration" reads the
+ * same as the empty-state convention the rest of the dashboard already uses
+ * (lib/setup/db-status.ts, lib/scoring's Settings page): any other DB error
+ * still surfaces as a real failure rather than being swallowed as "no team".
+ */
+async function listTeamMembersSafe(db: NonNullable<ReturnType<typeof getDb>>): Promise<{ members: TeamMemberRow[]; needsMigration: boolean }> {
+  try {
+    return { members: await listTeamMembers(db), needsMigration: false }
+  } catch (e) {
+    if (/does not exist/i.test((e as Error).message ?? '')) return { members: [], needsMigration: true }
+    throw e
+  }
+}
 
 export default async function SettingsPage() {
   const db = getDb()
@@ -34,14 +53,15 @@ export default async function SettingsPage() {
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations, teamMembers, role] = await Promise.all([
+  const [settingsRows, secretRows, actors, integrations, team, role] = await Promise.all([
     listSettings(db),
     listSecretStatuses(db),
     listActorKinds(db),
     listIntegrationSettings(db),
-    listTeamMembers(db),
+    listTeamMembersSafe(db),
     currentRole(),
   ])
+  const { members: teamMembers, needsMigration: needsTeamMigration } = team
   const settingsByKey = new Map(settingsRows.map((s) => [s.key, s]))
   const secretsByKey = new Map(secretRows.map((s) => [s.key, s]))
   const groups = settingsByGroup()
@@ -226,7 +246,11 @@ export default async function SettingsPage() {
       <section className="mb-6">
         <SectionHeader title="Team" meta="Who can sign in to this dashboard, and what they can do" />
         <Card className="p-4">
-          <TeamSection members={teamMembers} isOwner={role === 'owner'} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
+          {needsTeamMigration ? (
+            <p className="text-[13px] text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
+          ) : (
+            <TeamSection members={teamMembers} isOwner={role === 'owner'} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
+          )}
         </Card>
       </section>
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 // middleware.ts now reaches lib/db (plan 1.14's role lookup), which is
@@ -286,5 +286,116 @@ describe('Auth Gate - client bundle safety', () => {
       'NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY',
     )
     expect(publicEnvKeys).not.toContain('SUPABASE_SERVICE_ROLE_KEY')
+  })
+})
+
+/**
+ * A request with a method and/or extra headers, for the viewer write-gate
+ * tests below (the plain `req()` above only ever needs a GET).
+ */
+function reqWith(path: string, init?: { method?: string; headers?: Record<string, string> }) {
+  return new NextRequest(new URL(path, 'http://localhost'), init)
+}
+
+/**
+ * Stubs the one network call middleware.ts makes for a non-fallback account:
+ * its own `fetch('/api/internal/role')` hop (resolveRoleViaInternalApi).
+ * Restored per-test by the `vi.clearAllMocks()` in the outer `beforeEach`
+ * (afterEach restores the spy itself).
+ */
+function mockRoleFetch(role: string | null) {
+  return vi.spyOn(global, 'fetch').mockResolvedValue({
+    ok: true,
+    json: async () => ({ role }),
+  } as Response)
+}
+
+describe('Auth Gate - viewers are read-only (plan 1.14)', () => {
+  const VIEWER = 'viewer@example.com'
+  const EDITOR = 'editor@example.com'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    withSupabaseEnv()
+    process.env.ALLOWED_USER_EMAIL = ALLOWED
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('lets a viewer GET a page', async () => {
+    sessionFor(VIEWER)
+    mockRoleFetch('viewer')
+    const response = await middleware(req('/leads'))
+    expect(response.status).toBe(200)
+  })
+
+  it('lets a viewer GET an API route', async () => {
+    sessionFor(VIEWER)
+    mockRoleFetch('viewer')
+    const response = await middleware(req('/api/dashboard'))
+    expect(response.status).toBe(200)
+  })
+
+  it('blocks a viewer POSTing a write API route (/api/leads/stage)', async () => {
+    sessionFor(VIEWER)
+    mockRoleFetch('viewer')
+    const response = await middleware(reqWith('/api/leads/stage', { method: 'POST' }))
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.error).toBe('Viewers can look but not change things')
+  })
+
+  it('blocks a viewer request carrying the next-action header (a server action), even on a page route', async () => {
+    sessionFor(VIEWER)
+    mockRoleFetch('viewer')
+    const response = await middleware(
+      reqWith('/settings', { method: 'POST', headers: { 'next-action': 'abc123' } }),
+    )
+    expect(response.status).toBe(403)
+    const body = await response.json()
+    expect(body.error).toBe('Viewers can look but not change things')
+  })
+
+  it('blocks a viewer next-action request on an /api/* route too (belt and suspenders)', async () => {
+    sessionFor(VIEWER)
+    mockRoleFetch('viewer')
+    const response = await middleware(
+      reqWith('/api/leads/stage', { method: 'POST', headers: { 'next-action': 'abc123' } }),
+    )
+    expect(response.status).toBe(403)
+  })
+
+  it('lets an editor POST a write API route', async () => {
+    sessionFor(EDITOR)
+    mockRoleFetch('editor')
+    const response = await middleware(reqWith('/api/leads/stage', { method: 'POST' }))
+    expect(response.status).toBe(200)
+  })
+
+  it('lets an editor invoke a server action (next-action header) on a page route', async () => {
+    sessionFor(EDITOR)
+    mockRoleFetch('editor')
+    const response = await middleware(
+      reqWith('/leads', { method: 'POST', headers: { 'next-action': 'abc123' } }),
+    )
+    expect(response.status).toBe(200)
+  })
+
+  it('leaves the self-authenticating ops/webhook routes unaffected by the viewer gate (no session at all, any method)', async () => {
+    sessionFor(null)
+    const ops = await middleware(reqWith('/api/ops', { method: 'POST' }))
+    expect(ops.status).toBe(200)
+    const webhook = await middleware(reqWith('/api/webhooks/instantly', { method: 'POST' }))
+    expect(webhook.status).toBe(200)
+  })
+
+  it('never calls the internal role route for the fallback owner, viewer gate included', async () => {
+    sessionFor(ALLOWED)
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    const response = await middleware(reqWith('/api/leads/stage', { method: 'POST' }))
+    expect(response.status).toBe(200)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })
