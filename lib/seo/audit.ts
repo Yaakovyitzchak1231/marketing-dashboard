@@ -16,7 +16,7 @@ import {
  * (a bot wall, a timeout, a missing key) — never a guess dressed as a result.
  */
 
-export type CheckStatus = 'pass' | 'warn' | 'fail' | 'unknown'
+export type CheckStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'info'
 export interface Check {
   id: string
   label: string
@@ -137,25 +137,29 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
   } else if (robotsRes.status >= 200 && robotsRes.status < 300) {
     const robots = parseRobots(robotsRes.body)
     sitemapHints = robots.sitemaps
-    const blocked = AI_CRAWLERS.filter((c) => !robotsAllows(robots, c.ua, '/').allowed)
+    const paths = [...new Set(['/', ...(site.pages ?? []).map((p) => p.startsWith('/') ? p : `/${p}`)])]
+    const searchBots = AI_CRAWLERS.filter((c) => c.purpose === 'search')
+    const blocked = searchBots.flatMap((c) => paths.filter((p) => !robotsAllows(robots, c.ua, p).allowed).map((path) => ({ ...c, path })))
+    const policies = AI_CRAWLERS.filter((c) => c.purpose !== 'search' && !robotsAllows(robots, c.ua, '/').allowed)
+    checks.push({ id: 'crawler_policy', label: 'Training and user-fetch policy', status: 'info', detail: `${policies.length ? `Root rules disallow: ${policies.map((c) => c.ua).join(', ')}.` : 'No root disallow rule detected for the non-search agents checked.'} These are separate policy choices, not search visibility failures. User-triggered fetches may not follow robots.txt. Google-Extended is not required for Google Search AI features.` })
     checks.push(
       blocked.length
         ? {
             id: 'robots',
             label: 'AI crawlers in robots.txt',
             status: 'fail',
-            detail: `robots.txt blocks: ${blocked.map((b) => `${b.ua} (${b.who})`).join(', ')}.`,
+            detail: `robots.txt blocks search discovery on tracked paths: ${blocked.map((b) => `${b.ua} at ${b.path}`).join(', ')}.`,
             fix: wpFix(
               site,
-              'Yoast SEO > Tools > File editor: remove the Disallow lines for these bots (or Yoast > Settings > Advanced > Crawl optimization if a toggle blocks them).',
-              'Remove the Disallow rules for these user agents from robots.txt.',
+              'Review the listed search-bot/path rules in Yoast or your host. Allow only pages intended for public discovery; preserve private paths and your training opt-outs.',
+              'Review the listed search-bot/path rules. Allow public content intentionally; do not change training policy or expose private pages.',
             ),
           }
         : {
             id: 'robots',
             label: 'AI crawlers in robots.txt',
             status: 'pass',
-            detail: `All ${AI_CRAWLERS.length} crawlers we check (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot, Google-Extended, Googlebot, Bingbot) are allowed.`,
+            detail: `${searchBots.length} search crawlers allowed by robots.txt on ${paths.length} tracked paths. This does not verify crawler visits, firewall access, indexing or citations.`,
           },
     )
   } else {
@@ -174,29 +178,22 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
         ? {
             id: 'llms_txt',
             label: 'llms.txt',
-            status: p.links.length >= 3 ? 'pass' : 'warn',
-            detail: `llms.txt titled "${p.title}" lists ${p.links.length} link${p.links.length === 1 ? '' : 's'}.`,
-            fix: p.links.length >= 3 ? undefined : 'List your key pages (offer, pricing, comparisons, FAQ) with one-line descriptions.',
+            status: 'info',
+            detail: `Optional llms.txt titled "${p.title}" lists ${p.links.length} link${p.links.length === 1 ? '' : 's'}. Its presence is not evidence of search visibility or citations.`,
           }
         : {
             id: 'llms_txt',
             label: 'llms.txt',
-            status: 'warn',
-            detail: 'Something answers at /llms.txt but it is not a markdown llms.txt (it looks like a web page).',
-            fix: wpFix(site, 'Yoast SEO > Settings > Site features > llms.txt: turn it on and pick your key pages.', 'Publish a plain-text /llms.txt that starts with "# Your company" and lists key pages.'),
+            status: 'info',
+            detail: 'The optional /llms.txt endpoint does not look like a markdown map. This is not a search eligibility requirement.',
           },
     )
   } else if (llms.status != null) {
     checks.push({
       id: 'llms_txt',
       label: 'llms.txt',
-      status: 'warn',
-      detail: `No llms.txt (HTTP ${llms.status}). It is a new, optional convention, but cheap: a short markdown map of the site for AI tools.`,
-      fix: wpFix(
-        site,
-        'Yoast SEO (free) > Settings > Site features > llms.txt: turn it on and choose the pages.',
-        'Add a public/llms.txt file: "# TapDash", one line on what it is, then "- [Page](url): description" for each key page.',
-      ),
+      status: 'info',
+      detail: `Optional llms.txt not available (HTTP ${llms.status}). Google does not require AI text files or special markup for AI search features. No fix is required for its absence.`,
     })
   } else {
     checks.push({ id: 'llms_txt', label: 'llms.txt', status: 'unknown', detail: `/llms.txt didn't load (${llms.error ?? 'no answer'}).` })
@@ -306,11 +303,11 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
       id: 'bot_wall',
       label: 'Bot wall in front of the site',
       status: 'fail',
-      detail: `${walls.length} of our requests got a ${walls[0]} instead of the page. These fetches run from a cloud server, which is where AI crawlers (GPTBot, ClaudeBot, PerplexityBot, ChatGPT browsing) come from too, so they may be getting the same wall.`,
+      detail: `${walls.length} of our requests got a ${walls[0]} instead of the page. This proves the audit encountered a challenge, not that verified search crawlers were blocked. Inspect host logs to determine their access.`,
       fix:
         (site.host ?? '').toLowerCase() === 'siteground'
-          ? 'Check SiteGround Site Tools > Statistics > Access log for GPTBot / ClaudeBot / PerplexityBot / OAI-SearchBot: status 202 means they are walled. If so, ask SiteGround support to exempt verified AI crawlers from the anti-bot challenge (free).'
-          : 'Ask the host to exempt verified search and AI crawlers from the bot challenge.',
+          ? 'Check SiteGround access and security logs for verified Googlebot, Bingbot, PerplexityBot and OAI-SearchBot. Confirm challenges before requesting narrow search-crawler exceptions; preserve training opt-outs and security protections.'
+          : 'Ask the host to verify search-crawler access and apply narrow exceptions only where challenges are confirmed.',
     })
   } else {
     checks.unshift({ id: 'bot_wall', label: 'Bot wall in front of the site', status: 'pass', detail: 'Every request got the real content (no captcha or challenge page).' })
@@ -383,9 +380,9 @@ function finishSchema(site: AuditSite, path: string, f: PageFacts, out: Check[])
       : {
           id: 'schema_faq',
           label: 'FAQ schema',
-          status: 'warn',
-          detail: f.hasFaqText ? 'The page has FAQ text but no FAQPage schema.' : 'No FAQ section or FAQPage schema. AI answers lift question-and-answer pairs directly.',
-          fix: wpFix(site, 'Add a Yoast FAQ block (free, in the block editor: "Yoast FAQ") with the 4-6 questions buyers ask; Yoast emits the FAQPage schema.', 'Add an FAQ section with FAQPage JSON-LD.'),
+          status: f.hasFaqText ? 'warn' : 'info',
+          detail: f.hasFaqText ? 'Visible FAQ text was detected without FAQPage schema. Markup is optional and does not guarantee citations or rich results.' : 'No FAQ section detected. Consider useful buyer answers only if the page needs them; do not add hidden or invented FAQ markup.',
+          fix: 'Review actual buyer questions and visible page content first. Any FAQ markup must match the visible answers; Google FAQ rich-result eligibility is restricted.',
           page: path,
         },
   )
@@ -398,10 +395,10 @@ function finishSchema(site: AuditSite, path: string, f: PageFacts, out: Check[])
             id: 'schema_offer',
             label: 'Offer / price schema',
             status: 'warn',
-            detail: 'No Service/Product/Offer schema, so the price and terms on the page are not machine-readable.',
+            detail: 'No Service/Product/Offer schema detected. Consider markup only for verified, visible offer details; it is not required for AI citations.',
             fix: wpFix(
               site,
-              'Add a Service JSON-LD block with the offer (e.g. $99/month platform fee, month-to-month) using a free "custom HTML" block or a free schema plugin; Yoast free does not add Offer schema by itself.',
+              'Review a Service/Offer JSON-LD draft using only verified pricing and terms already visible on this page. Do not publish placeholder or unsupported values.',
               'Add Service or Product JSON-LD with an Offer (price, currency, billing period).',
             ),
             page: path,

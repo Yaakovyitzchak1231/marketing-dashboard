@@ -13,7 +13,20 @@
 alter table lp.status_history drop constraint if exists status_history_entity_type_check;
 alter table lp.status_history add constraint status_history_entity_type_check
   check (entity_type in ('company', 'contact', 'task', 'campaign', 'campaign_lead', 'campaign_profile',
-                         'actor', 'setting', 'suppression', 'job', 'deal', 'segment', 'journey'));
+                         'actor', 'setting', 'suppression', 'job', 'pool', 'integration', 'event_type',
+                         'deal', 'segment', 'journey'));
+
+-- Some entities are keyed by a text slug, not a number (a setting 'workspace.timezone',
+-- an actor 'tab', a job name, a pool 'dental_clinics', an integration 'listmonk').
+-- Those rows carry entity_key and leave entity_id null; numeric entities keep entity_id.
+alter table lp.status_history alter column entity_id drop not null;
+alter table lp.status_history add column if not exists entity_key text
+  check (entity_key is null or length(entity_key) between 1 and 200);
+alter table lp.status_history drop constraint if exists status_history_identity_check;
+alter table lp.status_history add constraint status_history_identity_check
+  check (entity_id is not null or entity_key is not null);
+create index if not exists status_history_key_idx on lp.status_history (entity_type, entity_key, changed_at desc)
+  where entity_key is not null;
 
 -- Which door the change came through: the dashboard UI, the ops API (an agent's own
 -- key), the Instantly webhook, the background runner, an import, or a DB trigger.
