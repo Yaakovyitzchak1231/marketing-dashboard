@@ -144,3 +144,31 @@ registerField({
 registerField({ key: 'contact.do_not_contact', label: 'Do not contact', table: 'contact', type: 'boolean', sql: 'ct.do_not_contact' })
 registerField({ key: 'contact.created_at', label: 'Contact created', table: 'contact', type: 'date', sql: 'ct.created_at' })
 registerField({ key: 'contact.verified_at', label: 'Verified at', table: 'contact', type: 'date', sql: 'ct.verified_at' })
+
+// --------------------------------------------------------------------------
+// Computed traits (2.7) and lead scoring (2.8) plug in here. Unlike the plain
+// columns above, a trait's value lives in a separate table (lp.trait_values,
+// one row per entity per trait), so its `sql` can't be a bare "c.column" --
+// registerField's SQL_IDENTIFIER_RE would (correctly) reject it. This is the
+// one escape hatch: a tightly-shaped scalar subquery whose only "free" text
+// is a trait key THIS FUNCTION embeds itself, from a value it has already
+// checked against TRAIT_KEY_RE -- never a string handed in by a caller. The
+// value a condition compares against still goes through compile.ts's `add()`
+// placeholder path like any other field; only the identifier-ish shape of
+// the subquery is fixed text, same trust boundary as every other field.sql.
+const TRAIT_KEY_RE = /^[a-z][a-z0-9_]{0,63}$/
+
+export function registerTraitField(opts: { key: string; label: string; table: FieldEntityTable; traitKey: string }): void {
+  if (!/^[a-z][a-z0-9_.]{0,63}$/.test(opts.key)) throw new FieldRegistryError(`field key "${opts.key}" must be a lowercase dotted slug`)
+  if (!TRAIT_KEY_RE.test(opts.traitKey)) throw new FieldRegistryError(`trait key "${opts.traitKey}" must be a lowercase slug`)
+  const idExpr = opts.table === 'company' ? 'company_id = c.id' : 'contact_id = ct.id'
+  const sql = `(select value from lp.trait_values where ${idExpr} and trait_key = '${opts.traitKey}')`
+  registry.set(opts.key, { key: opts.key, label: opts.label, table: opts.table, type: 'number', sql })
+}
+
+/** Drop a trait's field (archive_trait: it should stop showing up in list_fields / the
+ *  builder, though an already-saved segment condition naming it just starts matching
+ *  nothing -- the subquery still runs, lp.trait_values just has no row to find). */
+export function unregisterField(key: string): void {
+  registry.delete(key)
+}

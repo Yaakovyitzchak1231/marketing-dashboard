@@ -264,3 +264,52 @@ here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
 (2.5), using a segment as a campaign source (2.6), computed traits and scoring as
 field-registry entries (2.7/2.8 -- the registry is ready for them), the "describe a
 segment" AI box (2.11), and the analytics UI on top of `segment_snapshot` (2.12).
+
+
+## Computed traits (2.7) and segment analytics (2.12) — P2-I
+
+Traits are per-lead numbers computed once from `lp.lead_events` and reused everywhere:
+in a segment condition (`trait.<key>`, registered into the SAME field registry
+`segment_preview`/`create_segment` already read -- no new condition kind), on a score
+rule, on the lead profile. Five campaign-agnostic traits ship seeded (migration 0033):
+`replies_30d`, `opens_14d`, `days_since_last_touch`, `steps_received`, `total_meetings`.
+
+A trait definition: `{"event_types":["reply_received"],"aggregation":"count"|"sum"|
+"min"|"max"|"last"|"days_since","prop":"minutes","window_days":30,"prop_filters":
+[{"path":"url","op":"is"|"contains","value":"..."}]}`. `prop` is required for
+sum/min/max/last (the jsonb prop key to read off each event, cast numeric); `count`
+and `days_since` ignore it. `window_days` omitted/null = all time. `days_since` and
+sum/min/max/last come back `null` (never 0) for an entity the event has never
+happened to -- NULL is not 0 is the house rule here too.
+
+| op | args | what |
+|---|---|---|
+| `list_traits` | `{include_archived?}` | every trait |
+| `get_trait` | `{key}` | one trait |
+| `define_trait` | `{key, label, entity, definition}` | create, or redefine an existing key's rules (upsert); resets `last_computed_at` so the next recompute is a full one under the new rules |
+| `archive_trait` | `{key}` | soft delete; also drops its segment field (an already-saved condition naming it just stops matching) |
+| `recompute_traits` | `{key?, full?}` | recomputes one trait or every active one; incremental (only entities with a new `lp.lead_events` row since the last run) unless `full: true` |
+| `trait_preview` | `{entity, definition, sample_size?}` | values this (not-necessarily-saved) definition produces for up to 20 (default 5) sample leads -- writes nothing |
+
+The `traits_refresh` runner job (hourly) calls `recompute_traits` with no args
+(every active trait, incremental). Defining or redefining a trait through `define_trait`
+makes it usable in a segment condition immediately, before the next job run.
+
+Segment analytics (2.12) extend `segment_snapshot` (already in this doc, P2-A): a
+segment with `alert_rule` set (`{"enabled":true,"shrink_pct":20,"grow_pct":50}`, a
+plain column on `lp.segments`) gets checked against its two most recent daily
+snapshots right after they're written, and a crossing writes one ordinary
+notification to `owner` (`kind: 'segment_alert'`) -- at most once per day's snapshot,
+never a repeat for a crossing that persists.
+
+| op | args | what |
+|---|---|---|
+| `segment_stats` | `{id, days?}` | `{history: [{taken_on, companies, contacts, sendable}, ...], metrics: {sample_size, sample_capped, reply_rate, meetings, avg_score, avg_score_field}}` -- `avg_score`/`avg_score_field` are `null` when no score field is registered yet (lead scoring, 2.8, is a sibling PR; this never invents a number) |
+
+UI: `app/segments/traits/page.tsx` (list, define, archive, preview-on-5-leads) and
+`app/segments/[id]/stats/page.tsx` (sparkline + the metrics card,
+`components/segments/SegmentStats.tsx` + `SizeSparkline.tsx` -- a self-contained
+component another screen can drop in directly).
+
+Deferred from this slice: the alert UI (configuring `alert_rule` is DB/ops-only for
+now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).

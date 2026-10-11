@@ -16,7 +16,8 @@ import {
   type SegmentDefinition,
   type SegmentEntity,
 } from './definition.ts'
-import { requireField, type FieldDef, type FieldType } from './fields.ts'
+import { requireField, type FieldDef } from './fields.ts'
+import { ensureTraitFieldsRegistered } from '../traits/register.ts'
 
 const MAX_SEGMENT_DEPTH = 3
 
@@ -233,6 +234,9 @@ export interface CompiledSegment {
  *  Re-validates the definition (cheap; a stored row should never be trusted
  *  blindly) before compiling it. */
 export async function compileSegment(db: Queryable, rawDefinition: unknown): Promise<CompiledSegment> {
+  // Computed traits (2.7) register their field lazily, from the DB, so a trait defined
+  // five minutes ago is usable in a segment condition without a deploy.
+  await ensureTraitFieldsRegistered(db)
   const def = validateDefinition(rawDefinition)
   const params: unknown[] = []
   const add = makeAdder(params)

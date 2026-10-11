@@ -12,6 +12,9 @@ import { readback } from './readback.ts'
 import { archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment } from './store.ts'
 import { emitLeadEvents } from '../events/emit.ts'
 import { allFields } from './fields.ts'
+import { ensureTraitFieldsRegistered } from '../traits/register.ts'
+import { segmentStats } from './stats.ts'
+import { checkSegmentAlerts } from './alerts.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -57,7 +60,10 @@ async function requireSegment(db: Db, segId: number) {
 export const SEGMENT_OPS: Record<string, Op> = {
   list_fields: {
     args: '{}  -- the field registry (key, label, table, type, operators); for building a picker',
-    run: async () => allFields(),
+    run: async (db) => {
+      await ensureTraitFieldsRegistered(db)
+      return allFields()
+    },
   },
   list_segments: {
     args: '{include_archived?, campaign_id?}',
@@ -209,8 +215,20 @@ export const SEGMENT_OPS: Record<string, Op> = {
         )
         results.push({ segment_id: seg.id, written: Boolean(rowCount) })
       }
-      void actor
-      return { segments: segs.length, results }
+      // 2.12: a segment with alert_rule set gets checked against its last two snapshots
+      // right after they're written -- same job, no separate scheduler entry.
+      const alerts = await checkSegmentAlerts(db, actor)
+      return { segments: segs.length, results, alerts }
+    }),
+  },
+  /** Size-over-time + per-segment metrics for 2.12: companies/contacts/sendable history
+   *  from lp.segment_snapshots, plus reply rate / meetings / avg score when those are
+   *  available (gracefully omitted otherwise -- never a fake number). */
+  segment_stats: {
+    args: '{id, days?}  -- days: how much snapshot history to return (default 90)',
+    run: wrap(async (db, _actor, a) => {
+      const seg = await requireSegment(db, id(a.id))
+      return segmentStats(db, seg, a.days == null ? 90 : Number(a.days))
     }),
   },
 }
