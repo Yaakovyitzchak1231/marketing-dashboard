@@ -48,7 +48,8 @@ describe('campaigns workspace (real Postgres via PGlite)', () => {
     const { rows } = await db.query<{ id: string }>('select id from lp.campaign_statuses order by sort')
     expect(rows.map((r) => r.id)).toEqual(['draft', 'active', 'paused', 'archived'])
     await expect(db.query(`insert into lp.campaigns (name, status) values ('x', 'bogus')`)).rejects.toThrow()
-    await expect(db.query(`insert into lp.campaigns (name, pool) values ('x', 'nope')`)).rejects.toThrow()
+    // 0020: pool is any lowercase slug (campaign-agnostic), but still not free text.
+    await expect(db.query(`insert into lp.campaigns (name, pool) values ('x', 'Not A Pool!')`)).rejects.toThrow()
     await db.query(`update lp.companies set tags = '{vip}' where id = $1`, [gem])
   })
 
