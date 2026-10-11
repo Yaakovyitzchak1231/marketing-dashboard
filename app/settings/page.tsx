@@ -60,16 +60,31 @@ export default async function SettingsPage() {
   // Every field on this page, in page order, for the "Needs setup" box at the top.
   const setupFields: SetupField[] = [
     ...groups.flatMap(({ group, items }) =>
-      items.map((spec) => ({
-        key: spec.key,
-        label: spec.label,
-        group,
-        secret: spec.secret,
-        envFallback: spec.envFallback,
-        value: settingsByKey.get(spec.key)?.value ?? null,
-        secretSet: secretsByKey.get(spec.key)?.set ?? false,
-        optional: spec.optional,
-      })),
+      // Quiet hours is one control on the page, so it is one item here too:
+      // listed once as "Quiet hours", set only when both ends are.
+      items
+        .filter((spec) => spec.key !== QUIET_END_KEY)
+        .map((spec): SetupField =>
+          spec.key === QUIET_START_KEY
+            ? {
+                key: spec.key,
+                label: 'Quiet hours',
+                group,
+                secret: false,
+                value: settingsByKey.get(QUIET_START_KEY)?.value && settingsByKey.get(QUIET_END_KEY)?.value ? 'set' : null,
+                optional: spec.optional,
+              }
+            : {
+                key: spec.key,
+                label: spec.label,
+                group,
+                secret: spec.secret,
+                envFallback: spec.envFallback,
+                value: settingsByKey.get(spec.key)?.value ?? null,
+                secretSet: secretsByKey.get(spec.key)?.set ?? false,
+                optional: spec.optional,
+              },
+        ),
     ),
     ...integrations.flatMap((i) => [
       { key: i.apiKeyKey, label: `${i.name} API key`, group: 'Integrations', secret: true, secretSet: i.apiKeyStatus.set },
