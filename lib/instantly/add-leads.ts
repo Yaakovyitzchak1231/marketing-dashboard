@@ -28,6 +28,30 @@ import { InstantlyWriteError } from '@/lib/instantly/writer'
 import { evaluateCompanies } from '@/lib/rules/recompute'
 import { ruleSetForCampaign } from '@/lib/rules/store'
 import { firstStanding, isReady, type Batch, type LeadVerdict, type ParkReason, type Tier } from '@/lib/rules/evaluate'
+import { REASON_WORDS, checkEmails, type SuppressionReason } from '@/lib/suppressions/store'
+
+/**
+ * item 1.8 enforcement: the Instantly campaign id on an AddPreview (input.campaign_id
+ * above) is Instantly's own id (a string), not the dashboard's lp.campaigns.id. A
+ * per-campaign suppression is keyed to the dashboard id, so resolve it here when a
+ * dashboard campaign is linked (lp.campaigns.instantly_campaign_id, same join
+ * lib/rules/store.ts's ruleSetForCampaign uses); when none is linked, only GLOBAL
+ * suppressions (campaign_id is null) apply, and callers are told so (instantlyNote).
+ */
+async function resolveDashboardCampaignId(q: Queryable, instantlyCampaignId: string | null): Promise<number | null> {
+  if (!instantlyCampaignId) return null
+  const { rows } = await q.query<{ id: number }>('select id from lp.campaigns where instantly_campaign_id = $1 order by id limit 1', [instantlyCampaignId.toLowerCase()])
+  return rows[0] ? Number(rows[0].id) : null
+}
+
+/** "2 unsubscribed, 1 competitor domain" -- the human-readable breakdown for a set of suppression reasons. */
+export function suppressionBreakdown(reasons: (SuppressionReason | null | undefined)[]): string {
+  const counts: Partial<Record<SuppressionReason, number>> = {}
+  for (const r of reasons) if (r) counts[r] = (counts[r] ?? 0) + 1
+  return Object.entries(counts)
+    .map(([r, n]) => `${n} ${REASON_WORDS[r as SuppressionReason]?.toLowerCase() ?? r}`)
+    .join(', ')
+}
 
 export type ExcludeReason =
   | 'no_email'
@@ -41,6 +65,7 @@ export type ExcludeReason =
   | 'parked'
   | 'role_inbox_batch'
   | 'not_role_inbox'
+  | 'suppressed'
 
 export const EXCLUDE_WORDS: Record<ExcludeReason, string> = {
   no_email: 'No email address',
@@ -54,6 +79,7 @@ export const EXCLUDE_WORDS: Record<ExcludeReason, string> = {
   parked: "Doesn't meet this campaign's rules",
   role_inbox_batch: 'Role inbox: goes only in its own role-inbox batch',
   not_role_inbox: 'Not a role inbox (this is a role-inbox batch)',
+  suppressed: 'Suppressed',
 }
 
 export interface PreviewLead {
@@ -74,6 +100,8 @@ export interface PreviewLead {
   park_reasons?: string[]
   /** Personalization values sent as Instantly custom variables. */
   merge?: Record<string, string>
+  /** Set only when excluded === 'suppressed': which suppression reason matched. */
+  suppression_reason?: SuppressionReason | null
 }
 
 export interface AddPreview {
@@ -88,6 +116,9 @@ export interface AddPreview {
   rules?: { id: number; name: string; version: number } | null
   /** standard = named inboxes; role-inbox = released role inboxes only, sent apart and tagged. */
   batch?: Batch
+  /** How many of `excluded` are excluded for being suppressed, and why, in plain words ("2 unsubscribed, 1 competitor domain"). Empty string when none. */
+  suppressedSummary?: string
+  suppressedCount?: number
 }
 
 type Row = {
@@ -195,6 +226,27 @@ export async function buildAddPreview(
       merge: v.merge,
     })
   }
+
+  // item 1.8 enforcement, BEFORE the approval request: drop suppressed emails from
+  // what would otherwise be ready. One batch query (checkEmails), never N calls.
+  // When this Instantly campaign has no linked dashboard campaign, only GLOBAL
+  // suppressions apply -- said plainly below, not hidden.
+  const dashboardCampaignId = await resolveDashboardCampaignId(q, input.campaign_id)
+  const wouldBeReady = leads.filter((l) => !l.excluded && l.email)
+  if (wouldBeReady.length) {
+    const checks = await checkEmails(q, wouldBeReady.map((l) => l.email!), dashboardCampaignId)
+    for (const l of wouldBeReady) {
+      const c = checks[l.email!]
+      if (c?.suppressed) {
+        l.excluded = 'suppressed'
+        l.suppression_reason = c.by!.reason
+        l.park_reasons = [`Suppressed: ${REASON_WORDS[c.by!.reason]}${c.by!.campaign_id ? ' (this campaign)' : ' (all campaigns)'}`]
+      }
+    }
+  }
+  const suppressedLeads = leads.filter((l) => l.excluded === 'suppressed')
+  const suppressedSummary = suppressionBreakdown(suppressedLeads.map((l) => l.suppression_reason))
+
   return {
     campaign_id: input.campaign_id,
     campaign_name: input.campaign_name ?? null,
@@ -204,6 +256,8 @@ export async function buildAddPreview(
     instantlyNote: note,
     rules: { id: rs.id, name: rs.name, version: rs.version },
     batch,
+    suppressedCount: suppressedLeads.length,
+    suppressedSummary,
   }
 }
 
@@ -223,6 +277,22 @@ export async function recheckReady(q: Queryable, campaignId: string, ready: Prev
     const cv = byCompany.get(l.company_id)?.contacts.find((c) => c.contact_id === l.contact_id)
     if (cv && isReady(cv.tier) && cv.batch === batch) keep.push({ ...l, tier: cv.tier, merge: cv.merge })
     else dropped.push({ contact_id: l.contact_id, email: l.email, reasons: cv ? cv.reasons.map((x) => `${x.label}: ${x.detail}`) : ['lead no longer exists'] })
+  }
+  // item 1.8 enforcement, RIGHT BEFORE THE ACTUAL SEND: state can change between the
+  // approval and this moment (someone unsubscribed, a bounce came in), so suppression
+  // is re-checked here too -- the one recheck confirmAddLeads calls before writer.addLeads
+  // for every path (the human's own preview->confirm, and an agent's approved request).
+  const withEmail = keep.filter((l) => l.email)
+  if (withEmail.length) {
+    const dashboardCampaignId = await resolveDashboardCampaignId(q, campaignId)
+    const checks = await checkEmails(q, withEmail.map((l) => l.email!), dashboardCampaignId)
+    const stillKeep: PreviewLead[] = []
+    for (const l of keep) {
+      const c = l.email ? checks[l.email] : undefined
+      if (c?.suppressed) dropped.push({ contact_id: l.contact_id, email: l.email, reasons: [`Suppressed: ${REASON_WORDS[c.by!.reason]}`] })
+      else stillKeep.push(l)
+    }
+    return { keep: stillKeep, dropped }
   }
   return { keep, dropped }
 }

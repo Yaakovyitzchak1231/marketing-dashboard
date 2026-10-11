@@ -184,7 +184,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                               ) : <span className="text-ink-faint">No email</span>}
                             </td>
                             <td className="px-3 py-2.5">
-                              <TierPill tier={r.verdict?.tier ?? null} />
+                              <TierPill tier={r.verdict?.tier ?? null} suppressedReason={r.suppressed?.reason ?? null} />
                               {r.verdict?.batch === 'role-inbox' ? <p className="mt-1 text-[11px] text-ink-faint">role-inbox batch</p> : null}
                               {r.verdict?.stale ? <p className="mt-1 text-[11px] text-ink-faint">changed since scored</p> : null}
                             </td>
