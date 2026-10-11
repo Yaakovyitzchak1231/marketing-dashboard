@@ -313,3 +313,5 @@ component another screen can drop in directly).
 
 Deferred from this slice: the alert UI (configuring `alert_rule` is DB/ops-only for
 now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).
+
+<!-- retrigger: Vercel git_info_fail on first branch deploy -->
