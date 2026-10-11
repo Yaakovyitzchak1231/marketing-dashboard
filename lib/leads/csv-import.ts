@@ -137,15 +137,15 @@ async function mergeCustom(q: Queryable, entity: 'contact' | 'company', id: numb
 
 async function findCompany(q: Queryable, domain: string | null, phone: string | null, nameAddr: string | null): Promise<number | null> {
   if (domain) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where website_domain = $1 limit 1', [domain])
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where website_domain = $1 and merged_into is null limit 1', [domain])
     if (rows[0]) return rows[0].id
   }
   if (phone) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where phone_e164 = $1 limit 1', [phone])
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where phone_e164 = $1 and merged_into is null limit 1', [phone])
     if (rows[0]) return rows[0].id
   }
   if (nameAddr) {
-    const { rows } = await q.query<{ id: number }>('select id from lp.companies where name_addr_key = $1 limit 1', [nameAddr])
+    const { rows } = await q.query<{ id: number }>('select id from lp.companies where name_addr_key = $1 and merged_into is null limit 1', [nameAddr])
     if (rows[0]) return rows[0].id
   }
   return null
@@ -226,8 +226,8 @@ async function processRows(
       // Find or create the contact (and its company) for real -- processRows always writes;
       // the caller rolls this transaction back for a dry run.
       const existing = email
-        ? await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where email_norm = $1 limit 1', [email])
-        : await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where phone_e164 = $1 and email is null limit 1', [phone])
+        ? await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where email_norm = $1 and merged_into is null limit 1', [email])
+        : await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where phone_e164 = $1 and email is null and merged_into is null limit 1', [phone])
       willUpdate = Boolean(existing.rows[0])
 
       const companyName = mapped.company.company_name?.trim() || null
