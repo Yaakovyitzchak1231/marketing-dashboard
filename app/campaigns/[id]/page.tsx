@@ -15,6 +15,8 @@ import {
   addLeadsByFilterAction, addLeadsByIdsAction, archiveCampaignAction, duplicateCampaignAction, makeOwnRulesAction, removeLeadsAction,
   updateCampaignAction, updateCampaignLeadAction,
 } from '@/app/actions/campaigns'
+import { InlineEditCell } from '@/components/edit/InlineEditCell'
+import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -310,6 +312,27 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 </label>
                 <button className={BUTTON}>Add</button>
               </form>
+            </Card>
+          </section>
+
+          <section aria-labelledby="quick-h">
+            <SectionHeader id="quick-h" title="Quick edit" meta={<HistoryDrawer type="campaign" id={id} />} />
+            <Card className="space-y-2 p-3">
+              <label className={LABEL}>Name<InlineEditCell type="campaign" id={id} field="name" value={campaign.name} label="Campaign name" className="w-full" /></label>
+              <label className={LABEL}>Goal<InlineEditCell type="campaign" id={id} field="goal" value={campaign.goal} label="Goal" placeholder="No goal set" className="w-full" /></label>
+              <label className={LABEL}>Notes<InlineEditCell type="campaign" id={id} field="notes" value={campaign.notes} label="Notes" placeholder="No notes" className="w-full" /></label>
+              <label className={LABEL}>
+                Status
+                <InlineEditCell
+                  type="campaign"
+                  id={id}
+                  field="status"
+                  value={campaign.status}
+                  label="Status"
+                  options={statuses.map((s) => ({ value: s.id, label: s.label })).concat(statusKnown ? [] : [{ value: campaign.status, label: campaign.status }])}
+                />
+              </label>
+              <p className="text-[11px] text-ink-faint">Saves instantly, one field at a time — logged in History above. For pool, owner, rules or template, use Settings below.</p>
             </Card>
           </section>
 
