@@ -9,7 +9,7 @@
 import type { Queryable } from '../db/types'
 import type { SegmentDefinition } from '../segments/definition'
 import { getSegment } from '../segments/store'
-import { companyIdsForDefinition } from '../segments/match-companies'
+import { companyIdsForDefinition, companyIdsForSegment } from '../segments/match-companies'
 
 export interface AdvancedFilter {
   /** What narrowed the list: a saved segment's id and name, or an ad-hoc definition. */
@@ -30,7 +30,7 @@ export async function resolveAdvancedFilter(db: Queryable, segId: number | null,
       // A stale/removed segment id must not fall back to "no restriction" (that
       // would silently show the whole table under a URL that says "filtered").
       if (!seg) return { source: null, companyIds: [] }
-      const companyIds = await companyIdsForDefinition(db, seg.definition)
+      const companyIds = await companyIdsForSegment(db, seg)
       return { source: { kind: 'segment', id: seg.id, name: seg.name }, companyIds }
     }
     const companyIds = await companyIdsForDefinition(db, def)

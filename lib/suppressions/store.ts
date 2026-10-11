@@ -309,24 +309,31 @@ export async function checkEmails(q: Queryable, emails: string[], campaignId?: n
     for (const e of emails) out[e] = { suppressed: false, by: null }
     return out
   }
-  const { rows } = await q.query<{ email_norm: string; id: number | null; kind: 'email' | 'domain' | null; reason: SuppressionReason | null; campaign_id: number | null }>(
-    `with input as (
+  type CheckRow = { email_norm: string; id: number | null; kind: 'email' | 'domain' | null; reason: SuppressionReason | null; campaign_id: number | null }
+  // A forgotten person's address is kept only as a sha256 hash (lib/retention/store.ts);
+  // match those rows too. Before migration 0027 (email_hash) has run, fall back to the
+  // plain match so an un-migrated database still answers.
+  const sql = (withHash: boolean) => `with input as (
        select e as email_norm, split_part(e, '@', 2) as domain from unnest($1::text[]) as e
      )
      select i.email_norm, m.id, m.kind, m.reason, m.campaign_id
        from input i
        left join lateral (
-         select s.id, s.reason, s.campaign_id, case when s.email_norm = i.email_norm then 'email' else 'domain' end as kind
+         select s.id, s.reason, s.campaign_id, case when s.domain is not null and s.domain = i.domain and s.email_norm is distinct from i.email_norm then 'domain' else 'email' end as kind
            from lp.suppressions s
           where s.lifted_at is null
             and (s.expires_at is null or s.expires_at > now())
             and (s.campaign_id is null or s.campaign_id = $2)
-            and (s.email_norm = i.email_norm or s.domain = i.domain)
-          order by (s.campaign_id is not null) desc, (s.email_norm is not null) desc, s.id
+            and (s.email_norm = i.email_norm or s.domain = i.domain${withHash ? ` or s.email_hash = encode(sha256(convert_to(i.email_norm, 'UTF8')), 'hex')` : ''})
+          order by (s.campaign_id is not null) desc, (s.domain is null) desc, s.id
           limit 1
-       ) m on true`,
-    [uniqueNorms, campaignId == null ? null : Number(campaignId)],
-  )
+       ) m on true`
+  const params = [uniqueNorms, campaignId == null ? null : Number(campaignId)]
+  // Probe instead of try/catch: a failed statement would abort the caller's transaction.
+  const hasHash = (await q.query(
+    `select 1 from information_schema.columns where table_schema = 'lp' and table_name = 'suppressions' and column_name = 'email_hash'`,
+  )).rows.length > 0
+  const rows = (await q.query<CheckRow>(sql(hasHash), params)).rows
   const byNorm = new Map(rows.map((r) => [r.email_norm, r]))
   for (const e of emails) {
     const norm = normalizeEmail(e)

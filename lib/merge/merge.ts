@@ -6,6 +6,7 @@
  * is already a merge loser (or already merged into something else).
  */
 import type { Db, Queryable } from '../db/types'
+import { nameAddressKey, normalizeDomain, normalizeEmail, normalizePhone } from '../leads/normalize'
 
 export class MergeError extends Error {
   status: number
@@ -63,6 +64,30 @@ async function moveNoDupe(
   await q.query(`update lp.${table} set ${fkColumn} = $2 where ${fkColumn} = $1`, [from, to])
 }
 
+/** Re-point a plain FK column (no unique index involving it) from `from` to `to`. */
+async function movePlain(q: Queryable, table: string, fkColumn: string, from: number, to: number): Promise<void> {
+  await q.query(`update lp.${table} set ${fkColumn} = $2 where ${fkColumn} = $1`, [from, to])
+}
+
+/** lp.lead_events is append-only; migration 0036 lets a merge (flag lp.merge, this transaction only) re-point its ids. */
+async function moveLeadEvents(q: Queryable, fkColumn: 'company_id' | 'contact_id', from: number, to: number): Promise<void> {
+  await q.query(`select set_config('lp.merge', 'on', true)`)
+  await q.query(`update lp.lead_events set ${fkColumn} = $2 where ${fkColumn} = $1`, [from, to])
+  await q.query(`select set_config('lp.merge', 'off', true)`)
+}
+
+/** A dedupe key for the survivor: the candidates in order, skipping any another LIVE company already owns. */
+async function freeCompanyKey(q: Queryable, column: 'website_domain' | 'phone_e164' | 'name_addr_key', keep: number, candidates: (string | null | undefined)[]): Promise<string | null> {
+  for (const c of candidates) {
+    if (!c) continue
+    const { rows } = await q.query(`select 1 from lp.companies where ${column} = $1 and id <> $2 and merged_into is null limit 1`, [c, keep])
+    if (!rows.length) return c
+  }
+  return null
+}
+
+const SUB_RANK: Record<string, number> = { never_asked: 0, subscribed: 1, bounced: 2, unsubscribed: 3 }
+
 async function mergeCompanies(db: Db, actor: string, keep: number, merge: number, choices: Record<string, unknown>): Promise<MergeResult> {
   return db.tx(async (q) => {
     if (keep === merge) throw new MergeError('Cannot merge a company into itself')
@@ -92,7 +117,35 @@ async function mergeCompanies(db: Db, actor: string, keep: number, merge: number
     await q.query(`update lp.tasks set company_id = $2 where company_id = $1`, [merge, keep])
     await q.query(`update lp.comments set company_id = $2 where company_id = $1`, [merge, keep])
 
+    // Campaign membership, rule evaluations, the timeline, engine items, lists, scores,
+    // traits and files follow the survivor (the dead row must not keep any of them).
+    await moveNoDupe(q, 'campaign_leads', 'company_id', merge, keep, `x.campaign_id = y.campaign_id`)
+    await moveNoDupe(q, 'lead_evaluations', 'company_id', merge, keep, `x.rule_set_id = y.rule_set_id`)
+    await moveLeadEvents(q, 'company_id', merge, keep)
+    await movePlain(q, 'engine_items', 'company_id', merge, keep)
+    await moveNoDupe(q, 'segment_members', 'company_id', merge, keep, `x.segment_id = y.segment_id and x.company_id is not null and y.company_id is not null`)
+    await moveNoDupe(q, 'scores', 'company_id', merge, keep, `x.model_id = y.model_id and x.contact_id is null and y.contact_id is null`)
+    await movePlain(q, 'score_points', 'company_id', merge, keep)
+    await movePlain(q, 'score_history', 'company_id', merge, keep)
+    await moveNoDupe(q, 'trait_values', 'company_id', merge, keep, `x.trait_key = y.trait_key and x.contact_id is null and y.contact_id is null`)
+    await movePlain(q, 'files', 'company_id', merge, keep)
+    await q.query(
+      `update lp.companies k set tags = coalesce((select array_agg(distinct t) from unnest(k.tags || m.tags) t), '{}'),
+              custom = m.custom || k.custom
+         from lp.companies m where k.id = $1 and m.id = $2`,
+      [keep, merge],
+    )
+
+    // Hide the loser FIRST (the live-row unique indexes skip merged rows), then give the
+    // survivor its dedupe keys, so later imports match the survivor, never the hidden row.
     await q.query(`update lp.companies set merged_into = $1, updated_at = now() where id = $2`, [keep, merge])
+    const domain = await freeCompanyKey(q, 'website_domain', keep, [normalizeDomain(fieldsApplied.website as string | null), keepRow.website_domain as string | null, mergeRow.website_domain as string | null])
+    const phone = await freeCompanyKey(q, 'phone_e164', keep, [normalizePhone(fieldsApplied.phone as string | null), keepRow.phone_e164 as string | null, mergeRow.phone_e164 as string | null])
+    const nak = await freeCompanyKey(q, 'name_addr_key', keep, [
+      nameAddressKey(fieldsApplied.name as string | null, fieldsApplied.address_line as string | null, fieldsApplied.city as string | null, fieldsApplied.state as string | null),
+      keepRow.name_addr_key as string | null, mergeRow.name_addr_key as string | null,
+    ])
+    await q.query(`update lp.companies set website_domain = $2, phone_e164 = $3, name_addr_key = $4 where id = $1`, [keep, domain, phone, nak])
     await q.query(
       `insert into lp.merge_log (entity, kept_id, merged_id, field_choices, actor) values ('company', $1, $2, $3, $4)`,
       [keep, merge, JSON.stringify(choices), actor],
@@ -116,17 +169,52 @@ async function mergeContacts(db: Db, actor: string, keep: number, merge: number,
 
     const fieldsApplied: Record<string, unknown> = {}
     for (const f of CONTACT_FIELDS) fieldsApplied[f] = resolveField(f, keepRow[f], mergeRow[f], choices[f])
+    // Hide the loser FIRST: its email_norm must be gone before the survivor takes the
+    // chosen email, or the live-row unique index (contacts_email_uq) rejects the update.
+    await q.query(`update lp.contacts set merged_into = $1, email_norm = null, updated_at = now() where id = $2`, [keep, merge])
+    // The survivor keeps the strictest consent state of the two: an unsubscribe or bounce on
+    // either row keeps protecting the merged person.
+    const keepSub = String(keepRow.subscription_status ?? 'never_asked')
+    const mergeSub = String(mergeRow.subscription_status ?? 'never_asked')
+    const subscription = (SUB_RANK[mergeSub] ?? 0) > (SUB_RANK[keepSub] ?? 0) ? mergeSub : keepSub
+    const doNotContact = Boolean(keepRow.do_not_contact) || Boolean(mergeRow.do_not_contact)
     await q.query(
-      `update lp.contacts set email=$1, email_norm=lower($1), first_name=$2, last_name=$3, title=$4, phone=$5, personalization=$6, updated_at=now()
-         where id = $7`,
-      [fieldsApplied.email, fieldsApplied.first_name, fieldsApplied.last_name, fieldsApplied.title, fieldsApplied.phone, fieldsApplied.personalization, keep],
+      `update lp.contacts set email=$1, email_norm=$2, first_name=$3, last_name=$4, title=$5, phone=$6, phone_e164=$7, personalization=$8,
+              subscription_status=$9, do_not_contact=$10, status = case when $10 then 'do-not-contact' else status end,
+              custom = (select m.custom from lp.contacts m where m.id = $12) || custom, updated_at=now()
+         where id = $11`,
+      [fieldsApplied.email, normalizeEmail(fieldsApplied.email as string | null), fieldsApplied.first_name, fieldsApplied.last_name, fieldsApplied.title,
+       fieldsApplied.phone, normalizePhone(fieldsApplied.phone as string | null) ?? (keepRow.phone_e164 as string | null) ?? (mergeRow.phone_e164 as string | null),
+       fieldsApplied.personalization, subscription, doNotContact, keep, merge],
     )
+    // Live suppressions on the merged-away address also protect the survivor's address.
+    const keepNorm = normalizeEmail(fieldsApplied.email as string | null)
+    const mergeNorm = normalizeEmail(mergeRow.email as string | null)
+    if (keepNorm && mergeNorm && keepNorm !== mergeNorm) {
+      await q.query(
+        `insert into lp.suppressions (email_norm, campaign_id, reason, source, note, created_by)
+         select $1, s.campaign_id, s.reason, 'merge', 'Carried over when contact #' || $3::text || ' was merged into this one', $4
+           from lp.suppressions s
+          where s.email_norm = $2 and s.lifted_at is null and (s.expires_at is null or s.expires_at > now())
+         on conflict do nothing`,
+        [keepNorm, mergeNorm, String(merge), actor],
+      )
+    }
     await q.query(`update lp.verification_results set contact_id = $2 where contact_id = $1`, [merge, keep])
     await q.query(`update lp.campaign_touches set contact_id = $2 where contact_id = $1`, [merge, keep])
     await moveNoDupe(q, 'sources', 'contact_id', merge, keep, `x.kind = y.kind and x.source_ref = y.source_ref and coalesce(x.company_id,0) = coalesce(y.company_id,0)`)
     await q.query(`update lp.enrichment set contact_id = $2 where contact_id = $1`, [merge, keep])
-
-    await q.query(`update lp.contacts set merged_into = $1, email_norm = null, updated_at = now() where id = $2`, [keep, merge])
+    // Consent history, campaign membership, evaluations, the timeline, lists, scores, traits, files.
+    await movePlain(q, 'consent_log', 'contact_id', merge, keep)
+    await movePlain(q, 'campaign_leads', 'contact_id', merge, keep)
+    await movePlain(q, 'lead_evaluations', 'contact_id', merge, keep)
+    await moveLeadEvents(q, 'contact_id', merge, keep)
+    await moveNoDupe(q, 'segment_members', 'contact_id', merge, keep, `x.segment_id = y.segment_id and x.contact_id is not null and y.contact_id is not null`)
+    await moveNoDupe(q, 'scores', 'contact_id', merge, keep, `x.model_id = y.model_id`)
+    await movePlain(q, 'score_points', 'contact_id', merge, keep)
+    await movePlain(q, 'score_history', 'contact_id', merge, keep)
+    await moveNoDupe(q, 'trait_values', 'contact_id', merge, keep, `x.trait_key = y.trait_key`)
+    await movePlain(q, 'files', 'contact_id', merge, keep)
     await q.query(
       `insert into lp.merge_log (entity, kept_id, merged_id, field_choices, actor) values ('contact', $1, $2, $3, $4)`,
       [keep, merge, JSON.stringify(choices), actor],

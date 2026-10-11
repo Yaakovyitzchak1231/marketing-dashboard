@@ -113,27 +113,60 @@ export async function forgetContact(db: Db, actor: string, input: ForgetContactI
     // The maintenance escape hatch (0017): the only way status_history rows may be deleted.
     await q.query("select set_config('lp.maintenance', 'on', true)")
 
+    // The person = this row plus every row ever merged into it (directly or through a chain):
+    // a merged-away row still holds its own plaintext email/name/phone.
+    const { rows: personRows } = await q.query<{ id: number; email: string | null }>(
+      `with recursive person as (
+         select id, email from lp.contacts where id = $1
+         union
+         select c.id, c.email from lp.contacts c join person p on c.merged_into = p.id
+       ) select id, email from person`,
+      [contactId],
+    )
+    const ids = personRows.map((r) => Number(r.id))
+    const emails = [...new Set(personRows.map((r) => normalizeEmail(r.email)).filter((e): e is string => Boolean(e)))]
+
     await q.query(
       `update lp.contacts set email = null, email_norm = null, first_name = null, last_name = null, suggested_first_name = null,
               title = null, phone = null, phone_e164 = null, personalization = null, name_evidence_url = null,
-              do_not_contact = true, status = 'do-not-contact', updated_at = now()
-         where id = $1`,
-      [contactId],
+              custom = '{}'::jsonb, do_not_contact = true, status = 'do-not-contact', updated_at = now()
+         where id = any($1::bigint[])`,
+      [ids],
     )
-    await q.query(`delete from lp.enrichment where contact_id = $1`, [contactId])
-    await q.query(`delete from lp.sources where contact_id = $1`, [contactId])
-    await q.query(`update lp.campaign_touches set email = null, payload = coalesce(payload, '{}'::jsonb) - 'email' - 'personalization' where contact_id = $1`, [contactId])
-    await q.query(`update lp.verification_results set email = '[forgotten]' where contact_id = $1`, [contactId])
+    await q.query(`delete from lp.enrichment where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`delete from lp.sources where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`update lp.campaign_touches set email = null, payload = coalesce(payload, '{}'::jsonb) - 'email' - 'personalization' where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`update lp.verification_results set email = '[forgotten]' where contact_id = any($1::bigint[])`, [ids])
+    // The timeline keeps the event (counts stay true) but not the address.
+    await q.query(
+      `update lp.lead_events set email_norm = null, props = props - 'email' - 'lead_email'
+        where contact_id = any($1::bigint[]) or email_norm = any($2::text[])`,
+      [ids, emails],
+    )
+    await q.query(`update lp.consent_log set evidence = null where contact_id = any($1::bigint[])`, [ids])
     // The contact's own edit history can hold the same PII (an old email in an InlineEditCell change); clear it.
-    await q.query(`delete from lp.status_history where entity_type = 'contact' and entity_id = $1 and field = any($2::text[])`, [contactId, PII_HISTORY_FIELDS])
+    await q.query(`delete from lp.status_history where entity_type = 'contact' and entity_id = any($1::bigint[]) and field = any($2::text[])`, [ids, PII_HISTORY_FIELDS])
+
+    // Plaintext suppressions for any of the person's addresses become hashed ones (same
+    // reason / campaign scope), so the block survives without keeping the address.
+    for (const e of emails) {
+      await q.query(
+        `insert into lp.suppressions (email_hash, campaign_id, reason, source, note, created_by, expires_at)
+         select $1, s.campaign_id, s.reason, s.source, 'Hashed when the person was forgotten', $3, s.expires_at
+           from lp.suppressions s where s.email_norm = $2 and s.lifted_at is null
+         on conflict do nothing`,
+        [emailHash(e), e, actor],
+      )
+    }
+    if (emails.length) await q.query(`delete from lp.suppressions where email_norm = any($1::text[])`, [emails])
 
     let suppressed = false
-    if (norm) {
+    for (const e of emails) {
       await q.query(
         `insert into lp.suppressions (email_hash, reason, source, note, created_by)
            values ($1, 'do_not_contact', 'manual', 'Forgotten via Settings/lead page (data retention request)', $2)
          on conflict do nothing`,
-        [emailHash(norm), actor],
+        [emailHash(e), actor],
       )
       suppressed = true
     }

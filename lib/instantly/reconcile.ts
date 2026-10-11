@@ -74,7 +74,8 @@ async function knownContacts(q: Queryable, sinceDays: number): Promise<Reconcile
        join lp.contacts c on c.id = e.contact_id
       where e.source in ('instantly_webhook', 'backfill')
         and e.occurred_at > now() - ($1 || ' days')::interval
-        and c.email_norm is not null`,
+        and c.email_norm is not null
+        and c.merged_into is null`,
     [String(sinceDays)],
   )
   return rows
@@ -101,6 +102,10 @@ function leadEventInput(
 ): EmitLeadEventInput | null {
   const status = lead.lt_interest_status
   if (status == null) return null
+  // No reliable timestamp -> skip rather than date a months-old status "today" (emitLeadEvents
+  // falls back to now()), which would skew windowed traits and the 24h panel.
+  const occurredAt = lead.timestamp_last_reply ?? lead.timestamp_last_contact ?? null
+  if (!occurredAt) return null
   const type = INTEREST_EVENT[status] ?? 'custom'
   return {
     type,
@@ -111,10 +116,21 @@ function leadEventInput(
     instantly_campaign_id: lead.campaign ?? null,
     source: 'instantly_reconcile',
     actor: 'instantly-ai',
-    occurred_at: lead.timestamp_last_reply ?? lead.timestamp_last_contact ?? null,
+    occurred_at: occurredAt,
     dedupe_key: `reconcile:lead:${lead.id}:${status}`,
     props: { lt_interest_status: status, reconciled: true, ...(type === 'custom' ? { instantly_type: `lt_interest_status:${status}` } : {}) },
   }
+}
+
+/** Out-of-office / autoresponder subjects (the API's own flag wins when present). */
+const AUTO_REPLY_SUBJECT = /\b(out of (the )?office|automatic reply|auto[- ]?reply|autoreply|auto[- ]?response|away from (the )?office|on vacation|on leave|abwesenheit|absence)\b/i
+
+/** True when Instantly (or the message itself) says this is an automatic reply, not a person. */
+export function isAutoReply(email: ApiEmail): boolean {
+  const flag = email.is_auto_reply
+  if (flag === true || flag === 1) return true
+  if (flag === false || flag === 0) return false
+  return AUTO_REPLY_SUBJECT.test(email.subject ?? '')
 }
 
 function replyEventInput(
@@ -124,7 +140,8 @@ function replyEventInput(
   dashboardCampaignId: number | null,
 ): EmitLeadEventInput {
   return {
-    type: 'reply_received',
+    // Same split the webhook makes: an autoresponder is not a human reply (reply rate).
+    type: isAutoReply(email) ? 'auto_reply_received' : 'reply_received',
     company_id: contact.company_id,
     contact_id: contact.id,
     email: addr,
@@ -155,7 +172,10 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
     errors: [],
   }
 
-  return db.tx(async (q) => {
+  // Reads and the (possibly slow, paged) Instantly calls happen OUTSIDE any transaction;
+  // only the inserts run in one, in chunks.
+  {
+    const q: Queryable = db
     const contacts = await knownContacts(q, sinceDays)
     summary.contacts_checked = contacts.length
     if (!contacts.length) return summary
@@ -199,11 +219,66 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
     }
 
     summary.events_considered = inputs.length
-    if (inputs.length) {
-      const results = await emitLeadEvents(q, inputs)
+    // The webhook keys its rows on `touch:<id>`, so `on conflict (dedupe_key)` alone never
+    // catches a reply/status the webhook already saved. Drop those here first.
+    const fresh = await withoutWebhookDuplicates(q, inputs)
+    if (fresh.length) {
+      const results = await db.tx(async (tq) => {
+        const out: Awaited<ReturnType<typeof emitLeadEvents>> = []
+        for (let i = 0; i < fresh.length; i += INSERT_CHUNK) out.push(...(await emitLeadEvents(tq, fresh.slice(i, i + INSERT_CHUNK))))
+        return out
+      }, 'instantly-ai')
       summary.events_inserted = results.filter((r) => r.inserted).length
-      summary.events_skipped_duplicate = results.length - summary.events_inserted
     }
+    summary.events_skipped_duplicate = inputs.length - summary.events_inserted
     return summary
-  }, 'instantly-ai')
+  }
+}
+
+/** Rows per multi-row insert (12 params a row stays far below Postgres' 65,535-param limit). */
+const INSERT_CHUNK = 500
+
+const REPLY_TYPES = new Set(['reply_received', 'auto_reply_received'])
+/** A reconciled reply within this long of a webhook reply from the same contact is the same reply. */
+const REPLY_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Inputs the webhook (or the 0018 backfill) has NOT already recorded:
+ *  - a reply: no webhook reply/auto-reply event from that contact carrying the same Instantly
+ *    email id, or within REPLY_MATCH_WINDOW_MS of it;
+ *  - an interest-status event: no webhook event of the same type for that contact (and the
+ *    same Instantly campaign, when both name one).
+ */
+export async function withoutWebhookDuplicates(q: Queryable, inputs: EmitLeadEventInput[]): Promise<EmitLeadEventInput[]> {
+  const contactIds = [...new Set(inputs.map((i) => i.contact_id).filter((x): x is number => x != null))]
+  if (!contactIds.length) return inputs
+  const { rows } = await q.query<{ contact_id: string | number; type: string; instantly_campaign_id: string | null; occurred_at: Date | string; email_id: string | null }>(
+    `select contact_id, type, instantly_campaign_id, occurred_at, props->>'instantly_email_id' as email_id
+       from lp.lead_events
+      where contact_id = any($1::bigint[]) and source in ('instantly_webhook', 'backfill')
+        and type = any($2::text[])`,
+    [contactIds, [...new Set([...inputs.map((i) => i.type), ...REPLY_TYPES])]],
+  )
+  const byContact = new Map<number, typeof rows>()
+  for (const r of rows) {
+    const k = Number(r.contact_id)
+    const list = byContact.get(k) ?? []
+    list.push(r)
+    byContact.set(k, list)
+  }
+  return inputs.filter((i) => {
+    const existing = i.contact_id != null ? byContact.get(Number(i.contact_id)) : undefined
+    if (!existing?.length) return true
+    if (REPLY_TYPES.has(i.type)) {
+      const emailId = (i.props as { instantly_email_id?: string } | undefined)?.instantly_email_id ?? null
+      const at = i.occurred_at ? new Date(i.occurred_at).getTime() : NaN
+      return !existing.some((r) =>
+        REPLY_TYPES.has(r.type) &&
+        ((emailId != null && r.email_id === emailId) ||
+          (Number.isFinite(at) && Math.abs(new Date(r.occurred_at).getTime() - at) <= REPLY_MATCH_WINDOW_MS)))
+    }
+    return !existing.some((r) =>
+      r.type === i.type &&
+      (r.instantly_campaign_id == null || i.instantly_campaign_id == null || r.instantly_campaign_id === i.instantly_campaign_id))
+  })
 }

@@ -25,6 +25,9 @@ export const INSTANTLY_RECONCILE_OPS: Record<string, Op> = {
       const client = await clientFromConfig()
       if (!client) throw new OpsError('no Instantly API key is configured (Settings → Integrations)', 409)
       const sinceDays = a.since_days == null ? undefined : Number(a.since_days)
+      if (sinceDays !== undefined && (!Number.isInteger(sinceDays) || sinceDays < 1 || sinceDays > 365)) {
+        throw new OpsError('since_days must be a whole number of days from 1 to 365')
+      }
       return reconcileInstantly(db, client, { sinceDays })
     },
   },

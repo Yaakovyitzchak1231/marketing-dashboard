@@ -162,13 +162,19 @@ async function compileSegmentRef(
 ): Promise<string> {
   if (ctx.stack.length >= MAX_SEGMENT_DEPTH) throw new DefinitionError(`segment nesting is limited to ${MAX_SEGMENT_DEPTH} levels deep`)
   if (ctx.stack.includes(cond.segment_id)) throw new DefinitionError(`segment ${cond.segment_id} refers back to itself (cycle)`)
-  const { rows } = await ctx.db.query<{ id: number; entity: string; definition: unknown }>(
-    `select id, entity, definition from lp.segments where id = $1 and archived_at is null`,
+  const { rows } = await ctx.db.query<{ id: number; entity: string; kind: string; definition: unknown }>(
+    `select id, entity, kind, definition from lp.segments where id = $1 and archived_at is null`,
     [cond.segment_id],
   )
   const refRow = rows[0]
   if (!refRow) throw new DefinitionError(`segment ${cond.segment_id} not found (or archived)`)
   if (refRow.entity !== entity) throw new DefinitionError(`segment ${cond.segment_id} is a "${refRow.entity}" segment; in_segment here requires a "${entity}" segment`)
+  if (refRow.kind === 'static') {
+    // A static list's membership is its stored rows, never its (empty) definition --
+    // an empty definition compiles to `true` and would match every lead.
+    const verb = cond.kind === 'in_segment' ? 'in' : 'not in'
+    return `${entity === 'company' ? 'c.id' : 'ct.id'} ${verb} (${staticMembersSql(entity, add(refRow.id))})`
+  }
   const refDef = validateDefinition(refRow.definition)
   const subCtx: CompileContext = { db: ctx.db, stack: [...ctx.stack, cond.segment_id] }
   // Re-using the alias names c / ct inside this subquery is deliberate: SQL scoping lets
@@ -217,7 +223,9 @@ async function compileDefinitionWhere(ctx: CompileContext, entity: SegmentEntity
   if (def.exclude.length) {
     const parts: string[] = []
     for (const g of def.exclude) parts.push(await compileGroupAnd(ctx, entity, g, add))
-    excludeSql = `not (${parts.join(' or ')})`
+    // coalesce: a NULL field must count as "doesn't match the exclusion" ("everyone
+    // except NY" keeps leads with no state), not drop the row via SQL's NULL logic.
+    excludeSql = `not coalesce((${parts.join(' or ')}), false)`
   }
   return `(${includeSql}) and (${excludeSql})`
 }
@@ -245,6 +253,33 @@ export async function compileSegment(db: Queryable, rawDefinition: unknown): Pro
   const fromSql = def.entity === 'company' ? 'lp.companies c' : 'lp.contacts ct join lp.companies c on c.id = ct.company_id'
   const idSql = def.entity === 'company' ? 'c.id' : 'ct.id'
   return { entity: def.entity, fromSql, idSql, whereSql, params }
+}
+
+/** The member-id subquery for a static list (column never NULL, so `not in` is safe). */
+function staticMembersSql(entity: SegmentEntity, segmentIdParam: string): string {
+  const col = entity === 'company' ? 'company_id' : 'contact_id'
+  return `select sm.${col} from lp.segment_members sm where sm.segment_id = ${segmentIdParam} and sm.${col} is not null`
+}
+
+/** A stored segment row, as far as compiling it needs. */
+export interface StoredSegmentLike {
+  id: number
+  kind: string
+  entity: SegmentEntity | string
+  definition: unknown
+}
+
+/** Compile a STORED segment: a static list matches its lp.segment_members rows; a dynamic
+ *  segment compiles its definition. Every caller holding a segment row must use this
+ *  (not compileSegment(seg.definition)), or a static list matches every lead. */
+export async function compileStoredSegment(db: Queryable, seg: StoredSegmentLike): Promise<CompiledSegment> {
+  if (seg.kind !== 'static') return compileSegment(db, seg.definition)
+  const entity: SegmentEntity = seg.entity === 'contact' ? 'contact' : 'company'
+  const params: unknown[] = []
+  const add = makeAdder(params)
+  const idSql = entity === 'company' ? 'c.id' : 'ct.id'
+  const fromSql = entity === 'company' ? 'lp.companies c' : 'lp.contacts ct join lp.companies c on c.id = ct.company_id'
+  return { entity, fromSql, idSql, whereSql: `${idSql} in (${staticMembersSql(entity, add(Number(seg.id)))})`, params }
 }
 
 /** The one SELECT every other query (counts, members, samples) is built from: distinct matching ids. */

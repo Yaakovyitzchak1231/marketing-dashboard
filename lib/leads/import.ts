@@ -120,7 +120,7 @@ interface Keys {
 
 async function loadKeys(q: Queryable): Promise<Keys> {
   const { rows } = await q.query<{ id: number; website_domain: string | null; phone_e164: string | null; name_addr_key: string | null }>(
-    'select id, website_domain, phone_e164, name_addr_key from lp.companies',
+    'select id, website_domain, phone_e164, name_addr_key from lp.companies where merged_into is null',
   )
   const k: Keys = { domain: new Map(), phone: new Map(), nameaddr: new Map() }
   for (const r of rows) {
@@ -146,9 +146,9 @@ async function upsertCompany(q: Queryable, keys: Keys, row: Record<string, strin
     await q.query(
       `update lp.companies set
          website = coalesce(website, $2),
-         website_domain = coalesce(website_domain, case when $3::text is null or exists (select 1 from lp.companies o where o.website_domain = $3 and o.id <> $1) then null else $3 end),
+         website_domain = coalesce(website_domain, case when $3::text is null or exists (select 1 from lp.companies o where o.website_domain = $3 and o.id <> $1 and o.merged_into is null) then null else $3 end),
          phone = coalesce(phone, $4),
-         phone_e164 = coalesce(phone_e164, case when $5::text is null or exists (select 1 from lp.companies o where o.phone_e164 = $5 and o.id <> $1) then null else $5 end),
+         phone_e164 = coalesce(phone_e164, case when $5::text is null or exists (select 1 from lp.companies o where o.phone_e164 = $5 and o.id <> $1 and o.merged_into is null) then null else $5 end),
          city = coalesce(city, $6), state = coalesce(state, $7), vertical = coalesce(vertical, $8)
        where id = $1`,
       [existing, clean(row.website), domain, clean(row.phone), phone, city, state, vertical],

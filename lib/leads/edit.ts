@@ -292,7 +292,7 @@ export async function editCompany(
         const domain = normalizeDomain(next)
         if (domain && domain !== cur.website_domain) {
           const dup = await q.query<{ id: number; name: string }>(
-            `select id, name from lp.companies where website_domain = $1 and id <> $2 limit 1`,
+            `select id, name from lp.companies where website_domain = $1 and id <> $2 and merged_into is null limit 1`,
             [domain, companyId],
           )
           if (dup.rows[0]) throw new LeadEditError(`${domain} is already the website of ${dup.rows[0].name} (/leads/${dup.rows[0].id}).`, 409)
@@ -308,7 +308,7 @@ export async function editCompany(
         const e164 = phoneOrThrow(next)
         if (e164 && e164 !== cur.phone_e164) {
           const dup = await q.query<{ id: number; name: string }>(
-            `select id, name from lp.companies where phone_e164 = $1 and id <> $2 limit 1`,
+            `select id, name from lp.companies where phone_e164 = $1 and id <> $2 and merged_into is null limit 1`,
             [e164, companyId],
           )
           if (dup.rows[0]) throw new LeadEditError(`${next} is already the phone of ${dup.rows[0].name} (/leads/${dup.rows[0].id}).`, 409)
@@ -330,7 +330,7 @@ export async function editCompany(
       )
       if (key) {
         const dup = await q.query<{ id: number; name: string }>(
-          `select id, name from lp.companies where name_addr_key = $1 and id <> $2 limit 1`,
+          `select id, name from lp.companies where name_addr_key = $1 and id <> $2 and merged_into is null limit 1`,
           [key, companyId],
         )
         if (dup.rows[0]) throw new LeadEditError(`That name and address already belong to ${dup.rows[0].name} (/leads/${dup.rows[0].id}).`, 409)
