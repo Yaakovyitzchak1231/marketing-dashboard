@@ -13,6 +13,20 @@ import type { Role } from '../auth/roles'
 
 export class TeamError extends Error {}
 
+/**
+ * The database's own team guards (migrations 0050-0052) speak in plain words;
+ * show those words as-is instead of "That did not work: ...". The app checks
+ * below normally answer first; these only fire on a race (two owners at once) or
+ * a path that skipped the app check.
+ */
+const DB_TEAM_GUARD = /^(Cannot remove or demote the last owner|The built-in owner login|Only an owner can|Team changes need to say who)/
+
+function plainTeamError(e: unknown): never {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (!(e instanceof TeamError) && DB_TEAM_GUARD.test(msg)) throw new TeamError(msg)
+  throw e
+}
+
 const ROLES: readonly Role[] = ['owner', 'editor', 'viewer']
 
 /** A role from a form or a caller, checked: only owner / editor / viewer. */
@@ -110,7 +124,7 @@ export async function addTeamMember(db: Db, actorId: string, input: { email: str
       [id],
     )
     return row.rows[0]
-  }, actorId)
+  }, actorId).catch(plainTeamError)
 }
 
 async function countOtherActiveOwners(q: Queryable, excludingId: string | null): Promise<number> {
@@ -138,7 +152,7 @@ export async function changeTeamMemberRole(db: Db, actorId: string, targetId: st
     }
     await q.query(`update lp.actors set role = $1 where id = $2`, [role, targetId])
     await auditActor(q, actorId, targetId, 'role', target.role, role)
-  }, actorId)
+  }, actorId).catch(plainTeamError)
 }
 
 /** Remove (deactivate) a team member. Can't remove the last active DB owner. */
@@ -157,5 +171,5 @@ export async function removeTeamMember(db: Db, actorId: string, targetId: string
     }
     await q.query(`update lp.actors set active = false where id = $1`, [targetId])
     await auditActor(q, actorId, targetId, 'active', 'true', 'false')
-  }, actorId)
+  }, actorId).catch(plainTeamError)
 }

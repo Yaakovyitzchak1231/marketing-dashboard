@@ -40,13 +40,13 @@ afterAll(async () => {
   await db.close()
 })
 beforeEach(async () => {
-  await db.query(`delete from lp.actors where kind = 'human' and id != 'owner'`)
-  await db.query(`update lp.actors set role = 'owner', active = true where id = 'owner'`)
-  await db.query(
+  await db.tx((q) => q.query(`delete from lp.actors where kind = 'human' and id != 'owner'`), 'owner')
+  await db.tx((q) => q.query(`update lp.actors set role = 'owner', active = true where id = 'owner'`), 'owner')
+  await db.tx((q) => q.query(
     `insert into lp.actors (id, kind, display_name, email, role, active) values
        ('ed', 'human', 'Ed Itor', 'ed@example.com', 'editor', true),
        ('vi', 'human', 'Vi Ewer', 'vi@example.com', 'viewer', true)`,
-  )
+  ), 'owner')
 })
 
 describe('the database refuses team changes not made by an owner (0050)', () => {

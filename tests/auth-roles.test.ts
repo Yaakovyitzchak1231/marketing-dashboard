@@ -53,9 +53,9 @@ describe('resolveRole', () => {
     vi.stubEnv('ALLOWED_USER_EMAIL', 'yaakov@example.com')
     const db = await createTestDb()
     try {
-      await db.query(
+      await db.tx((q) => q.query(
         `insert into lp.actors (id, kind, display_name, harness, active, role, email) values ('izzy', 'human', 'Izzy', 'dashboard', true, 'editor', 'izzy@example.com')`,
-      )
+      ), 'owner')
       expect(await resolveRole('izzy@example.com', db)).toBe('editor')
       expect(await resolveRole('Izzy@Example.com', db)).toBe('editor')
     } finally {
@@ -67,9 +67,9 @@ describe('resolveRole', () => {
     vi.stubEnv('ALLOWED_USER_EMAIL', 'yaakov@example.com')
     const db = await createTestDb()
     try {
-      await db.query(
+      await db.tx((q) => q.query(
         `insert into lp.actors (id, kind, display_name, harness, active, role, email) values ('izzy', 'human', 'Izzy', 'dashboard', false, 'editor', 'izzy@example.com')`,
-      )
+      ), 'owner')
       expect(await resolveRole('izzy@example.com', db)).toBeNull()
     } finally {
       await db.close()

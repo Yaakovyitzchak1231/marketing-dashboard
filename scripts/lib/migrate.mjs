@@ -55,6 +55,8 @@ export function migrationFiles(dir) {
 
 /**
  * Apply each pending migration once, in filename order, each in its own transaction.
+ * Each transaction sets lp.migration = 'on' (transaction-local) so the lp.actors team
+ * trigger (migration 0051) knows a write with no lp.actor is a migration.
  * Safe to run again and safe when two builds run at once: every file takes a
  * transaction-scoped advisory lock and re-checks lp_schema_migrations under it,
  * which also works through a transaction-mode connection pooler.
@@ -92,6 +94,10 @@ export async function applyMigrations(client, opts) {
         log(`applied  ${f}  (by another process)`)
         continue
       }
+      // Transaction-local: tells the lp.actors team trigger (0051) that this write
+      // is a migration, not an app path that forgot to say who is acting. It ends
+      // with this transaction, so it never leaks into a pooled connection.
+      await client.query("select set_config('lp.migration', 'on', true)")
       await client.query(read(f))
       await client.query('insert into lp_schema_migrations (filename) values ($1)', [f])
       await client.query('commit')

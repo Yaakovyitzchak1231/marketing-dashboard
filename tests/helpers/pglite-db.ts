@@ -17,7 +17,11 @@ export async function createTestDb(): Promise<Db & { close: () => Promise<void> 
     },
   })
   for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort()) {
-    await pg.exec(readFileSync(join(MIGRATIONS, f), 'utf8'))
+    // Same transaction-local flag the real runner sets (scripts/lib/migrate.mjs, 0051).
+    await pg.transaction(async (t) => {
+      await t.query("select set_config('lp.migration', 'on', true)")
+      await t.exec(readFileSync(join(MIGRATIONS, f), 'utf8'))
+    })
   }
   const wrap = (runner: { query: PGlite['query'] }): Queryable => ({
     async query<T>(text: string, params?: unknown[]) {
