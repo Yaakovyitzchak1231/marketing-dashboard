@@ -45,6 +45,7 @@ import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
 import { EDIT_OPS } from '../edit/ops.ts'
 import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
+import { SETTINGS_OPS } from '../settings/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -463,6 +464,7 @@ export const OPS: Record<string, Op> = {
   ...EDIT_OPS,
   // Suppression list (lib/suppressions/ops.ts): suppress/unsuppress/is_suppressed, CSV import/export.
   ...SUPPRESSION_OPS,
+  ...SETTINGS_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
