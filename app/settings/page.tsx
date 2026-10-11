@@ -17,6 +17,7 @@ import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/se
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,6 +107,14 @@ export default async function SettingsPage() {
       ) : null}
 
       <NeedsSetup items={setupItems} />
+
+      <section className="mb-6">
+        <SectionHeader title="More settings" />
+        <Card className="flex flex-wrap gap-4 p-4 text-[13px]">
+          <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
+          <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
+        </Card>
+      </section>
 
       {groups.map(({ group, items }) => {
         const nonSecret = items.filter((s) => !s.secret && s.key !== QUIET_START_KEY && s.key !== QUIET_END_KEY)

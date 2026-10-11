@@ -16,6 +16,7 @@ import { SEGMENT_LABELS, STAGE_LABELS } from '@/lib/leads/filters'
 import type { Stage, VerificationStatus } from '@/lib/leads/types'
 import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
 import { TierPill } from '@/components/rules/bits'
+import { leadScores } from '@/lib/scoring/engine'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
 import { LeadTimeline } from '@/components/leads/LeadTimeline'
 
@@ -69,6 +70,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   }
   if (!/^\d{1,15}$/.test(id)) notFound()
   const [d, readiness] = await Promise.all([getLeadDetail(db, Number(id)), leadReadiness(db, Number(id))])
+  const scores = await leadScores(db, Number(id)).catch((e) => (/does not exist/i.test((e as Error).message ?? '') ? [] : Promise.reject(e)))
   if (!d) notFound()
   const c = d.company
   const site = safeHref(c.website)
@@ -106,6 +108,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <Fact label="Stage"><StagePill stage={c.stage} /></Fact>
               <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
               <Fact label="Owner">{c.owner_name}</Fact>
+              {scores.length ? (
+                <Fact label="Score">
+                  {scores.map((s) => (
+                    <span key={s.model.id} className="mr-3 inline-flex items-center gap-1">
+                      <span className="text-ink-faint">{s.model.kind === 'engagement' ? 'Engagement' : 'Fit'}</span> {s.score}
+                      {s.threshold ? <span className="text-ink-faint">({s.threshold})</span> : null}
+                    </span>
+                  ))}
+                </Fact>
+              ) : null}
               <Fact label="Website">{site ? <a href={site} target="_blank" rel="noreferrer noopener" className="text-accent">{c.website_domain ?? c.website}</a> : c.website}</Fact>
               <Fact label="Phone"><InlineEditCell type="company" id={c.id} field="phone" value={c.phone} label="Phone" /></Fact>
               <Fact label="Address">{[c.address_line, place(c.city, c.state), c.postal_code].filter(Boolean).join(', ') || null}</Fact>

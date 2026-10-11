@@ -63,3 +63,16 @@ export function dateTime(d: Date | string | null): string {
   if (!d) return '—'
   return DATETIME_FMT.format(new Date(d))
 }
+
+/** A tag pill using the tag's own colour when it has one (no colour = the neutral Pill tone). */
+export function TagPill({ tag, colour }: { tag: string; colour: string | null }) {
+  if (!colour) return <Pill tone="neutral">{tag}</Pill>
+  return (
+    <span
+      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-[1px] text-[11px] font-medium leading-[18px]"
+      style={{ borderColor: `${colour}4d`, backgroundColor: `${colour}1a`, color: colour }}
+    >
+      {tag}
+    </span>
+  )
+}

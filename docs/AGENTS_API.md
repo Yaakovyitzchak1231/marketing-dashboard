@@ -187,3 +187,56 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+## 8. Lead scoring (plan 2.8)
+
+Rule-based point scores beside the AI fit tiers (`lib/rules/evaluate.ts` stays the Fit
+*gate*). Two kinds of score model, one row per model in `lp.score_models`:
+`engagement` (how much a lead has engaged — opens, clicks, replies, meetings) and
+`fit` (how well a lead matches a campaign's own ICP/buying-signal rules). A model
+with `campaign_id: null` is the workspace default used by every campaign without
+its own; a Fit model's rules are built from the campaign's own
+`lp.campaign_profiles`/`lp.campaign_profile_items` (`signal_rule` items), never
+hard-coded to an industry (`lib/scoring/rules.ts#fitRulesFromProfile`,
+`lib/scoring/engine.ts#fitModelForCampaign`). Points can expire
+(`expires_after_days` on a rule); `recompute_scores` re-evaluates events, drops
+expired points from the live sum, and is safe to call repeatedly (idempotent —
+re-processing the same events never double-awards). Crossing a threshold (e.g.
+"hot" ≥ 25) writes a `score_threshold_crossed` lead event exactly once per
+crossing (deduped), so journeys can trigger on it later. A nightly job
+(`score_refresh`, seeded in `lp.jobs`) calls `lib/scoring/engine.ts#recomputeAllScores`.
+
+| op | args |
+|---|---|
+| `list_score_models` | `{campaign_id?, kind?: engagement\|fit, active_only?}` |
+| `get_score_model` | `{id}` |
+| `upsert_score_model` | `{id?, name, entity: company\|contact, kind: engagement\|fit, campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}` — create (omit id) or edit (give id); writes one `lp.status_history` row (`entity_type: 'score_model'`). At most one default (campaign_id null) model per entity+kind, one per-campaign model per entity+kind+campaign. |
+| `recompute_scores` | `{model_id?, company_id?, contact_id?}` — omit everything to recompute every active model for every lead it covers (the nightly job's call). |
+| `lead_scores` | `{company_id}` → every active model's current score + threshold for one lead, for the lead page / a leads-table column. |
+
+`lib/scoring/fields.ts#scoreFieldDescriptors` is the hand-off point for the segment
+condition engine (plan 2.1) to register score fields later — not wired in, so it
+doesn't collide with `lib/segments`.
+
+## 9. Tags as first-class (plan 2.9)
+
+`lp.companies.tags` (text[], since 0011) stays the tag storage; `lp.tag_defs`
+(0031_tags.sql) adds an optional colour + description per tag. Rename and merge
+update every company row carrying the tag in one transaction, write one
+`lp.status_history` row (`entity_type: 'tag'`, `entity_key` = the tag), and emit
+`tag_added`/`tag_removed` lead events per affected lead (both event types already
+existed since 0018_lead_events.sql).
+
+| op | args |
+|---|---|
+| `list_tags` | `{}` → every tag with its live count (from `companies.tags`) and any styling. |
+| `add_tag` / `remove_tag` | `{company_id, tag, colour?, description?}` / `{company_id, tag}` — one company, emits `tag_added`/`tag_removed`. |
+| `rename_tag` | `{from, to}` — updates every company carrying `from`; audited; `tag_removed`+`tag_added` per affected lead. |
+| `merge_tags` | `{tags: [...], into}` — updates every company carrying any listed tag; audited; events per affected lead. |
+| `set_tag_style` | `{tag, colour?: "#rrggbb", description?}` |
+| `tag_trends` | `{weeks?}` → tag-added counts per week (default last 8 weeks), from `lp.lead_events`. |
+
+UI: Settings → Scoring (`/settings/scoring`) and Settings → Data → Tags
+(`/settings/tags`), linked from the main Settings page. Both pages render an
+honest "Needs migration 00NN" empty state on a preview deploy, where migrations
+0030/0031 haven't run yet.

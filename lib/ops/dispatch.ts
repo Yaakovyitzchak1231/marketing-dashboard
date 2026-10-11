@@ -50,6 +50,8 @@ import { JOB_OPS } from '../jobs/ops.ts'
 import { LEAD_EVENT_OPS } from '../events/ops.ts'
 import { CAMPAIGN_PROFILE_OPS } from '../campaign-profiles/ops.ts'
 import { POOL_OPS } from '../pools/ops.ts'
+import { SCORING_OPS } from '../scoring/ops.ts'
+import { TAG_OPS } from '../tags/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -479,6 +481,10 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
+  // Lead scoring (lib/scoring/ops.ts, plan 2.8): Engagement + per-campaign Fit score models, recompute with point expiry.
+  ...SCORING_OPS,
+  // Tags as first-class (lib/tags/ops.ts, plan 2.9): tag manager, rename/merge, colour/description, trends.
+  ...TAG_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
