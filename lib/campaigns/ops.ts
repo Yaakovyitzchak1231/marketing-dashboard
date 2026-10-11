@@ -77,7 +77,7 @@ const RAW: Record<string, Op> = {
     run: (db, actor, a) => addStatus(db, actor, { id: String(a.id ?? ''), label: String(a.label ?? ''), is_archived: a.is_archived === true, sort: a.sort == null ? undefined : Number(a.sort) }),
   },
   create_campaign: {
-    args: '{name, pool?: jeweler|ai_agency|ai_builder|other, goal?, notes?, owner?, status? (default draft), rule_set_id? (null = pool rules), is_template?}',
+    args: '{name, pool?: a pool id (lp.pools; e.g. jeweler, dental_clinics -- see list_pools), goal?, notes?, owner?, status? (default draft), rule_set_id? (null = pool rules), is_template?}',
     run: (db, actor, a) => createCampaign(db, actor, parseCampaignPatch(a, { create: true }) as { name: string }, { via: 'api' }),
   },
   update_campaign: {

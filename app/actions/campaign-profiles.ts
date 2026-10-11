@@ -28,7 +28,7 @@ import {
 } from '@/lib/campaign-profiles/store'
 import { getAiConfig, suggestCampaignProfile, verifyFeed, type SuggestOutcome } from '@/lib/campaign-profiles/suggest'
 import { verifyItem } from '@/lib/campaign-profiles/verify'
-import { createPool, listPools, type Pool } from '@/lib/campaign-profiles/pools'
+import { getOrCreatePool, listPools, PoolError, type Pool } from '@/lib/pools/store'
 
 const ME = 'owner'
 
@@ -41,7 +41,7 @@ function db() {
 }
 
 function fail(e: unknown): Fail {
-  if (e instanceof ProfileError) return { ok: false, error: e.message }
+  if (e instanceof ProfileError || e instanceof PoolError) return { ok: false, error: e.message }
   console.error('campaign profile action failed', (e as Error).message)
   return { ok: false, error: 'That could not be saved right now.' }
 }
@@ -149,7 +149,7 @@ export async function listPoolsAction(): Promise<{ ok: true; pools: Pool[] } | F
 
 export async function createPoolAction(label: string): Promise<{ ok: true; pool: Pool } | Fail> {
   try {
-    return { ok: true, pool: await createPool(db(), ME, label) }
+    return { ok: true, pool: await getOrCreatePool(db(), ME, { label }, 'ui') }
   } catch (e) {
     return fail(e)
   }

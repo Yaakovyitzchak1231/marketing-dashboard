@@ -27,30 +27,37 @@ export function parseWhere(where: string): { states: string[]; cities: string[] 
   return { states, cities }
 }
 
+export interface FindPool {
+  id: string
+  label: string
+  /** The pool's starting searches: the campaign-agnostic default, or a measured set for the two original pools. */
+  queries: string[]
+}
+
 export function FindForm({
-  jewelerQueries,
-  agencyQueries,
-  initialSegment = 'jeweler',
+  pools,
+  initialSegment,
 }: {
-  jewelerQueries: string[]
-  agencyQueries: string[]
-  /** Pre-picked segment, e.g. from a "Find more leads" button on the runway screen (/find?segment=ai_agency). */
-  initialSegment?: 'jeweler' | 'ai_agency'
+  /** Every pool a campaign can use (lib/pools/store.ts), with a starting query list each. */
+  pools: FindPool[]
+  /** Pre-picked pool, e.g. from a "Find more leads" button on the runway screen (/find?segment=dental_clinics). */
+  initialSegment?: string
 }) {
   const router = useRouter()
-  const [segment, setSegment] = useState<'jeweler' | 'ai_agency'>(initialSegment)
+  const first = pools[0]?.id ?? 'jeweler'
+  const [segment, setSegment] = useState<string>(initialSegment && pools.some((p) => p.id === initialSegment) ? initialSegment : first)
   const [where, setWhere] = useState('MD')
   const [allUs, setAllUs] = useState(false)
   const [max, setMax] = useState('100')
-  const [queries, setQueries] = useState((initialSegment === 'ai_agency' ? agencyQueries : jewelerQueries).join(', '))
+  const [queries, setQueries] = useState((pools.find((p) => p.id === segment)?.queries ?? []).join(', '))
   const [stages, setStages] = useState<string[]>(STAGES.filter((s) => !('extra' in s && s.extra)).map((s) => s.id))
   const [proxies, setProxies] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null)
 
-  function pickSegment(s: 'jeweler' | 'ai_agency') {
+  function pickSegment(s: string) {
     setSegment(s)
-    setQueries((s === 'jeweler' ? jewelerQueries : agencyQueries).join(', '))
+    setQueries((pools.find((p) => p.id === s)?.queries ?? []).join(', '))
   }
 
   async function submit(e: React.FormEvent) {
@@ -91,22 +98,17 @@ export function FindForm({
 
   return (
     <form onSubmit={submit} className="grid gap-4 p-4 sm:p-5">
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Segment">
-        {(
-          [
-            ['jeweler', 'Independent jewelers'],
-            ['ai_agency', 'AI agencies / builders'],
-          ] as const
-        ).map(([id, text]) => (
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Pool">
+        {pools.map((p) => (
           <button
-            key={id}
+            key={p.id}
             type="button"
             role="radio"
-            aria-checked={segment === id}
-            onClick={() => pickSegment(id)}
-            className={`rounded-full border px-3 py-1 text-[12.5px] ${segment === id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:border-ink-faint'}`}
+            aria-checked={segment === p.id}
+            onClick={() => pickSegment(p.id)}
+            className={`rounded-full border px-3 py-1 text-[12.5px] ${segment === p.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:border-ink-faint'}`}
           >
-            {text}
+            {p.label}
           </button>
         ))}
       </div>
@@ -130,7 +132,9 @@ export function FindForm({
         Searches
         <input className={input} value={queries} onChange={(e) => setQueries(e.target.value)} />
         <span className="mt-1 block text-[11.5px] font-normal text-ink-faint">
-          {segment === 'jeweler' ? 'The set that found the Oct 6 list (7 searches per city).' : 'A starting set; not measured yet.'}
+          {segment === 'jeweler'
+            ? 'The set that found the Oct 6 list (7 searches per city).'
+            : 'A starting set for this pool; edit it, or set the campaign\'s approved search phrases in its Profile so every run uses them.'}
         </span>
       </label>
 

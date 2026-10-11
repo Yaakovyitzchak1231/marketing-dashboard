@@ -56,6 +56,12 @@ describe('phase 1 foundation schema', () => {
       await expect(
         db.query(`insert into lp.status_history (entity_type, entity_id, field, via) values ('campaign', 1, 'name', 'carrier_pigeon')`),
       ).rejects.toThrow()
+      // Slug-keyed entities use entity_key; a row needs one of the two ids.
+      await db.query(
+        `insert into lp.status_history (entity_type, entity_key, field, old_value, new_value, changed_by, via) values ('setting', 'workspace.timezone', 'value', null, 'America/New_York', 'owner', 'ui')`,
+      )
+      await db.query(`insert into lp.status_history (entity_type, entity_key, field) values ('pool', 'dental_clinics', 'label')`)
+      await expect(db.query(`insert into lp.status_history (entity_type, field) values ('setting', 'value')`)).rejects.toThrow()
     })
 
     it('is append-only, except deletes in a maintenance transaction', async () => {

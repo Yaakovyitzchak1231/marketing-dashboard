@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { createTestDb } from './helpers/pglite-db'
-import { createPool, listPools } from '@/lib/campaign-profiles/pools'
-import { ProfileError } from '@/lib/campaign-profiles/store'
+import { getOrCreatePool, listPools, PoolError } from '@/lib/pools/store'
 
-describe('pools (industries/audiences as rows, not a fixed list)', () => {
+// The wizard's pool picker reads and creates pools through lib/pools (the one pools module);
+// these cover exactly the calls app/actions/campaign-profiles.ts makes.
+describe('campaign-profile wizard pools (via lib/pools)', () => {
   it('lists the seeded pools by sort', async () => {
     const db = await createTestDb()
     try {
@@ -15,16 +16,15 @@ describe('pools (industries/audiences as rows, not a fixed list)', () => {
     }
   })
 
-  it('createPool adds a new pool from a label, slugified, and is idempotent by id', async () => {
+  it('"Create a new pool" adds one from a label, slugified, and a second click returns the same pool', async () => {
     const db = await createTestDb()
     try {
-      const p = await createPool(db, 'owner', 'Restaurants')
+      const p = await getOrCreatePool(db, 'owner', { label: 'Restaurants' }, 'ui')
       expect(p.id).toBe('restaurants')
       expect(p.label).toBe('Restaurants')
-      const again = await createPool(db, 'owner', 'Restaurants')
+      const again = await getOrCreatePool(db, 'owner', { label: 'Restaurants' }, 'ui')
       expect(again.id).toBe('restaurants')
-      const pools = await listPools(db)
-      expect(pools.map((x) => x.id)).toContain('restaurants')
+      expect((await listPools(db)).map((x) => x.id)).toContain('restaurants')
     } finally {
       await db.close()
     }
@@ -33,7 +33,7 @@ describe('pools (industries/audiences as rows, not a fixed list)', () => {
   it('rejects an empty label', async () => {
     const db = await createTestDb()
     try {
-      await expect(createPool(db, 'owner', '   ')).rejects.toThrow(ProfileError)
+      await expect(getOrCreatePool(db, 'owner', { label: '   ' }, 'ui')).rejects.toThrow(PoolError)
     } finally {
       await db.close()
     }

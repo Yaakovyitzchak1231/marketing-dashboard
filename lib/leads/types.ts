@@ -31,7 +31,8 @@ export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number]
 export interface CompanyRow {
   id: number
   name: string
-  segment: 'jeweler' | 'ai_agency' | 'ai_builder' | 'other'
+  /** Any pool slug in lp.pools (lib/pools/store.ts) — campaign-agnostic. */
+  segment: string
   vertical: string | null
   website: string | null
   website_domain: string | null

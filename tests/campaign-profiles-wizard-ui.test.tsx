@@ -51,7 +51,7 @@ describe('Campaign profile wizard', () => {
       <ProfileWizard
         campaignId={1} campaignName="Dental Q4"
         initial={{ profile: EMPTY_PROFILE, items: emptyItems(), exists: false }}
-        pools={[{ id: 'jeweler', label: 'Jewelers', description: null, sort: 10, active: true }]}
+        pools={[{ id: 'jeweler', label: 'Jewelers', description: null, sort: 10, active: true, created_by: null, created_at: new Date(0), updated_at: new Date(0) }]}
         aiConfigured={false}
       />,
     )

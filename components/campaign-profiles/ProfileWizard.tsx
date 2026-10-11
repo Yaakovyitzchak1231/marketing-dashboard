@@ -12,7 +12,7 @@ import { Card, Pill, SectionHeader, EmptyNote, type PillTone } from '@/component
 import { INPUT, LABEL, Notice } from '@/components/campaigns/ui'
 import type { CampaignProfile, ItemKind, ItemStatus, ProfileItem, VerifyStatus } from '@/lib/campaign-profiles/store'
 import { ITEM_KINDS } from '@/lib/campaign-profiles/store'
-import type { Pool } from '@/lib/campaign-profiles/pools'
+import type { Pool } from '@/lib/pools/store'
 import type { SuggestOutcome } from '@/lib/campaign-profiles/suggest'
 import {
   addProfileItemsAction, createPoolAction, getProfileAction, recheckProfileItemAction, setItemStatusAction,

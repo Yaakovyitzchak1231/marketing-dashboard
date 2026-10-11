@@ -25,7 +25,7 @@ const FIELDS: { key: keyof LeadFilter; label: string; placeholder: string; optio
   { key: 'state', label: 'State', placeholder: 'MD' },
   { key: 'stage', label: 'Stage', placeholder: 'any', options: ['', 'new', 'researched', 'ready', 'in_campaign', 'contacted', 'replied', 'interested', 'meeting', 'won', 'lost'] },
   { key: 'verification_status', label: 'Email status', placeholder: 'any', options: ['', 'unverified', 'valid', 'invalid', 'catch_all', 'unknown', 'risky'] },
-  { key: 'segment', label: 'Segment', placeholder: 'any', options: ['', 'jeweler', 'ai_agency', 'other'] },
+  { key: 'segment', label: 'Pool', placeholder: 'any pool id, e.g. jeweler' },
   { key: 'q', label: 'Search', placeholder: 'name, email, city, domain' },
 ]
 

@@ -10,7 +10,8 @@ import { ProfileSummaryCard } from '@/components/campaign-profiles/ProfileSummar
 import { getCampaign, listStatuses } from '@/lib/campaigns/store'
 import { getCampaignLead, listCampaignLeads, previewPick } from '@/lib/campaigns/leads'
 import { pickableRuleSets, rulesWriter, tierCountsFor, TIER_WORDS, type Tier } from '@/lib/campaigns/evaluator'
-import { POOLS, POOL_LABELS, overridesToLines, parsePick, type LeadPick } from '@/lib/campaigns/types'
+import { overridesToLines, parsePick, type LeadPick } from '@/lib/campaigns/types'
+import { listPools } from '@/lib/pools/store'
 import { CONTACT_STATUSES, STAGES, VERIFICATION_STATUSES } from '@/lib/leads/types'
 import {
   addLeadsByFilterAction, addLeadsByIdsAction, archiveCampaignAction, duplicateCampaignAction, makeOwnRulesAction, removeLeadsAction,
@@ -50,7 +51,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   } catch {
     pick = null
   }
-  const [list, statuses, ruleSets, counts, actors, editing, preview] = await Promise.all([
+  const [list, statuses, ruleSets, counts, actors, editing, preview, pools] = await Promise.all([
     listCampaignLeads(db, id, filter),
     listStatuses(db, { includeInactive: false }),
     pickableRuleSets(db, campaign.rule_set_id),
@@ -58,7 +59,9 @@ export default async function CampaignPage({ params, searchParams }: { params: P
     db.query<{ id: string; display_name: string }>('select id, display_name from lp.actors where active order by kind, display_name').then((r) => r.rows),
     Number.isInteger(leadId) && leadId > 0 ? getCampaignLead(db, id, leadId) : Promise.resolve(null),
     pick ? previewPick(db, id, pick) : Promise.resolve(null),
+    listPools(db),
   ])
+  const poolLabel: Record<string, string> = Object.fromEntries(pools.map((p) => [p.id, p.label]))
   const err = one(sp.error)
   const qs = (patch: Record<string, string | null>) => {
     const u = new URLSearchParams()
@@ -81,7 +84,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       title={campaign.name}
       meta={
         <>
-          <Link href="/campaigns" className="hover:text-ink">Campaigns</Link> · {POOL_LABELS[campaign.pool]} · {campaign.is_template ? 'template · ' : ''}
+          <Link href="/campaigns" className="hover:text-ink">Campaigns</Link> · {poolLabel[campaign.pool] ?? campaign.pool} · {campaign.is_template ? 'template · ' : ''}
           {fmt(list.total)} lead{list.total === 1 ? '' : 's'}{filter.q || filter.state || filter.tier ? ' match' : ''} · updated {shortDate(campaign.updated_at)}
         </>
       }
@@ -271,7 +274,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                   <label className={LABEL}>Pool
                     <select name="pool" defaultValue={pick?.pool ?? campaign.pool} className={INPUT}>
                       <option value="">Any</option>
-                      {POOLS.map((p) => <option key={p} value={p}>{POOL_LABELS[p]}</option>)}
+                      {pools.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </select>
                   </label>
                   <label className={LABEL}>Stage
@@ -326,7 +329,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 <div className="grid grid-cols-2 gap-2">
                   <label className={LABEL}>Pool
                     <select name="pool" defaultValue={campaign.pool} className={INPUT}>
-                      {POOLS.map((p) => <option key={p} value={p}>{POOL_LABELS[p]}</option>)}
+                      {pools.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                     </select>
                   </label>
                   <label className={LABEL}>Status

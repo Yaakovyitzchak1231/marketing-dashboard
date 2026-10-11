@@ -108,6 +108,5 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `suggest_campaign_profile` | `{campaign_id, industry, notes?, example_sites?}` — AI-assisted setup; saves everything as `status:'suggested', source:'ai'`, **never auto-approved**; every suggestion with an HTTP-checkable value is verified before it's returned. `{configured:false, reason}` when no free/OSS AI provider is set up. |
 | `copy_campaign_profile` | `{from, to}` — copies the profile's scalars and items (new items get `source:'copied'`); skips anything the destination already has. |
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
-| `list_pools` | `{include_inactive?}` — the industries/audiences a campaign's `pool` can be; never a hard-coded list. |
-| `create_pool` | `{label, id?, description?}` — adds a new pool when an agent or the wizard needs one that doesn't exist yet. |
+| `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |

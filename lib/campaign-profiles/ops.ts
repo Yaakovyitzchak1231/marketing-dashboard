@@ -25,7 +25,6 @@ import {
 // lib/ops/dispatch.ts lazy-loads the Instantly gate for the same reason.
 const suggestModule = () => import('./suggest.ts')
 import { verifyItem } from './verify.ts'
-import { createPool, listPools } from './pools.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -88,14 +87,6 @@ const RAW: Record<string, Op> = {
   copy_campaign_profile: {
     args: '{from, to}  -- copies profile scalars + items (source becomes "copied")',
     run: (db, actor, a) => copyProfile(db, actor, cid(a.from, 'from'), cid(a.to, 'to')),
-  },
-  list_pools: {
-    args: '{include_inactive?}  -- industries/audiences for a campaign pool picker; never a hard-coded list',
-    run: (db, _actor, a) => listPools(db, { include_inactive: a.include_inactive === true || a.include_inactive === 'true' }),
-  },
-  create_pool: {
-    args: '{label, id?, description?}  -- adds a new pool (industry/audience) when the wizard\'s picker doesn\'t already have one',
-    run: (db, actor, a) => createPool(db, actor, String(a.label ?? ''), { id: typeof a.id === 'string' ? a.id : undefined, description: a.description as string | null | undefined }),
   },
   recheck_profile_item: {
     args: '{id}  -- re-run verification on one item (the "Re-check" button) and save the result',

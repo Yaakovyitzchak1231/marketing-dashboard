@@ -44,10 +44,11 @@ import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
 import { CAMPAIGN_PROFILE_OPS } from '../campaign-profiles/ops.ts'
-import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
+import { POOL_OPS } from '../pools/ops.ts'
+import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
-import { FIELD_CATALOG, OPS as RULE_OPS } from '../rules/schema.ts'
+import { OPS as RULE_OPS } from '../rules/schema.ts'
 import { STANDING_RULES } from '../rules/standing.ts'
 import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
@@ -380,11 +381,11 @@ export const OPS: Record<string, Op> = {
   list_rule_sets: {
     args: '{}  -- every lead rule set (default, pools, campaigns, templates) with counts; read-only',
     run: async (db) => {
-      const [sets, counts, jobs] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db)])
+      const [sets, counts, jobs, fields] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db), resolveFieldCatalog(db)])
       return {
         rule_sets: sets.map((s) => ({ ...s, counts: counts.get(s.id) ?? null, rescore: jobs.get(s.id) ?? null })),
         standing_rules: STANDING_RULES,
-        fields: FIELD_CATALOG,
+        fields,
         conditions: RULE_OPS,
       }
     },
@@ -457,6 +458,8 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_OPS,
   // Campaign profiles (lib/campaign-profiles/ops.ts): per-campaign industry/ICP/keywords/competitors/feeds/directories/signals + AI-assisted setup.
   ...CAMPAIGN_PROFILE_OPS,
+  // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
+  ...POOL_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {

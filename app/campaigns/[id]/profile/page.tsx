@@ -7,7 +7,7 @@ import { ProfileWizard } from '@/components/campaign-profiles/ProfileWizard'
 import { getCampaign } from '@/lib/campaigns/store'
 import { getProfile } from '@/lib/campaign-profiles/store'
 import { getAiConfig } from '@/lib/campaign-profiles/suggest'
-import { listPools } from '@/lib/campaign-profiles/pools'
+import { listPools } from '@/lib/pools/store'
 
 export const dynamic = 'force-dynamic'
 
