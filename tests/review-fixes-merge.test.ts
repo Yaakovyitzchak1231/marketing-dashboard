@@ -88,15 +88,18 @@ describe('review fix #81: merge moves everything, Forget clears everything', () 
     const loser = await addContact(db, co, 'old@forget.example')
     await db.query(`update lp.contacts set first_name = 'Pat' where id = $1`, [loser])
     await merge(db, 'owner', { entity: 'contact', keep, merge: loser, choices: {} })
-    await db.query(`insert into lp.lead_events (type, contact_id, email_norm, source, dedupe_key) values ('email_sent', $1, 'me@forget.example', 'manual', 'm3')`, [keep])
+    // A real timeline row carries the address in props too (the e2e run's failing case).
+    await db.query(`insert into lp.lead_events (type, contact_id, email_norm, source, dedupe_key, props) values ('email_sent', $1, 'me@forget.example', 'manual', 'm3', '{"email":"me@forget.example","step":1}')`, [keep])
     await db.query(`insert into lp.suppressions (email_norm, reason, source) values ('old@forget.example', 'bounced', 'manual')`)
 
     await forgetContact(db, 'owner', { contact_id: keep, confirm: 'me@forget.example' })
 
     const left = await db.query<{ email: string | null; first_name: string | null }>(`select email, first_name from lp.contacts where id in ($1, $2)`, [keep, loser])
     expect(left.rows.every((r) => r.email === null && r.first_name === null)).toBe(true)
-    const ev = await db.query(`select 1 from lp.lead_events where email_norm in ('me@forget.example', 'old@forget.example')`)
+    const ev = await db.query(`select 1 from lp.lead_events where email_norm in ('me@forget.example', 'old@forget.example') or props ? 'email'`)
     expect(ev.rows).toHaveLength(0)
+    const kept = await db.query<{ props: Record<string, unknown> }>(`select props from lp.lead_events where dedupe_key = 'm3'`)
+    expect(kept.rows[0].props).toEqual({ step: 1 }) // the event survives, without the address
     const plain = await db.query(`select 1 from lp.suppressions where email_norm in ('me@forget.example', 'old@forget.example')`)
     expect(plain.rows).toHaveLength(0)
     const hashed = await db.query(`select 1 from lp.suppressions where email_hash = $1`, [emailHash('old@forget.example')])
