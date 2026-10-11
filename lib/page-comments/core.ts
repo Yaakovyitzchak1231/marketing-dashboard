@@ -342,7 +342,7 @@ export async function sendPageComments(db: Db, actor: string, clientIds: string[
         if (row.sent_at) return { id: row.id, notification_id: row.notification_id, already: true }
         if (!row.body.trim()) throw new OpsError('write something first')
         const msg = composeMessage(c, me.display_name, base)
-        const nid = await notify(q, { recipient: c.recipient, kind: 'message', summary: msg.summary, body: msg.body, created_by: actor })
+        const nid = await notify(q, { recipient: c.recipient, kind: 'message', summary: msg.summary, body: msg.body, page_comment_id: c.id, created_by: actor })
         await q.query('update lp.page_comments set sent_at = now(), notification_id = $2 where id = $1', [row.id, nid])
         await logEvent(q, {
           actor,
@@ -398,6 +398,8 @@ export async function replyToPageComment(db: Db, actor: string, id: number, body
       kind: 'message',
       summary: isAuthor ? `${me.display_name} followed up on ${where}: ${body.slice(0, 140)}` : `${me.display_name} replied to your comment on ${where}: ${body.slice(0, 140)}`,
       body: text,
+      page_comment_id: c.id,
+      auto_reply: !isAuthor,
       created_by: actor,
     })
     const r = await q.query<{ id: number }>('insert into lp.page_comment_replies (page_comment_id, author, body, notification_id) values ($1, $2, $3, $4) returning id', [c.id, actor, body, nid])

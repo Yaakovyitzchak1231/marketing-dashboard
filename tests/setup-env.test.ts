@@ -46,6 +46,14 @@ describe('Vercel links', () => {
 })
 
 describe('envStatus', () => {
+  it('exposes mail and retry prerequisites without exposing credentials or promising a schedule', () => {
+    const keys = envStatus('notifications', { MAIL_PROVIDER: 'resend', MAIL_API_KEY: 'private-test-value', CRON_SECRET: 'private-scheduler-value' })
+    expect(keys.map((k) => k.key)).toEqual(['MAIL_PROVIDER', 'MAIL_API_KEY', 'MAIL_FROM', 'CRON_SECRET'])
+    expect(keys.find((k) => k.key === 'MAIL_FROM')?.set).toBe(false)
+    expect(JSON.stringify(keys)).not.toContain('private-test-value')
+    expect(JSON.stringify(keys)).not.toContain('private-scheduler-value')
+    expect(keys.find((k) => k.key === 'CRON_SECRET')?.purpose).toContain('does not create a schedule')
+  })
   it('says set or missing, never the value', () => {
     const s = envStatus('leads', { DATABASE_URL: 'postgres://u:hunter2@h/db' })
     expect(s[0]).toMatchObject({ key: 'DATABASE_URL', required: true, set: true })

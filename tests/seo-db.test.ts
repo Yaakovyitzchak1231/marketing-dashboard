@@ -3,11 +3,11 @@ import { generateKeyPairSync, createVerify } from 'node:crypto'
 import { createTestDb } from './helpers/pglite-db'
 import { healthySite } from './helpers/seo-fake-web'
 import {
-  addCompetitor, addPrompt, addSite, getFixTask, latestAudits, listFixTasks, listSites, normalizeBaseUrl, parsePaths, runSiteAudit, runVisibility, runResults,
+  addCompetitor, addPrompt, addSite, getFixTask, latestAudits, latestRuns, listFixTasks, listSites, normalizeBaseUrl, parsePaths, runSiteAudit, runVisibility, runResults,
 } from '@/lib/seo/store'
 import { applyChange, listChanges, previewChange, undoChange, validateJsonLd } from '@/lib/seo/changes'
 import { WpClient, type WpFetch } from '@/lib/seo/wordpress'
-import { analyzeAnswer } from '@/lib/seo/visibility'
+import { analyzeAnswer, tallyResults } from '@/lib/seo/visibility'
 import { gscReport, signJwt } from '@/lib/seo/searchconsole'
 import { claimTask } from '@/lib/ops/core'
 
@@ -25,7 +25,7 @@ afterAll(async () => {
 function fakeWp(opts: { snippet: boolean }) {
   const meta = (o: Record<string, string> = {}) =>
     opts.snippet ? { _yoast_wpseo_title: '', _yoast_wpseo_metadesc: '', _yoast_wpseo_canonical: '', '_yoast_wpseo_meta-robots-noindex': '', _tapdash_jsonld: '', ...o } : {}
-  const pages = new Map<number, { id: number; slug: string; link: string; status: string; title: { raw: string }; meta: Record<string, string> }>([
+  const pages = new Map<number, { id: number; slug: string; link: string; status: string; title: { raw: string }; content?: { raw: string }; meta: Record<string, string> }>([
     [10, { id: 10, slug: 'home', link: 'https://gempay.test/', status: 'publish', title: { raw: 'Home New' }, meta: meta() }],
     [11, { id: 11, slug: 'partners', link: 'https://gempay.test/partners/', status: 'publish', title: { raw: 'Partners' }, meta: meta({ _yoast_wpseo_canonical: 'https://www.gempay.test/partners/' }) }],
     [12, { id: 12, slug: 'test-inner-page-2', link: 'https://gempay.test/test-inner-page-2/', status: 'publish', title: { raw: 'Test' }, meta: meta() }],
@@ -46,7 +46,7 @@ function fakeWp(opts: { snippet: boolean }) {
     if (p === '/wp/v2/posts' && method === 'GET') return ok([])
     if (p === '/wp/v2/pages' && method === 'POST') {
       const id = nextId++
-      const np = { id, slug: body.slug, link: `https://gempay.test/?page_id=${id}`, status: 'draft', title: { raw: body.title }, meta: meta() }
+      const np = { id, slug: body.slug, link: `https://gempay.test/?page_id=${id}`, status: 'draft', title: { raw: body.title }, content: { raw: body.content ?? '' }, meta: meta() }
       pages.set(id, np)
       return ok(np, 201)
     }
@@ -160,7 +160,7 @@ describe('WordPress actions (mocked WP API)', () => {
     expect(wp.writes.every((w) => w.auth === `Basic ${Buffer.from('jacob:abcdefgh').toString('base64')}`)).toBe(true)
     if (taskId) expect((await getFixTask(db, taskId))!.status).toBe('done')
     const ev = await db.query<{ summary: string }>("select summary from lp.events where kind = 'seo.change' order by id desc limit 1")
-    expect(ev.rows[0].summary).toBe('Changed the canonical URL on Gem Pay /partners/')
+    expect(ev.rows[0].summary).toBe(`Applied WordPress change #${c.id} on Gem Pay: page 11 /partners/`)
     const u = await undoChange(db, 'owner', c.id, env)
     expect(u.status).toBe('undone')
     expect(wp.pages.get(11)!.meta._yoast_wpseo_canonical).toBe('https://www.gempay.test/partners/')
@@ -229,8 +229,8 @@ describe('AI visibility (mocked model APIs)', () => {
       [{ name: 'Square', domain: 'squareup.com' }, { name: 'Clover', domain: 'clover.com' }, { name: 'Helcim', domain: 'helcim.com' }, { name: 'Stripe', domain: 'stripe.com' }],
     )
     expect(a.mentioned).toBe(true)
-    expect(a.matchedTerms.sort()).toEqual(['TapDash', 'tapdash.co'])
-    expect(a.competitors).toEqual(['Square', 'Clover', 'Helcim'])
+    expect(a.matchedTerms.sort()).toEqual(['TapDash'])
+    expect(a.competitors).toEqual(['Square', 'Clover'])
     expect(analyzeAnswer({ text: 'Use Stripe.', citedUrls: [] }, ['TapDash'], []).mentioned).toBe(false)
   })
 
@@ -257,14 +257,81 @@ describe('AI visibility (mocked model APIs)', () => {
     expect(run.status).toBe('done')
     expect(run.mentioned).toBe(results.filter((r) => r.mentioned).length)
     expect(results.find((r) => r.mentioned === false)!.competitors).toContain('Helcim')
+    // Accounting: attempted = answered + failed + unknown, and the config is kept.
+    expect(run.attempted).toBe(run.prompt_count)
+    expect(run.failed).toBe(1)
+    expect(run.answered).toBe(run.prompt_count! - 1)
+    expect(run.unknown).toBe(0)
+    expect(run.attempted).toBe(run.answered! + run.failed! + run.unknown!)
+    expect(run.web_search).toBe(false)
+    expect(run.brand_terms).toContain('TapDash')
+    expect(run.prompts).toHaveLength(run.prompt_count!)
+    expect(run.prompts!.some((p) => p.prompt === 'best card processor for a jewelry store in NJ')).toBe(true)
+    expect(tallyResults(results)).toEqual({ attempted: run.attempted, answered: run.answered, failed: run.failed, unknown: run.unknown })
+  })
+
+  it('an empty provider response stays unknown, never a "not named" negative', async () => {
+    const fetcher = async () => ({ status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: '' }] } }] }) })
+    const run = await runVisibility(db, 'owner', 'gemini', { env: { GEMINI_API_KEY: 'test-key' }, fetcher })
+    expect(run.status).toBe('failed')
+    expect(run.mentioned).toBeNull()
+    expect(run.answered).toBe(0)
+    expect(run.failed).toBe(0)
+    expect(run.unknown).toBe(run.prompt_count)
+    const rows = await runResults(db, [run.id])
+    expect(rows).toHaveLength(run.prompt_count!)
+    expect(rows.every((r) => r.mentioned === null)).toBe(true)
+    expect(rows.every((r) => r.error === null)).toBe(true)
+    expect(rows.some((r) => r.mentioned === false)).toBe(false)
+    expect(tallyResults(rows)).toEqual({ attempted: run.prompt_count, answered: 0, failed: 0, unknown: run.prompt_count })
+  })
+
+  it('all failures mark the run failed and store no negatives', async () => {
+    const fetcher = async () => ({ status: 500, text: async () => JSON.stringify({ error: { message: 'boom' } }) })
+    const run = await runVisibility(db, 'owner', 'gemini', { env: { GEMINI_API_KEY: 'test-key' }, fetcher })
+    expect(run.status).toBe('failed')
+    expect(run.mentioned).toBeNull()
+    expect(run.answered).toBe(0)
+    expect(run.failed).toBe(run.prompt_count)
+    expect(run.unknown).toBe(0)
+    const rows = await runResults(db, [run.id])
+    expect(rows.every((r) => r.error)).toBe(true)
+    expect(rows.every((r) => r.mentioned === null)).toBe(true)
+    expect(tallyResults(rows)).toEqual({ attempted: run.prompt_count, answered: 0, failed: run.prompt_count, unknown: 0 })
+  })
+
+  it('keeps web search and brand terms for the run it used them on', async () => {
+    const fetcher = async () => ({ status: 200, text: async () => JSON.stringify({ candidates: [{ content: { parts: [{ text: 'No one here.' }] } }] }) })
+    const run = await runVisibility(db, 'owner', 'gemini', { env: { GEMINI_API_KEY: 'test-key', SEO_WEB_SEARCH: '1' }, fetcher })
+    expect(run.web_search).toBe(true)
+    expect(run.brand_terms!.length).toBeGreaterThan(0)
+  })
+
+  it('falls back to the result rows when a historical run has no stored counts', async () => {
+    // A run written before migration 0017: the accounting columns are null and
+    // the page must read the result rows instead of showing nothing.
+    const { rows: started } = await db.query<{ id: number }>(
+      `insert into lp.seo_visibility_runs (provider, model, status, prompt_count, mentioned, finished_at) values ('gemini', 'gemini-2.5-flash', 'done', 3, 1, now()) returning id`,
+    )
+    const runId = started[0].id
+    await db.query(
+      `insert into lp.seo_visibility_results (run_id, prompt, answer, mentioned) values ($1, 'q1', 'TapDash', true), ($1, 'q2', 'Square', false), ($1, 'q3', null, null)`,
+      [runId],
+    )
+    const run = (await latestRuns(db)).find((r) => r.id === runId)!
+    expect(run.attempted).toBeNull()
+    expect(run.answered).toBeNull()
+    expect(run.unknown).toBeNull()
+    const rows = await runResults(db, [runId])
+    expect(tallyResults(rows)).toEqual({ attempted: 3, answered: 2, failed: 0, unknown: 1 })
   })
 
   it('OpenAI / Anthropic / Perplexity answers parse from their shapes', async () => {
     const { ask } = await import('@/lib/seo/visibility')
     const mk = (j: unknown) => async () => ({ status: 200, text: async () => JSON.stringify(j) })
-    expect(await ask('openai', 'k', 'm', 'q', { fetcher: mk({ output: [{ type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Hi TapDash', annotations: [{ type: 'url_citation', url: 'https://a.test' }] }] }] }) })).toEqual({ text: 'Hi TapDash', citedUrls: ['https://a.test'] })
-    expect(await ask('anthropic', 'k', 'm', 'q', { fetcher: mk({ content: [{ type: 'text', text: 'A', citations: [{ url: 'https://b.test' }] }, { type: 'text', text: 'B' }] }) })).toEqual({ text: 'AB', citedUrls: ['https://b.test'] })
-    expect(await ask('perplexity', 'k', 'sonar', 'q', { fetcher: mk({ choices: [{ message: { content: 'P' } }], citations: ['https://c.test'] }) })).toEqual({ text: 'P', citedUrls: ['https://c.test'] })
+    expect(await ask('openai', 'k', 'm', 'q', { fetcher: mk({ output: [{ type: 'web_search_call' }, { type: 'message', content: [{ type: 'output_text', text: 'Hi TapDash', annotations: [{ type: 'url_citation', url: 'https://a.test' }] }] }] }) })).toEqual({ text: 'Hi TapDash', citedUrls: ['https://a.test/'], retrievedUrls: [] })
+    expect(await ask('anthropic', 'k', 'm', 'q', { fetcher: mk({ content: [{ type: 'text', text: 'A', citations: [{ url: 'https://b.test' }] }, { type: 'text', text: 'B' }] }) })).toEqual({ text: 'AB', citedUrls: ['https://b.test/'], retrievedUrls: [] })
+    expect(await ask('perplexity', 'k', 'sonar', 'q', { fetcher: mk({ choices: [{ message: { content: 'P' } }], citations: ['https://c.test'] }) })).toEqual({ text: 'P', citedUrls: ['https://c.test/'], retrievedUrls: [] })
   })
 })
 

@@ -13,6 +13,7 @@
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { logEvent } from './events.ts'
+import { pauseBlockFor, pauseMessage } from './pause.ts'
 
 export class OpsError extends Error {
   status: number
@@ -86,6 +87,16 @@ async function requireActor(q: Queryable, id: string): Promise<Actor> {
   return a
 }
 
+/** Also used by direct database workers, not just the HTTP gate. */
+export async function requireRunnableActor(q: Queryable, id: string): Promise<Actor> {
+  const a = await requireActor(q, id)
+  if (a.kind === 'agent') {
+    const block = await pauseBlockFor(q, id)
+    if (block) throw new OpsError(pauseMessage(id, block), 423)
+  }
+  return a
+}
+
 /** Presence: every call an actor makes marks them as seen. */
 export async function touchActor(q: Queryable, actor: string, statusNote?: string | null): Promise<void> {
   if (statusNote === undefined) {
@@ -97,15 +108,15 @@ export async function touchActor(q: Queryable, actor: string, statusNote?: strin
 
 export async function notify(
   q: Queryable,
-  n: { recipient: string; kind: string; summary: string; body?: string | null; task_id?: number | null; comment_id?: number | null; created_by: string },
+  n: { recipient: string; kind: string; summary: string; body?: string | null; task_id?: number | null; comment_id?: number | null; page_comment_id?: number | null; auto_reply?: boolean; created_by: string },
 ): Promise<number | null> {
   if (n.recipient === n.created_by) return null
   // The insert fires lp.fan_out_notification (migration 0013): one delivery row per channel of the
   // recipient, sent right after the request by lib/notify (kickDelivery).
   const { rows } = await q.query<{ id: number }>(
-    `insert into lp.notifications (recipient, kind, summary, body, task_id, comment_id, created_by)
-     select $1, $2, $3, $4, $5, $6, $7 where exists (select 1 from lp.actors where id = $1) returning id`,
-    [n.recipient, n.kind, n.summary.slice(0, 500), n.body ?? null, n.task_id ?? null, n.comment_id ?? null, n.created_by],
+    `insert into lp.notifications (recipient, kind, summary, body, task_id, comment_id, created_by, page_comment_id, auto_reply)
+     select $1, $2, $3, $4, $5, $6, $7, $8, $9 where exists (select 1 from lp.actors where id = $1) returning id`,
+    [n.recipient, n.kind, n.summary.slice(0, 500), n.body ?? null, n.task_id ?? null, n.comment_id ?? null, n.created_by, n.page_comment_id ?? null, n.auto_reply === true],
   )
   return rows[0]?.id ?? null
 }
@@ -191,7 +202,7 @@ export async function claimTask(
   opts: { kinds?: string[]; task_id?: number; lease_seconds?: number } = {},
 ): Promise<TaskRow | null> {
   return db.tx(async (q) => {
-    await requireActor(q, actor)
+    await requireRunnableActor(q, actor)
     const kinds = Array.isArray(opts.kinds) && opts.kinds.length ? opts.kinds.map(String) : null
     const { rows } = await q.query<TaskRow>(
       `update lp.tasks t set status = 'claimed', claimed_by = $1, heartbeat_at = now(),
@@ -221,20 +232,39 @@ export async function claimTask(
   }, actor)
 }
 
-function assertHolder(t: TaskRow, actor: string) {
+/** Lock and validate a particular claim, using the database clock. Keep the lock through its writes. */
+export async function assertTaskClaim(q: Queryable, actor: string, id: number, claimAttempt?: number): Promise<TaskRow> {
+  await requireRunnableActor(q, actor)
+  const t = await loadTask(q, id, true)
   if (t.claimed_by !== actor) throw new OpsError(`task ${t.id} is not claimed by ${actor}${t.claimed_by ? ` (held by ${t.claimed_by})` : ''}`, 409)
   if (!['claimed', 'running', 'blocked'].includes(t.status)) throw new OpsError(`task ${t.id} is ${t.status}`, 409)
+  // Legacy callers may omit the token on the first claim only. After any retry,
+  // omission is unsafe: an old process with the same actor could still be alive.
+  if ((claimAttempt === undefined && t.attempts !== 1) || (claimAttempt !== undefined && claimAttempt !== t.attempts)) {
+    throw new OpsError(`task ${id} claim_attempt must match the current claim; claim it again before working`, 409)
+  }
+  const active = await q.query('select id from lp.tasks where id = $1 and lease_expires_at > clock_timestamp()', [id])
+  if (!active.rows.length) throw new OpsError(`task ${id} lease expired; claim it again before working`, 409)
+  return t
+}
+
+/** Each direct-worker write/checkpoint holds the task lock until it commits. */
+export function taskScopedDb(db: Db, actor: string, id: number, claimAttempt: number): Db {
+  const tx: Db['tx'] = (fn) => db.tx(async (q) => {
+    await assertTaskClaim(q, actor, id, claimAttempt)
+    return fn(q)
+  }, actor)
+  return { tx, query: (text, params) => tx((q) => q.query(text, params)) }
 }
 
 export async function heartbeatTask(
   db: Db,
   actor: string,
   id: number,
-  opts: { lease_seconds?: number; progress?: unknown; status_note?: string } = {},
+  opts: { lease_seconds?: number; progress?: unknown; status_note?: string; claim_attempt?: number } = {},
 ): Promise<TaskRow> {
   return db.tx(async (q) => {
-    const t = await loadTask(q, id, true)
-    assertHolder(t, actor)
+    await assertTaskClaim(q, actor, id, opts.claim_attempt)
     const { rows } = await q.query<TaskRow>(
       `update lp.tasks set status = case when status = 'claimed' then 'running' else status end,
               heartbeat_at = now(), lease_expires_at = now() + make_interval(secs => $2),
@@ -248,16 +278,20 @@ export async function heartbeatTask(
   }, actor)
 }
 
-export async function completeTask(db: Db, actor: string, id: number, opts: { result?: unknown; report?: string } = {}): Promise<TaskRow> {
+export async function completeTask(db: Db, actor: string, id: number, opts: {
+  result?: unknown; report?: string; claim_attempt?: number
+  /** Trusted server callback only: result writes and task completion share one transaction. */
+  prepareResult?: (q: Queryable, task: TaskRow) => Promise<unknown>
+} = {}): Promise<TaskRow> {
   return db.tx(async (q) => {
-    const t = await loadTask(q, id, true)
-    assertHolder(t, actor)
+    const t = await assertTaskClaim(q, actor, id, opts.claim_attempt)
+    const result = opts.prepareResult ? await opts.prepareResult(q, t) : opts.result
     const report = typeof opts.report === 'string' ? opts.report.slice(0, 20000) : null
     const { rows } = await q.query<TaskRow>(
       `update lp.tasks set status = 'done', finished_at = now(), lease_expires_at = null,
               result = coalesce($2::jsonb, result), report = coalesce($3, report), error = null
         where id = $1 returning *`,
-      [id, opts.result === undefined ? null : JSON.stringify(opts.result), report],
+      [id, result === undefined ? null : JSON.stringify(result), report],
     )
     const who = await name(q, actor)
     if (report) await addComment(q, actor, { task_id: id, body: report, kind: 'report' })
@@ -268,10 +302,9 @@ export async function completeTask(db: Db, actor: string, id: number, opts: { re
   }, actor)
 }
 
-export async function failTask(db: Db, actor: string, id: number, opts: { error: string; retry?: boolean }): Promise<TaskRow> {
+export async function failTask(db: Db, actor: string, id: number, opts: { error: string; retry?: boolean; claim_attempt?: number }): Promise<TaskRow> {
   return db.tx(async (q) => {
-    const t = await loadTask(q, id, true)
-    assertHolder(t, actor)
+    const t = await assertTaskClaim(q, actor, id, opts.claim_attempt)
     const error = nonEmpty(opts.error, 'error', 4000)
     const retry = opts.retry !== false && t.attempts < t.max_attempts
     const { rows } = await q.query<TaskRow>(
@@ -295,12 +328,11 @@ export async function failTask(db: Db, actor: string, id: number, opts: { error:
 }
 
 /** Hand a task to someone else (human or agent) with a note. */
-export async function handoffTask(db: Db, actor: string, id: number, opts: { to: string; note: string }): Promise<TaskRow> {
+export async function handoffTask(db: Db, actor: string, id: number, opts: { to: string; note: string; claim_attempt?: number }): Promise<TaskRow> {
   return db.tx(async (q) => {
-    const me = await requireActor(q, actor)
-    const t = await loadTask(q, id, true)
+    const me = await requireRunnableActor(q, actor)
+    const t = me.kind === 'agent' ? await assertTaskClaim(q, actor, id, opts.claim_attempt) : await loadTask(q, id, true)
     if (!LIVE.includes(t.status)) throw new OpsError(`task ${id} is ${t.status}`, 409)
-    if (me.kind === 'agent' && t.claimed_by && t.claimed_by !== actor) throw new OpsError(`task ${id} is held by ${t.claimed_by}`, 409)
     await requireActor(q, opts.to)
     const note = nonEmpty(opts.note, 'note', 4000)
     const { rows } = await q.query<TaskRow>(
@@ -325,9 +357,9 @@ export async function updateTask(
   patch: { status?: 'queued' | 'blocked' | 'cancelled' | 'done'; assigned_to?: string | null; priority?: number; title?: string },
 ): Promise<TaskRow> {
   return db.tx(async (q) => {
-    const me = await requireActor(q, actor)
-    const t = await loadTask(q, id, true)
-    if (me.kind === 'agent' && t.claimed_by && t.claimed_by !== actor) throw new OpsError(`task ${id} is held by ${t.claimed_by}`, 409)
+    const me = await requireRunnableActor(q, actor)
+    if (me.kind !== 'human') throw new OpsError('Only a person may manually edit a task; agents use claim, heartbeat, complete, fail or handoff.', 403)
+    await loadTask(q, id, true)
     if (patch.status && !['queued', 'blocked', 'cancelled', 'done'].includes(patch.status)) throw new OpsError('bad status')
     if (patch.assigned_to) await requireActor(q, patch.assigned_to)
     const { rows } = await q.query<TaskRow>(
@@ -390,7 +422,7 @@ export async function addComment(
     where = co.rows[0] ? ` on ${co.rows[0].name}` : ''
   }
   for (const m of mentions) {
-    await notify(q, { recipient: m, kind: 'mention', summary: `${who} mentioned you${where}: ${body.slice(0, 160)}`, task_id: c.task_id ?? null, comment_id: id, created_by: actor })
+    await notify(q, { recipient: m, kind: 'mention', summary: `${who} mentioned you${where}: ${body.slice(0, 160)}`, body, task_id: c.task_id ?? null, comment_id: id, created_by: actor })
   }
   if ((c.kind ?? 'comment') === 'comment') {
     await logEvent(q, {
@@ -418,7 +450,7 @@ export async function comment(db: Db, actor: string, c: { task_id?: number | nul
  * inbox and goes out on their delivery channels at once. With task_id it is also kept on the
  * task's thread.
  */
-export async function sendMessage(db: Db, actor: string, m: { to: string; body: string; task_id?: number | null }): Promise<{ notification_id: number | null; comment_id: number | null }> {
+export async function sendMessage(db: Db, actor: string, m: { to: string; body: string; task_id?: number | null; no_reply?: boolean }): Promise<{ notification_id: number | null; comment_id: number | null }> {
   return db.tx(async (q) => {
     const me = await requireActor(q, actor)
     await touchActor(q, actor)
@@ -443,6 +475,7 @@ export async function sendMessage(db: Db, actor: string, m: { to: string; body: 
       body,
       task_id: m.task_id ?? null,
       comment_id: commentId,
+      auto_reply: m.no_reply === true,
       created_by: actor,
     })
     await logEvent(q, {

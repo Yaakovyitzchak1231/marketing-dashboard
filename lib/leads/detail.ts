@@ -33,6 +33,10 @@ export interface HistoryRow {
   id: number; entity_type: 'company' | 'contact'; entity_id: number; field: string; old_value: string | null
   new_value: string | null; changed_by: string | null; changed_by_name: string | null; changed_at: Date; email: string | null
 }
+export interface LeadEventRow {
+  id: number; type: string; type_label: string | null; occurred_at: Date; campaign_id: number | null
+  campaign_name: string | null; source: string; props: Record<string, unknown> | null
+}
 export interface LeadTaskRow {
   id: number; kind: string; title: string; status: string; claimed_by: string | null; assigned_to: string | null
   report: string | null; error: string | null; created_at: Date; updated_at: Date; finished_at: Date | null
@@ -46,6 +50,7 @@ export interface LeadDetail {
   verification: VerificationRow[]
   touches: TouchRow[]
   history: HistoryRow[]
+  events: LeadEventRow[]
   comments: CommentRow[]
   tasks: LeadTaskRow[]
   actors: { id: string; display_name: string; kind: string }[]
@@ -55,7 +60,7 @@ export async function getLeadDetail(db: Queryable, id: number): Promise<LeadDeta
   const co = await db.query<CompanyRow>(`select * from lp.companies where id = $1`, [id])
   const company = co.rows[0]
   if (!company) return null
-  const [contacts, sources, enrichment, verification, touches, history, comments, tasks, actors] = await Promise.all([
+  const [contacts, sources, enrichment, verification, touches, events, history, comments, tasks, actors] = await Promise.all([
     db.query<ContactRow>(
       `select * from lp.contacts where company_id = $1
         order by (verification_status = 'valid') desc, coalesce(is_role_address, false), id`,
@@ -83,6 +88,15 @@ export async function getLeadDetail(db: Queryable, id: number): Promise<LeadDeta
          from lp.campaign_touches t
         where t.company_id = $1 or t.contact_id in (select x.id from lp.contacts x where x.company_id = $1)
         order by t.occurred_at desc, t.id desc limit 200`,
+      [id],
+    ),
+    db.query<LeadEventRow>(
+      `select e.id, e.type, et.label as type_label, e.occurred_at, e.campaign_id, c.name as campaign_name, e.source, e.props
+         from lp.lead_events e
+         left join lp.event_types et on et.key = e.type
+         left join lp.campaigns c on c.id = e.campaign_id
+        where e.company_id = $1 or e.contact_id in (select x.id from lp.contacts x where x.company_id = $1)
+        order by e.occurred_at desc, e.id desc limit 200`,
       [id],
     ),
     db.query<HistoryRow>(
@@ -118,6 +132,7 @@ export async function getLeadDetail(db: Queryable, id: number): Promise<LeadDeta
     verification: verification.rows,
     touches: touches.rows,
     history: history.rows,
+    events: events.rows,
     comments: comments.rows.map((c) => ({ ...c, mentions: c.mentions ?? [] })),
     tasks: tasks.rows,
     actors: actors.rows,

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createTestDb } from './helpers/pglite-db'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
@@ -100,6 +102,22 @@ describe('phase 1 foundation schema', () => {
       await db.query(`delete from lp.companies where id = $1`, [co])
       const ev = await db.query<{ company_id: number | null; type: string }>(`select company_id, type from lp.lead_events`)
       expect(ev.rows).toEqual([{ company_id: null, type: 'email_sent' }])
+    })
+
+    it('backfills Instantly touches with the same type mapping the live webhook uses (and re-running adds nothing)', async () => {
+      await db.query(
+        `insert into lp.campaign_touches (email, campaign_id, event_type, source, external_id) values
+           ('a@x.com', 'c1', 'email_sent', 'instantly_webhook', 'e1'),
+           ('a@x.com', 'c1', 'lead_meeting_booked', 'instantly_webhook', 'e2'),
+           ('a@x.com', 'c1', 'lead_out_of_office', 'instantly_webhook', 'e3')`,
+      )
+      const sql = readFileSync(join(__dirname, '..', 'db', 'migrations', '0018_lead_events.sql'), 'utf8')
+      const backfill = sql.slice(sql.indexOf('insert into lp.lead_events (occurred_at'))
+      await db.query(backfill)
+      await db.query(backfill)
+      const { rows } = await db.query<{ type: string; props: Record<string, unknown> }>(`select type, props from lp.lead_events where source = 'backfill' order by id`)
+      expect(rows.map((r) => r.type)).toEqual(['email_sent', 'meeting_booked', 'custom'])
+      expect(rows[2].props.instantly_type).toBe('lead_out_of_office')
     })
 
     it('turns a stage change into a stage_changed lead event, naming the actor', async () => {
@@ -209,14 +227,22 @@ describe('phase 1 foundation schema', () => {
   })
 
   describe('0021 integrations (tools hub)', () => {
+    it('migration 0022 seeds the tools hub rows (owned by the tools-hub PR); Postiz was not installed', async () => {
+      const { rows } = await db.query<{ id: string; reachable_from: string }>(`select id, reachable_from from lp.integrations order by sort`)
+      expect(rows.map((r) => r.id)).toEqual(['warmbly', 'listmonk', 'miniflux', 'changedetection', 'umami', 'build_tracker', 'build_plan'])
+      expect(rows.map((r) => r.id)).not.toContain('postiz')
+    })
+
     it('stores tools as rows and snapshots with honest nulls, per campaign', async () => {
       const c = await campaign('Any campaign')
+      // A fresh id (not one of the seeded tools) keeps this test about the table's
+      // own behavior, independent of migration 0022's seed rows.
       await db.query(
-        `insert into lp.integrations (id, name, kind, url, api_url, reachable_from, settings_prefix) values ('listmonk', 'Listmonk', 'listmonk', 'http://100.64.0.1:18510', 'http://127.0.0.1:18510', 'tailnet', 'integrations.listmonk')`,
+        `insert into lp.integrations (id, name, kind, url, api_url, reachable_from, settings_prefix) values ('schema-test-tool', 'Schema test tool', 'listmonk', 'http://100.64.0.1:18510', 'http://127.0.0.1:18510', 'tailnet', 'integrations.schema_test_tool')`,
       )
-      await db.query(`insert into lp.integration_snapshots (integration_id, campaign_id, metric, value, dims) values ('listmonk', $1, 'listmonk.subscribers', 42, '{"list":"Q4"}')`, [c])
-      await db.query(`insert into lp.integration_snapshots (integration_id, metric, value) values ('listmonk', 'listmonk.bounces', null)`)
-      const { rows } = await db.query<{ metric: string; value: number | null }>(`select metric, value from lp.integration_snapshots order by id`)
+      await db.query(`insert into lp.integration_snapshots (integration_id, campaign_id, metric, value, dims) values ('schema-test-tool', $1, 'listmonk.subscribers', 42, '{"list":"Q4"}')`, [c])
+      await db.query(`insert into lp.integration_snapshots (integration_id, metric, value) values ('schema-test-tool', 'listmonk.bounces', null)`)
+      const { rows } = await db.query<{ metric: string; value: number | null }>(`select metric, value from lp.integration_snapshots where integration_id = 'schema-test-tool' order by id`)
       expect(rows).toEqual([
         { metric: 'listmonk.subscribers', value: 42 },
         { metric: 'listmonk.bounces', value: null },

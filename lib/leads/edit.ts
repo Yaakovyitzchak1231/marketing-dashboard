@@ -100,14 +100,21 @@ function summarize(who: string, what: string, changes: FieldChange[]): string {
   return `${who} edited ${what}: ${parts.join('; ')}`
 }
 
-async function writeHistory(q: Queryable, entity: 'company' | 'contact', id: number, changes: FieldChange[], actor: string) {
+async function writeHistory(
+  q: Queryable,
+  entity: 'company' | 'contact',
+  id: number,
+  changes: FieldChange[],
+  actor: string,
+  opts: { via?: 'ui' | 'ops_api'; note?: string | null } = {},
+) {
   for (const c of changes) {
     // status and verification_status rows are written by the trigger (lp.log_contact_status).
     if (c.field === 'status' || c.field === 'verification_status') continue
     await q.query(
-      `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by)
-       values ($1, $2, $3, $4, $5, $6)`,
-      [entity, id, c.field, c.from, c.to, actor],
+      `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by, via, note)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [entity, id, c.field, c.from, c.to, actor, opts.via ?? null, opts.note ?? null],
     )
   }
 }
@@ -121,6 +128,7 @@ export async function editContact(
   contactId: number,
   patch: ContactPatch,
   actor: string,
+  opts: { via?: 'ui' | 'ops_api'; note?: string | null } = {},
 ): Promise<EditResult & { contact: ContactWithPhone }> {
   patch = tidy(patch)
   return db.tx(async (q) => {
@@ -217,7 +225,7 @@ export async function editContact(
       `update lp.contacts set ${cols.map((c, i) => `${c} = $${i + 1}`).join(', ')} where id = $${cols.length + 1} returning *`,
       [...cols.map((c) => set[c]), contactId],
     )
-    await writeHistory(q, 'contact', contactId, changes, actor)
+    await writeHistory(q, 'contact', contactId, changes, actor, opts)
     const who = await actorName(q, actor)
     const label = cur.email ?? ([cur.first_name, cur.last_name].filter(Boolean).join(' ') || `contact ${contactId}`)
     await logEvent(q, {
@@ -244,6 +252,7 @@ export async function editCompany(
   companyId: number,
   patch: CompanyPatch,
   actor: string,
+  opts: { via?: 'ui' | 'ops_api'; note?: string | null } = {},
 ): Promise<EditResult & { company: CompanyRow }> {
   patch = tidy(patch)
   return db.tx(async (q) => {
@@ -334,7 +343,7 @@ export async function editCompany(
       `update lp.companies set ${cols.map((c, i) => `${c} = $${i + 1}`).join(', ')} where id = $${cols.length + 1} returning *`,
       [...cols.map((c) => set[c]), companyId],
     )
-    await writeHistory(q, 'company', companyId, changes, actor)
+    await writeHistory(q, 'company', companyId, changes, actor, opts)
     const who = await actorName(q, actor)
     await logEvent(q, {
       actor,

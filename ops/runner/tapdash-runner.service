@@ -1,0 +1,20 @@
+# systemd USER unit: ~/.config/systemd/user/tapdash-runner.service
+# Install steps: docs/RUNNER.md. Outbound HTTPS only; no port is opened.
+[Unit]
+Description=TapDash background job runner (lp.jobs via the dashboard ops API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/tapdash-runner
+EnvironmentFile=%h/.config/tapdash-runner.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node %h/tapdash-runner/index.mjs
+Restart=always
+RestartSec=5
+# Memory guard: the runner itself is a thin HTTP poll loop, a few MB in practice.
+MemoryMax=300M
+
+[Install]
+WantedBy=default.target
