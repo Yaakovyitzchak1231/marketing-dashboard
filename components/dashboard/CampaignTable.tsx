@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from 'react'
 import type { CampaignRow, CampaignStatus, StepStat } from '@/lib/dashboard/types'
 import { formatCount, formatPct } from './format'
 import { Card, EmptyNote, Pill, SectionHeader, Val, type PillTone } from './primitives'
+import { SequencePlanView } from './SequencePlanView'
 
 const STATUS: Record<CampaignStatus, { label: string; tone: PillTone; rank: number }> = {
   active: { label: 'Active', tone: 'good', rank: 0 },
@@ -90,6 +91,7 @@ function StepsDetail({ c }: { c: CampaignRow }) {
         <Stat label="Bounced"><Val value={c.counts.bounced}>{formatCount(c.counts.bounced)}</Val></Stat>
         <Stat label="Leads total"><Val value={c.leadsTotal}>{formatCount(c.leadsTotal)}</Val></Stat>
       </dl>
+      {c.plan ? <SequencePlanView plan={c.plan} /> : null}
       {steps.length === 0 ? (
         <p className="text-[12px] text-ink-faint">No per-step numbers reported for this campaign in this range.</p>
       ) : (

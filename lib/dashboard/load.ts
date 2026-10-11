@@ -30,6 +30,7 @@ import type {
   ApiAccount, ApiAccountDailyRow, ApiCampaign, ApiCampaignAnalytics, ApiDailyRow, ApiEmail, ApiLead,
 } from '@/lib/instantly/types'
 import { addDays, chunkRange, dateInZone, previousRange, rangeFor, resolveTimezone } from '@/lib/dashboard/dates'
+import { sequencePlan } from '@/lib/dashboard/sequence'
 import {
   EMPTY_COUNTS, accountStatusWord, campaignStatus, combinedTracking, countsFromApi, dailySeries, num,
   openTrackingOff, ratesFrom, ratio, repliedLeadsFrom, stepStats, sumAccountDaily, zeroCounts,
@@ -42,6 +43,8 @@ export const ACCOUNT_WINDOW_DAYS = 31
 export const MAX_ACCOUNT_WINDOWS = 12
 /** Emails per /accounts/analytics/daily call (API max 200; halves itself on 413). */
 export const ACCOUNT_BATCH = 100
+/** Days of per-campaign send history behind the sequence plan (send dates, new leads per day). */
+export const PLAN_HISTORY_DAYS = 60
 /** Parallel per-campaign calls. */
 export const CAMPAIGN_CONCURRENCY = 4
 /** Fallback start for the all-time daily chart when no campaign has a creation date. */
@@ -320,15 +323,22 @@ export async function loadDaily(ctx: DashboardContext): Promise<Stage<DailyPoint
 /** One row per campaign, with per-step results and all-time totals. */
 export async function loadCampaigns(ctx: DashboardContext): Promise<Stage<CampaignRow[]>> {
   const errors: SourceError[] = []
-  const [stepsRs, ovRs] = await Promise.all([
+  const today = dateInZone(ctx.now, ctx.timeZone)
+  const planWindow = { start: addDays(today, -(PLAN_HISTORY_DAYS - 1)), end: today }
+  const [stepsRs, ovRs, dailyRs] = await Promise.all([
     mapLimit(ctx.perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getStepAnalytics(ctx.client, id, ctx.apiWindow)),
     mapLimit(ctx.perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getAnalyticsOverview(ctx.client, ctx.apiWindow, id)),
+    // Send dates and new leads per day for the sequence plan. A failure only hides those dates.
+    mapLimit(ctx.perCampaignIds, CAMPAIGN_CONCURRENCY, (id) => getDailyAnalytics(ctx.client, planWindow, id)),
   ])
   const stepsById = new Map<string, PromiseSettledResult<unknown>>()
   const ovById = new Map<string, PromiseSettledResult<unknown>>()
+  const dailyById = new Map<string, ApiDailyRow[]>()
   ctx.perCampaignIds.forEach((id, i) => {
     stepsById.set(id, stepsRs[i])
     ovById.set(id, ovRs[i])
+    const d = dailyRs[i]
+    if (d.status === 'fulfilled') dailyById.set(id, d.value)
   })
   let stepFailures = 0
   const campaigns: CampaignRow[] = ctx.ids.map((id) => {
@@ -363,6 +373,9 @@ export async function loadCampaigns(ctx: DashboardContext): Promise<Stage<Campai
       leadsTotal,
       leadsRemaining: remaining !== null && remaining >= 0 ? remaining : null,
       lifetime: lifeCounts ? { counts: lifeCounts, rates: ratesFrom(lifeCounts) } : null,
+      plan: listedC?.sequences?.[0]?.steps?.length || steps.length
+        ? sequencePlan(listedC, steps, dailyById.get(id) ?? null, today)
+        : null,
     }
   })
   if (stepFailures) {

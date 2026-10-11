@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react'
 import type { FormResult } from '@/app/actions/settings'
 import { Pill } from '@/components/dashboard/primitives'
 import { btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { secretSummary } from '@/lib/settings/mask'
 
 export interface SecretFieldStatus {
   set: boolean
@@ -13,8 +14,6 @@ export interface SecretFieldStatus {
 }
 
 type FormAction = (prev: FormResult | null, f: FormData) => Promise<FormResult>
-
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null)
 
 /**
  * A secret field: the value itself never reaches this component, only its
@@ -28,6 +27,9 @@ export function SecretField({
   help,
   status,
   envConfigured,
+  envLast4 = null,
+  envSeenAt = null,
+  timeZone,
   testable,
   settingsKeyReady,
   replaceAction,
@@ -39,6 +41,12 @@ export function SecretField({
   help?: string
   status: SecretFieldStatus
   envConfigured: boolean
+  /** Last 4 characters of the env fallback's value (computed server-side; only these 4 reach the client). */
+  envLast4?: string | null
+  /** When the dashboard first saw the env value (lp.env_secret_seen), ISO. */
+  envSeenAt?: string | null
+  /** Workspace timezone for the "set" time. */
+  timeZone?: string
   testable: boolean
   settingsKeyReady: boolean
   replaceAction: FormAction
@@ -49,26 +57,24 @@ export function SecretField({
   const [confirmClear, setConfirmClear] = useState(false)
   const [replaceState, replaceFormAction, replacePending] = useActionState<FormResult | null, FormData>(replaceAction, null)
   const [testState, testFormAction, testPending] = useActionState<FormResult | null, FormData>(testAction, null)
+  const summary = status.set
+    ? secretSummary({ source: 'db', last4: status.last4, at: status.updated_at, by: status.updated_by, timeZone })
+    : envConfigured
+      ? secretSummary({ source: 'env', last4: envLast4, at: envSeenAt, timeZone })
+      : null
 
   return (
     <div className="border-b border-line-soft py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[13px] font-medium text-ink">{label}</span>
-        {status.set ? (
-          <Pill tone="good">Set · ends in …{status.last4}</Pill>
-        ) : envConfigured ? (
-          <Pill tone="neutral">from env</Pill>
+        {summary ? (
+          <Pill tone={status.set ? 'good' : 'neutral'}>{summary.badge}</Pill>
         ) : (
           <Pill tone="neutral">Not set</Pill>
         )}
       </div>
       {help ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{help}</p> : null}
-      {status.set ? (
-        <p className="mt-1 text-[11.5px] text-ink-faint">
-          Updated {fmt(status.updated_at) ?? 'recently'}
-          {status.updated_by ? ` by ${status.updated_by}` : ''}
-        </p>
-      ) : null}
+      {summary?.line ? <p className="mt-1 text-[11.5px] text-ink-faint">{summary.line}</p> : null}
 
       {!settingsKeyReady ? (
         <p className="mt-2 text-[12px] text-warn">Add SETTINGS_KEY in Vercel to enable saving secrets here (see the deploy note). Until then this field is read-only.</p>
