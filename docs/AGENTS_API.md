@@ -89,3 +89,25 @@ results back). See its README for install and undo.
 
 Tab's channel is email to its mailbox (seeded by migration 0013); a new mail wakes Tab within seconds,
 and Tab works the task through this API with its own key.
+
+
+## 7. Campaign profiles
+
+Every campaign gets a profile (industry, ICP, keywords, competitors, feeds,
+directories, signal rules, fingerprints, UTM, KPIs) — see `docs/campaign-profiles.md`
+for the full shape and the "how it works for any new campaign" walkthrough. Agents
+reach it through the same ops door as everything else (`POST /api/ops {op, ...}`).
+
+| op | args |
+|---|---|
+| `get_campaign_profile` | `{campaign_id}` → `{profile, items (grouped by kind), exists}`. Creates nothing on read. |
+| `update_campaign_profile` | `{campaign_id, industry?, vertical?, description?, icp?, value_prop?, newsletter_list?, utm?, kpis?, setup_status?}` |
+| `add_profile_items` | `{campaign_id, items: [{kind, name, value?, config?, status?, source?, rationale?, sort?}]}` — kinds: `keyword, topic, competitor, feed, forum, directory, trade_show, signal_rule, fingerprint, social_channel, negative_keyword, search_phrase, place_category`. Deduped case-insensitively per (campaign, kind, name). |
+| `set_profile_item_status` | `{ids: [...], status: suggested\|approved\|rejected\|archived}` |
+| `update_profile_item` | `{id, name?, value?, config?, rationale?, sort?}` |
+| `suggest_campaign_profile` | `{campaign_id, industry, notes?, example_sites?}` — AI-assisted setup; saves everything as `status:'suggested', source:'ai'`, **never auto-approved**; every suggestion with an HTTP-checkable value is verified before it's returned. `{configured:false, reason}` when no free/OSS AI provider is set up. |
+| `copy_campaign_profile` | `{from, to}` — copies the profile's scalars and items (new items get `source:'copied'`); skips anything the destination already has. |
+| `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
+| `list_pools` | `{include_inactive?}` — the industries/audiences a campaign's `pool` can be; never a hard-coded list. |
+| `create_pool` | `{label, id?, description?}` — adds a new pool when an agent or the wizard needs one that doesn't exist yet. |
+| `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
