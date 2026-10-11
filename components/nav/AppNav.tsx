@@ -21,6 +21,7 @@ export const NAV_ITEMS = [
   { href: '/team', label: 'Team' },
   { href: '/agents', label: 'Agents' },
   { href: '/settings', label: 'Settings' },
+  { href: '/tools', label: 'Tools' },
   { href: '/activity', label: 'Activity' },
   { href: '/reports', label: 'Reports' },
 ] as const
