@@ -21,6 +21,7 @@ export const NAV_ITEMS = [
   { href: '/agents', label: 'Agents' },
   { href: '/activity', label: 'Activity' },
   { href: '/reports', label: 'Reports' },
+  { href: '/jobs', label: 'Jobs' },
 ] as const
 
 export function isActive(pathname: string, href: string): boolean {

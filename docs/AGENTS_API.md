@@ -89,3 +89,30 @@ results back). See its README for install and undo.
 
 Tab's channel is email to its mailbox (seeded by migration 0013); a new mail wakes Tab within seconds,
 and Tab works the task through this API with its own key.
+
+
+## 7. Background jobs (the runner on Yaakov's OVH server)
+
+`lp.jobs` is the schedule; `lp.job_runs` is the log. A small runner service (not deployed yet — see
+`docs/RUNNER.md`) polls the ops API as its own agent, `system`, and runs each due job's handler.
+
+| What | op | Who |
+|---|---|---|
+| list jobs | `list_jobs {campaign_id?, kind?, enabled?}` | anyone |
+| one job | `get_job {name}` | anyone |
+| create/update a job | `put_job {name, kind, description?, schedule_cron?, timezone?, campaign_id?, payload?, enabled?, timeout_s?}` | owner or `system` |
+| enable/disable | `set_job_enabled {name, enabled}` | owner or `system` |
+| run once, now | `run_job_now {name}` | owner or `system` |
+| claim due work | `claim_jobs {runner, limit?}` | `system` only |
+| report how a run ended | `finish_job_run {run_id, status: ok\|failed\|skipped\|timeout, output?, error?}` | `system` only |
+| mark stuck runs | `reap_stale_jobs {}` | owner or `system` |
+| run history | `job_runs {name?, limit?}` | anyone |
+
+`schedule_cron` is a standard 5-field cron expression (minute hour day-of-month month day-of-week);
+`timezone` is any IANA name (default `America/New_York`); `next_run_at` is computed from cron on every
+save, enable, and finish. A job with no `schedule_cron` only ever runs via `run_job_now`.
+
+Job kinds are handler files in `runner/handlers/` on the runner box, auto-registered by filename —
+`heartbeat`, `http_ping` (payload `{url}`), and `ops_call` (payload `{op, args}` — runs any other ops
+API op on a schedule; this is how a per-campaign monitor or a tools-hub poller is expected to run,
+without its own handler file).
