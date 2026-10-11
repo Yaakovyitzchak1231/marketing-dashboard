@@ -113,7 +113,7 @@ describe('Lead views', () => {
   })
 
   it('filter bar is a plain GET form carrying the current view', () => {
-    const { container } = render(<FilterBar q={q('view=research&state=MD')} states={['MD', 'PA']} campaigns={[]} />)
+    const { container } = render(<FilterBar q={q('view=research&state=MD')} states={['MD', 'PA']} campaigns={[]} segments={[{ id: 'jeweler', label: 'Jewelers' }]} />)
     const form = container.querySelector('form')!
     expect(form).toHaveAttribute('method', 'get')
     expect(form.querySelector('input[name=view]')).toHaveValue('research')

@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getDb } from '@/lib/db'
-import { getRuleSet, listProposals } from '@/lib/rules/store'
+import { getRuleSet, listProposals, resolveFieldCatalog } from '@/lib/rules/store'
 import { recomputeStatus, tierCounts, topParkReasons } from '@/lib/rules/recompute'
-import { CONFIDENCES, FIELD_CATALOG, OPS, OP_WORDS, describeRequirement, type PersonalizationField, type Requirement } from '@/lib/rules/schema'
+import { CONFIDENCES, OPS, OP_WORDS, describeRequirement, type PersonalizationField, type Requirement } from '@/lib/rules/schema'
 import { changeWords } from '@/lib/rules/store'
 import { STANDING_RULES } from '@/lib/rules/standing'
 import { archiveRulesAction, decideProposalAction, recomputeRulesAction, saveRulesAction } from '@/app/actions/rules'
@@ -137,7 +137,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
   if (!/^\d{1,15}$/.test(id)) notFound()
   const rs = await getRuleSet(db, Number(id))
   if (!rs || rs.archived) notFound()
-  const [counts, jobs, proposals, reasons] = await Promise.all([tierCounts(db), recomputeStatus(db), listProposals(db, rs.id), topParkReasons(db, rs.id)])
+  const [counts, jobs, proposals, reasons, FIELD_CATALOG] = await Promise.all([tierCounts(db), recomputeStatus(db), listProposals(db, rs.id), topParkReasons(db, rs.id), resolveFieldCatalog(db)])
   const c = counts.get(rs.id)
   const j = jobs.get(rs.id)
   const applies =

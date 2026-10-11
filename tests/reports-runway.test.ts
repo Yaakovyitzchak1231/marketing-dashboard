@@ -133,9 +133,12 @@ describe('database: pools and campaign meta', () => {
 
   it('saves and updates campaign segment + angle', async () => {
     await saveCampaignMeta(db, 'owner', { campaign_id: 'cmp-1', campaign_name: 'One', segment: 'jeweler', angle: ' Held payouts ' })
-    await saveCampaignMeta(db, 'owner', { campaign_id: 'cmp-1', segment: 'bogus', angle: '' })
+    // A badly-shaped segment still becomes null quietly (not a pool slug at all).
+    await saveCampaignMeta(db, 'owner', { campaign_id: 'cmp-1', segment: 'Not A Pool!', angle: '' })
     const m = await listCampaignMeta(db)
     expect(m.get('cmp-1')).toMatchObject({ campaign_name: 'One', segment: null, angle: null })
+    // A validly-shaped but unknown pool slug is now a DB question (campaign_agnostic_pools FK) -- a clear error, not a silent null.
+    await expect(saveCampaignMeta(db, 'owner', { campaign_id: 'cmp-1', segment: 'bogus', angle: '' })).rejects.toThrow(/Unknown pool/)
     await saveCampaignMeta(db, 'owner', { campaign_id: 'cmp-1', segment: 'ai_agency', angle: 'Builders' })
     expect((await listCampaignMeta(db)).get('cmp-1')).toMatchObject({ segment: 'ai_agency', angle: 'Builders' })
   })

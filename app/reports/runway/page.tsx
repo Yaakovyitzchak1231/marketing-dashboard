@@ -75,7 +75,7 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
                   <dd className="text-right font-numeric tabular-nums">{fmtInt(s.unverified)}</dd>
                 </dl>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Link href={`/find?segment=${s.segment === 'ai_agency' ? 'ai_agency' : 'jeweler'}`} prefetch={false} className={BUTTON}>
+                  <Link href={`/find?segment=${encodeURIComponent(s.segment)}`} prefetch={false} className={BUTTON}>
                     Find more leads
                   </Link>
                   {s.unverified > 0 ? (
@@ -121,7 +121,7 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
                       <div className="font-medium">{c.name}</div>
                       <div className="text-[11px] text-ink-faint">
                         {c.status}
-                        {c.segment ? ` · ${SEGMENT_LABEL[c.segment]}` : ''}
+                        {c.segment ? ` · ${SEGMENT_LABEL[c.segment] ?? c.segment}` : ''}
                         {c.angle ? ` · ${c.angle}` : ''}
                       </div>
                     </td>
@@ -141,7 +141,7 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
                     <td className={TD}>
                       <div className="flex flex-wrap gap-1.5">
                         {(c.level === 'low' || c.level === 'out') && c.segment ? (
-                          <Link href={`/find?segment=${c.segment === 'ai_agency' ? 'ai_agency' : 'jeweler'}`} prefetch={false} className={BUTTON}>
+                          <Link href={`/find?segment=${encodeURIComponent(c.segment)}`} prefetch={false} className={BUTTON}>
                             Find more leads
                           </Link>
                         ) : null}

@@ -9,7 +9,8 @@ import { nameAddressKey, normalizeDomain, normalizePhone } from '../leads/normal
 
 export interface CompanyInput {
   name: string
-  segment?: 'jeweler' | 'ai_agency' | 'ai_builder' | 'other'
+  /** Any pool slug in lp.pools — campaign-agnostic. */
+  segment?: string
   vertical?: string | null
   website?: string | null
   phone?: string | null

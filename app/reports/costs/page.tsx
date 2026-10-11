@@ -7,7 +7,8 @@ import { inputCls } from '@/components/ops/bits'
 import { addCostAction, deleteCostAction, saveCampaignMetaAction } from '@/app/actions/reports'
 import { loadReportInputs } from '@/lib/reports/load'
 import { buildCostReport, CATEGORY_LABEL, COST_CATEGORIES, listCosts, verificationSpend, type CostLine, type CostRow } from '@/lib/reports/costs'
-import { SEGMENTS, SEGMENT_LABEL, angleHintFromName, segmentHintFromName } from '@/lib/reports/meta'
+import { SEGMENT_LABEL, angleHintFromName, segmentHintFromName } from '@/lib/reports/meta'
+import { listPools } from '@/lib/pools/store'
 import type { RangeKey } from '@/lib/dashboard/types'
 
 export const dynamic = 'force-dynamic'
@@ -94,6 +95,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
   const report = buildCostReport(inp.data.campaigns, costs, inp.meta, span)
   const thisMonth = inp.data.range.end.slice(0, 7)
   const ret = `/reports/costs?range=${rk}`
+  const pools = inp.db ? await listPools(inp.db) : []
 
   return (
     <PageShell
@@ -240,8 +242,8 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                   </div>
                   <select name="segment" defaultValue={m?.segment ?? ''} className={inputCls} aria-label={`Segment for ${c.name}`}>
                     <option value="">Segment…{!m && segmentHintFromName(c.name) ? ` (${SEGMENT_LABEL[segmentHintFromName(c.name)!]}?)` : ''}</option>
-                    {SEGMENTS.map((s) => (
-                      <option key={s} value={s}>{SEGMENT_LABEL[s]}</option>
+                    {pools.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
                     ))}
                   </select>
                   <input name="angle" defaultValue={m?.angle ?? ''} placeholder={angleHintFromName(c.name) ?? 'Angle, e.g. Held payouts'} className={inputCls} aria-label={`Angle for ${c.name}`} />

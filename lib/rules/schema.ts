@@ -9,8 +9,8 @@
  */
 import { CONTACT_STATUSES, RESEARCH_STATUSES, STAGES, VERIFICATION_STATUSES } from '../leads/types.ts'
 
-export const SEGMENTS = ['jeweler', 'ai_agency', 'ai_builder', 'other'] as const
-export type Segment = (typeof SEGMENTS)[number]
+/** Any pool slug in lp.pools (lib/pools/store.ts) — campaign-agnostic, not a fixed list. */
+export type Segment = string
 
 export const CONFIDENCES = ['low', 'medium', 'high'] as const
 export type Confidence = (typeof CONFIDENCES)[number]
@@ -37,6 +37,15 @@ export interface FieldDef {
   label: string
   kind: FieldKind
   options?: readonly string[]
+  /**
+   * This enum field's valid values are NOT the fixed `options` list — they are
+   * "exists in lp.pools" (lib/pools/store.ts), enforced by the campaigns_pool_fk /
+   * *_segment_fk foreign key at write time (lib/pools/store.ts's mapPoolFkError
+   * maps a 23503 violation to a plain error). A caller with a live pool list can
+   * still resolve real `options` for a dropdown (see lib/rules/store.ts's
+   * resolveFieldCatalog) — this schema module stays DB-free.
+   */
+  dynamicOptions?: 'pools'
   /** min_confidence is allowed (the field carries a confidence). */
   confidence?: boolean
   /** max_age_days is allowed; the date it reads, in words. */
@@ -56,7 +65,7 @@ export const FIELD_CATALOG: readonly FieldDef[] = [
   { key: 'contact.phone', label: 'Contact phone', kind: 'text' },
   { key: 'contact.personalization', label: 'Personalization line (contact)', kind: 'text' },
   { key: 'company.name', label: 'Company name', kind: 'text' },
-  { key: 'company.segment', label: 'Pool', kind: 'enum', options: SEGMENTS },
+  { key: 'company.segment', label: 'Pool', kind: 'enum', dynamicOptions: 'pools', options: [] },
   { key: 'company.vertical', label: 'Vertical / business type', kind: 'text' },
   { key: 'company.website_domain', label: 'Website', kind: 'text' },
   { key: 'company.phone', label: 'Store phone', kind: 'text' },
@@ -192,11 +201,11 @@ export function parseRequirement(raw: unknown, taken: Set<string>, n: number): R
     const list = listValue(r.value)
     if (!list.length) throw new RulesError(`${what}: list at least one value.`)
     if (list.length > 50) throw new RulesError(`${what}: at most 50 values.`)
-    if (def.kind === 'enum') for (const x of list) if (!def.options!.includes(x)) throw new RulesError(`${what}: "${x}" is not a ${def.label} value (${def.options!.join(', ')}).`)
+    if (def.kind === 'enum' && !def.dynamicOptions) for (const x of list) if (!def.options!.includes(x)) throw new RulesError(`${what}: "${x}" is not a ${def.label} value (${def.options!.join(', ')}).`)
     value = list
   } else if (op === 'eq' || op === 'neq' || op === 'contains') {
     const v = text(Array.isArray(r.value) ? r.value[0] : r.value, `${what}: value`, 200) as string
-    if (def.kind === 'enum' && op !== 'contains' && !def.options!.includes(v)) throw new RulesError(`${what}: "${v}" is not a ${def.label} value (${def.options!.join(', ')}).`)
+    if (def.kind === 'enum' && op !== 'contains' && !def.dynamicOptions && !def.options!.includes(v)) throw new RulesError(`${what}: "${v}" is not a ${def.label} value (${def.options!.join(', ')}).`)
     value = v
   }
   const id = typeof r.id === 'string' && ID.test(r.id) && !taken.has(r.id) ? r.id : newId('r', taken)

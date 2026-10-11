@@ -13,7 +13,6 @@
 import type { Queryable } from '@/lib/db/types'
 import type { CampaignRow, CampaignStatus } from '@/lib/dashboard/types'
 import type { CampaignMeta, Segment } from '@/lib/reports/meta'
-import { SEGMENTS } from '@/lib/reports/meta'
 
 /** Under this many days of leads, the screen warns. */
 export const RUNWAY_WARN_DAYS = 14
@@ -80,8 +79,10 @@ export function campaignRunway(c: CampaignRow, meta: CampaignMeta | undefined, w
   }
 }
 
+/** Every pool with runway data: from the DB query (segmentPools) plus any pool a live campaign names — not a fixed list. */
 export function segmentRunway(pools: SegmentPool[], campaigns: CampaignRunway[]): SegmentRunway[] {
-  return SEGMENTS.map((segment) => {
+  const segments = [...new Set<Segment>([...pools.map((p) => p.segment), ...campaigns.map((c) => c.segment).filter((s): s is Segment => s !== null)])]
+  return segments.map((segment) => {
     const pool = pools.find((p) => p.segment === segment) ?? { segment, ready: 0, unverified: 0 }
     const mine = campaigns.filter((c) => c.segment === segment)
     const loaded = mine.length === 0 ? 0 : mine.some((c) => c.remaining === null) ? null : mine.reduce((s, c) => s + (c.remaining as number), 0)
