@@ -16,6 +16,7 @@ import { fieldDef, RegistryError, type CompanyPatch, type ContactPatch, type Ent
 import { editCompany, editContact, LeadEditError } from '../leads/edit'
 import { guardCampaignEdit } from '../campaigns/store'
 import { CampaignError, type CampaignPatch } from '../campaigns/types'
+import { writeCustomFieldValue } from '../fields/store'
 
 /** The registry's normalized text value -> the typed value updateCampaign's own checks expect. */
 function campaignPatchFor(field: string, next: string | null): CampaignPatch {
@@ -120,6 +121,22 @@ async function directUpdate(
 /** Update one field on one entity. Validates, no-ops when unchanged, writes the field, logs one
  *  status_history row (unless a DB trigger already owns that field). Runs inside its own transaction. */
 export async function updateEntity(db: Db, actor: string, input: UpdateEntityInput): Promise<UpdateEntityResult> {
+  // Custom fields (plan 1.7): "custom.<key>" writes into companies.custom /
+  // contacts.custom, validated against lp.field_defs -- the dynamic part of the
+  // registry that the static table below can't express.
+  if (input.field.startsWith('custom.')) {
+    if (input.type !== 'company' && input.type !== 'contact') throw new RegistryError('Custom fields are only on company or contact.')
+    const entityId = positiveInt(input.id, `${input.type} id`)
+    const r = await writeCustomFieldValue(db, actor, {
+      entityType: input.type,
+      entityId,
+      key: input.field.slice('custom.'.length),
+      value: input.value,
+      via: input.via ?? 'ops_api',
+      note: noteOf(input.note),
+    })
+    return r
+  }
   const type = input.type as EntityType
   const def = fieldDef(input.type, input.field)
   const next = def.validate(input.value)

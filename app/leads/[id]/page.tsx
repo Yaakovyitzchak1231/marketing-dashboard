@@ -18,6 +18,8 @@ import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
 import { TierPill } from '@/components/rules/bits'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
 import { LeadTimeline } from '@/components/leads/LeadTimeline'
+import { CustomFieldsBlock } from '@/components/leads/CustomFieldsBlock'
+import { listFieldDefs } from '@/lib/fields/registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,7 +70,12 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     )
   }
   if (!/^\d{1,15}$/.test(id)) notFound()
-  const [d, readiness] = await Promise.all([getLeadDetail(db, Number(id)), leadReadiness(db, Number(id))])
+  const [d, readiness, companyFields, contactFields] = await Promise.all([
+    getLeadDetail(db, Number(id)),
+    leadReadiness(db, Number(id)),
+    listFieldDefs(db, { entity: 'company' }),
+    listFieldDefs(db, { entity: 'contact' }),
+  ])
   if (!d) notFound()
   const c = d.company
   const site = safeHref(c.website)
@@ -112,6 +119,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               {c.vertical ? <Fact label="Type">{c.vertical}</Fact> : null}
               {c.notes ? <Fact label="Notes">{c.notes}</Fact> : null}
             </dl>
+            <CustomFieldsBlock entity="company" id={c.id} defs={companyFields} values={c.custom} label="Custom fields" />
           </Card>
 
           <Readiness list={readiness} contacts={d.contacts} />
@@ -137,6 +145,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                           .join(' · ')}
                       </div>
                       <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
+                      <CustomFieldsBlock entity="contact" id={ct.id} defs={contactFields} values={ct.custom} label="Custom fields" />
                     </div>
                     <span className="flex items-center gap-1.5">
                       {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}

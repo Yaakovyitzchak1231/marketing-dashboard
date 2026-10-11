@@ -44,6 +44,8 @@ import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
 import { EDIT_OPS } from '../edit/ops.ts'
+import { FIELD_OPS } from '../fields/ops.ts'
+import { IMPORT_OPS } from '../leads/import-ops.ts'
 import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
 import { SETTINGS_OPS } from '../settings/ops.ts'
 import { JOB_OPS } from '../jobs/ops.ts'
@@ -467,6 +469,8 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_OPS,
   // Universal inline-edit + audit log (lib/edit/ops.ts): update_entity, entity_history, recent_changes.
   ...EDIT_OPS,
+  ...FIELD_OPS,
+  ...IMPORT_OPS,
   // Suppression list (lib/suppressions/ops.ts): suppress/unsuppress/is_suppressed, CSV import/export.
   ...SUPPRESSION_OPS,
   ...SETTINGS_OPS,

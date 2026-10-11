@@ -187,3 +187,52 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+## 8. Custom fields, and CSV import (plan 1.7 + 1.13)
+
+Custom fields let Yaakov define his own fields on a company or a contact (store
+size, a rating, a trade show, anything) without a code change. Values live in
+`companies.custom` / `contacts.custom` (jsonb, keyed by the field's slug); a
+field's key is unique per entity regardless of which campaign it is scoped to
+(`campaign_id` only filters where the field is *shown*, not where its value lives).
+
+| op | args |
+|---|---|
+| `list_fields` | `{entity?: company\|contact, campaign_id?, include_archived?}` |
+| `define_field` | `{entity, key, label, type: text\|number\|date\|select\|multi_select\|url\|boolean, options? (select/multi_select), campaign_id? (null = every campaign), sort?}` |
+| `update_field` | `{id, label?, options?, sort?, campaign_id?}` — type and key are permanent once created |
+| `archive_field` | `{id}` |
+
+A value is written through the normal `update_entity` op (see section on inline
+edit), with field named `custom.<key>` — e.g. `update_entity {type: 'contact', id: 42, field: 'custom.store_size', value: 'large'}`.
+It is validated against the field's type the same way every other field is, and
+audited in `lp.status_history` (entity_type `company`/`contact`, field `custom.<key>`).
+Defining, renaming, re-scoping or archiving a field is itself audited (entity_type
+`field_def`). `lib/fields/registry.ts`'s `listFieldDefs` is the one function other
+features (the segment engine, the lead-edit UI, the CSV importer) should read from.
+
+CSV import (plan 1.13), with a dry-run preview:
+
+| op | args |
+|---|---|
+| `import_csv` | `{csv: string, mapping: {csv_column: target_field}, pool?, campaign_id?, dry_run?}` |
+
+`target_field` is one of `email, first_name, last_name, title, phone` (contact),
+`company_name, website, company_phone, city, state` (company), or
+`contact_custom.<key>` / `company_custom.<key>` for a defined custom field; any
+other mapping value is ignored. `pool` sets a new company's `segment`;
+`campaign_id` also enrolls each row's company in that campaign
+(`lp.campaign_leads`). `dry_run: true` runs the whole import for real inside a
+transaction and rolls it back, so the counts — `would_create`, `would_update`,
+`skipped_duplicate` (same email/phone seen earlier in this file),
+`skipped_suppressed` (on `lp.suppressions`), `invalid` (no email or phone, a bad
+email/phone, or an unknown/invalid custom-field value) — are exactly what a real
+run right now would do, and nothing is written. A per-row `reason` rides every
+non-created/updated row. A contact needs an email **or** a phone, not both — the
+same phone-only contacts CSV import creates are usable everywhere else on the
+dashboard (call tasks, the lead page, exports).
+
+The dashboard's own UI: `/leads/import` (map → preview → import) and an
+"Add lead" button on `/leads` (one row through the same pipeline, so it gets the
+same dedupe/suppression/validation); `/settings/fields` (Settings → Data → Fields)
+to define, rename and archive fields.

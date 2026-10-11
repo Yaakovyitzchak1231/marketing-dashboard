@@ -9,6 +9,7 @@ import { updateEntity, updateEntityFields } from './update'
 import { entityHistory, recentChanges } from './history'
 import { RegistryError } from './registry'
 import { LeadEditError } from '../leads/edit'
+import { FieldError } from '../fields/store'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -21,6 +22,7 @@ function wrap(run: Op['run']): Op['run'] {
     } catch (e) {
       if (e instanceof RegistryError) throw new OpsError(e.message, e.status)
       if (e instanceof LeadEditError) throw new OpsError(e.message, e.status)
+      if (e instanceof FieldError) throw new OpsError(e.message, e.status)
       throw e
     }
   }

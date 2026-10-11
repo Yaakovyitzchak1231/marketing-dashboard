@@ -17,6 +17,7 @@ import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/se
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
@@ -211,6 +212,16 @@ export default async function SettingsPage() {
           </Card>
         </section>
       ) : null}
+
+      <section className="mb-6">
+        <SectionHeader title="Data" meta="Custom fields, import, and data tools" />
+        <Card className="p-4">
+          <Link href="/settings/fields" className="text-[13px] font-medium text-accent hover:underline">
+            Fields →
+          </Link>
+          <p className="mt-1 text-[12px] text-ink-faint">Define your own fields on a company or a contact.</p>
+        </Card>
+      </section>
 
       <section className="mb-6">
         <SectionHeader title="Agents" meta="Which task kinds each agent picks up" />

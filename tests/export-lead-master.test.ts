@@ -24,7 +24,9 @@ describe('Lead Master copy from the database', () => {
     await addTouch(db, { companyId: a, contactId: ca, campaign: 'Seg 3', event: 'email_sent', at: '2026-10-01T10:00:00Z' })
     await addTouch(db, { companyId: a, contactId: ca, campaign: 'Seg 3', event: 'reply_received', at: '2026-10-03T10:00:00Z' })
     const b = await addCompany(db, { name: 'No Email Co' })
-    await db.query('insert into lp.contacts (company_id, first_name) values ($1, $2)', [b, 'Nobody'])
+    // No email -- excluded from the email-keyed export (plan 1.13 phone-only contacts
+    // require a phone OR an email; give this stub a phone so the insert is still valid).
+    await db.query("insert into lp.contacts (company_id, first_name, phone) values ($1, $2, '410-555-0100')", [b, 'Nobody'])
     for (let i = 0; i < 7; i++) {
       const c = await addCompany(db, { name: `Bulk ${i}` })
       await addContact(db, c, `x${i}@bulk${i}.com`, 'unverified')

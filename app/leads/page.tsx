@@ -8,6 +8,8 @@ import { LeadsTable, type SortLink } from '@/components/leads/LeadsTable'
 import { ViewTabs, FilterBar, Pagination, KanbanBoard, CampaignGroups, RegionGroups } from '@/components/leads/LeadViews'
 import { shortDate } from '@/components/leads/pills'
 import { VerifyButton } from '@/components/verify/VerifyButton'
+import Link from 'next/link'
+import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,7 +77,20 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <PageShell title="Leads" meta={filtered || q.view !== 'table' ? `${meta} · ${facets.total.toLocaleString('en-US')} in the database` : meta}>
+    <PageShell
+      title="Leads"
+      meta={filtered || q.view !== 'table' ? `${meta} · ${facets.total.toLocaleString('en-US')} in the database` : meta}
+      actions={
+        <>
+          <Link href="/leads/import" className={BUTTON}>
+            Import CSV
+          </Link>
+          <Link href="/leads/add" className={BUTTON_PRIMARY}>
+            Add lead
+          </Link>
+        </>
+      }
+    >
       <ViewTabs q={q} />
       <FilterBar q={q} states={facets.states} campaigns={facets.campaigns} segments={pools} />
       {note ? (
