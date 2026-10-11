@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
+// See tests/auth-gate.test.ts: middleware.ts now reaches lib/db, which is 'server-only'.
+vi.mock('server-only', () => ({}))
+
 /**
  * /api/ops/* (agents, bearer token) and /api/webhooks/* (Instantly, shared
  * secret) authenticate inside the route, so the login gate lets them through.

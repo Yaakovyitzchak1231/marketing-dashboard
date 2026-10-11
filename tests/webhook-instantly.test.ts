@@ -71,6 +71,29 @@ describe('Instantly webhook ingest', () => {
     expect(n.rows[0].n).toBe(0)
   })
 
+  it('an open is stored low-trust (tracking is off, so Instantly opens are pixel loads, not people) (1.6)', async () => {
+    const r = await ingestInstantlyEvent(db, { ...base, event_type: 'email_opened', lead_email: 'owner@gemco.example', timestamp: '2026-10-08T15:30:00Z' })
+    expect(r.stored).toBe(true)
+    const ev = await db.query<{ props: { low_trust?: boolean } }>(
+      "select props from lp.lead_events where type = 'email_opened' and dedupe_key = $1",
+      [`touch:${(await db.query<{ id: number }>("select id from lp.campaign_touches where event_type = 'email_opened' order by id desc limit 1")).rows[0].id}`],
+    )
+    expect(ev.rows[0].props.low_trust).toBe(true)
+  })
+
+  it('an unsubscribe writes through lib/suppressions/store.ts, not just contacts.do_not_contact (1.6)', async () => {
+    await ingestInstantlyEvent(db, { ...base, event_type: 'lead_unsubscribed', lead_email: 'unsub@gemco.example', timestamp: '2026-10-08T18:30:00Z' })
+    const supp = await db.query<{ reason: string; source: string }>("select reason, source from lp.suppressions where email_norm = 'unsub@gemco.example'")
+    expect(supp.rows[0]).toMatchObject({ reason: 'unsubscribed', source: 'instantly_webhook' })
+    // addSuppressionIn's own bookkeeping: a status_history row for the suppression.
+    const hist = await db.query<{ n: number }>("select count(*)::int as n from lp.status_history where entity_type = 'suppression'")
+    expect(hist.rows[0].n).toBeGreaterThan(0)
+    // Re-delivering the same unsubscribe is a no-op in lp.suppressions (addSuppressionIn is idempotent), not a duplicate row.
+    await ingestInstantlyEvent(db, { ...base, event_type: 'lead_unsubscribed', lead_email: 'unsub@gemco.example', timestamp: '2026-10-08T18:31:00Z', email_id: 'retry-1' })
+    const supp2 = await db.query<{ n: number }>("select count(*)::int as n from lp.suppressions where email_norm = 'unsub@gemco.example'")
+    expect(supp2.rows[0].n).toBe(1)
+  })
+
   it('stage moves forward only, except terminal outcomes', () => {
     expect(nextStage('replied', 'email_sent')).toBeNull()
     expect(nextStage('contacted', 'reply_received')).toBe('replied')

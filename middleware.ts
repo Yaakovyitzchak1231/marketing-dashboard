@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isFallbackOwner } from '@/lib/auth/roles'
 
 /**
  * The login gate. Every page and every API route (including /api/dashboard,
- * which carries the Instantly numbers) requires a Supabase session whose email
- * matches ALLOWED_USER_EMAIL. Anything unexpected -- missing env, auth outage,
- * wrong account -- denies access. It never widens it.
+ * which carries the Instantly numbers) requires a Supabase session that
+ * resolves to a role (lib/auth/roles.ts): either the permanent
+ * ALLOWED_USER_EMAIL owner fallback (checked right here, no I/O), or an
+ * active lp.actors human row (plan 1.14 -- Users & roles), checked by asking
+ * /api/internal/role -- this middleware runs on the Edge runtime and cannot
+ * open a plain Postgres connection itself (lib/db uses `pg`, which needs
+ * Node's net/tls; that route runs on the normal Node runtime and can).
+ * Anything unexpected -- missing env, auth outage, wrong or unknown account,
+ * that internal call failing -- denies access. It never widens it.
  */
 
-// Read ALLOWED_USER_EMAIL per request rather than capturing it at module scope:
-// a module-scope read freezes whatever the env held at import, which makes the
-// gate impossible to test and hides a misconfigured deploy behind a value
-// nobody can inspect. The placeholder is a fail-closed default so an unset env
-// var can never widen access.
-function allowedEmail(): string {
-  return process.env.ALLOWED_USER_EMAIL || 'unset@invalid.local'
+function isPublicPath(pathname: string): boolean {
+  return pathname === '/login' || pathname.startsWith('/api/auth/')
 }
 
 /**
@@ -32,21 +34,22 @@ export function devAuthBypassEnabled(): boolean {
   return process.env.DASHBOARD_DEV_NO_AUTH === '1'
 }
 
-function isPublicPath(pathname: string): boolean {
-  return pathname === '/login' || pathname.startsWith('/api/auth/')
-}
-
 /**
  * Machine routes that authenticate themselves instead of using the login:
- *  - /api/ops/*      agents, each with its own bearer token (OPS_AGENT_TOKENS)
- *  - /api/webhooks/* Instantly, with a shared secret (INSTANTLY_WEBHOOK_SECRET)
+ *  - /api/ops/*           agents, each with its own bearer token (OPS_AGENT_TOKENS)
+ *  - /api/webhooks/*      Instantly, with a shared secret (INSTANTLY_WEBHOOK_SECRET)
+ *  - /api/internal/role   middleware's own role lookup; it re-derives the
+ *                         caller's session from cookies itself and answers
+ *                         { role: null } for anyone without one, so exempting
+ *                         it from this gate does not widen anything.
  * Each route rejects any request without its credential (fail closed).
  */
 export function isSelfAuthenticatingApi(pathname: string): boolean {
   return (
     pathname === '/api/ops' ||
     pathname.startsWith('/api/ops/') ||
-    pathname.startsWith('/api/webhooks/')
+    pathname.startsWith('/api/webhooks/') ||
+    pathname === '/api/internal/role'
   )
 }
 
@@ -91,6 +94,25 @@ async function getSession(request: NextRequest) {
   return { user: data.user, response }
 }
 
+/**
+ * The non-fallback path: ask /api/internal/role, forwarding this request's
+ * own cookies so that route can re-derive the same session independently
+ * (never trusting an email passed across the hop). Any failure (network,
+ * non-200, bad body) resolves to null -- fail closed.
+ */
+async function resolveRoleViaInternalApi(request: NextRequest): Promise<string | null> {
+  try {
+    const res = await fetch(new URL('/api/internal/role', request.url), {
+      headers: { cookie: request.headers.get('cookie') ?? '' },
+    })
+    if (!res.ok) return null
+    const body = (await res.json()) as { role?: string | null }
+    return body.role ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isApi = pathname.startsWith('/api/')
@@ -123,9 +145,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Signed in, but is it the allowed account?
-  const userEmail = user.email?.toLowerCase()
-  if (!userEmail || userEmail !== allowedEmail().toLowerCase()) {
+  // Signed in, but does the account resolve to a role? The env fallback is
+  // checked first and needs no network call, so Yaakov's own login never
+  // depends on the database (or this Edge function reaching it) at all.
+  const userEmail = user.email?.toLowerCase() ?? null
+  const role = isFallbackOwner(userEmail) ? 'owner' : await resolveRoleViaInternalApi(request)
+  if (!role) {
     if (isApi) {
       return NextResponse.json(
         { error: 'Forbidden: Account not authorized' },
@@ -137,8 +162,41 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Viewers are read-only (plan 1.14): block every mutation centrally, here,
+  // rather than trusting each server action / API route to check for itself.
+  // Two independent signals catch a write, fail-closed:
+  //  - any non-GET/HEAD request to /api/* (the self-authenticating machine
+  //    routes already returned above and never reach this point);
+  //  - any request carrying Next's `next-action` header, which marks an
+  //    invocation of a server action on a page route (the write paths behind
+  //    forms like Settings and Team never go through /api/* at all).
+  // A 403 here is also the right response for a server action: the client
+  // runtime surfaces the thrown error text, it does not need a redirect.
+  if (role === 'viewer' && isMutatingRequest(request, pathname, isApi)) {
+    return NextResponse.json(
+      { error: 'Viewers can look but not change things' },
+      { status: 403 },
+    )
+  }
+
   // Authorized: continue, carrying any refreshed session cookies.
   return response
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD'])
+
+/**
+ * True for any request a viewer must not be allowed to make: a non-GET/HEAD
+ * call to /api/* (leads, rules, verify, find, research, campaign-steps,
+ * suppressions and anything else under /api -- this check is central so a
+ * new write route needs no opt-in), or any request carrying the `next-action`
+ * header Next.js attaches to a server-action invocation, wherever it lands.
+ */
+function isMutatingRequest(request: NextRequest, pathname: string, isApi: boolean): boolean {
+  const method = request.method.toUpperCase()
+  if (isApi && !SAFE_METHODS.has(method)) return true
+  if (request.headers.has('next-action')) return true
+  return false
 }
 
 export const config = {

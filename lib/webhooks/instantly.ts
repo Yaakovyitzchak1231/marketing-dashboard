@@ -15,9 +15,15 @@
  * new (a retried delivery returns early above, before this runs at all).
  *
  * Also: unsubscribe, hard bounce and complaint events add a GLOBAL suppression
- * (lp.suppressions) plus contacts.subscription_status and an lp.consent_log
- * row, with plain SQL (lib/suppressions/store.ts is a parallel PR; not imported
- * here on purpose, per the build split).
+ * through lib/suppressions/store.ts's addSuppressionIn (same transaction, so a
+ * retried delivery that already suppressed the address is a no-op there too)
+ * plus contacts.subscription_status and an lp.consent_log row, written here
+ * since those two are webhook-specific and not part of the suppression module.
+ *
+ * A bot-driven "open" (Yaakov has link/open tracking off on new sends, so an
+ * email_opened Instantly still reports is treated as untrustworthy) is stored
+ * with props.low_trust = true rather than dropped, so segments/scoring can
+ * exclude it without losing the raw signal.
  */
 import { createHash } from 'node:crypto'
 import type { Db, Queryable } from '@/lib/db/types'
@@ -25,6 +31,7 @@ import { normalizeEmail } from '@/lib/leads/normalize'
 import { STAGES, type Stage } from '@/lib/leads/types'
 import { logEvent } from '@/lib/ops/events'
 import { emitLeadEvent } from '@/lib/events/emit'
+import { addSuppressionIn, type SuppressionReason } from '@/lib/suppressions/store'
 
 export interface InstantlyEvent {
   timestamp?: string
@@ -94,7 +101,7 @@ export const INSTANTLY_EVENT_TYPE_MAP: Record<string, string> = {
 }
 
 /** Events that add a GLOBAL suppression (campaign_id null = every campaign). */
-const SUPPRESSION_FOR_EVENT: Record<string, { reason: string; subscription_status: string }> = {
+const SUPPRESSION_FOR_EVENT: Record<string, { reason: SuppressionReason; subscription_status: string }> = {
   lead_unsubscribed: { reason: 'unsubscribed', subscription_status: 'unsubscribed' },
   email_bounced: { reason: 'bounced', subscription_status: 'bounced' },
   // Instantly has no documented 'complaint' webhook type as of Oct 2026; these
@@ -137,17 +144,22 @@ async function dashboardCampaignFor(q: Queryable, instantlyCampaignId: string | 
 }
 
 /**
- * Add a global suppression for this email (idempotent) plus subscription_status
- * and a consent_log row. Plain SQL on purpose — lib/suppressions/store.ts is a
- * parallel PR and is not imported here.
+ * Add a global suppression for this email (idempotent — addSuppressionIn
+ * returns the existing live row unchanged rather than duplicating it) plus
+ * subscription_status and a consent_log row. The suppression write itself
+ * goes through lib/suppressions/store.ts so it gets the same status_history
+ * + lead_event('suppressed') bookkeeping a manual or ops-API suppression gets;
+ * only the webhook-specific subscription_status/consent_log part is local.
  */
-async function addGlobalSuppression(q: Queryable, email: string, contactId: number | null, reason: string, subscriptionStatus: string, note: string) {
-  await q.query(
-    `insert into lp.suppressions (email_norm, campaign_id, reason, source, note)
-     values ($1, null, $2, 'instantly_webhook', $3)
-     on conflict (email_norm, coalesce(campaign_id, 0)) where email_norm is not null and lifted_at is null do nothing`,
-    [email, reason, note],
-  )
+async function addGlobalSuppression(
+  q: Queryable,
+  email: string,
+  contactId: number | null,
+  reason: SuppressionReason,
+  subscriptionStatus: string,
+  note: string,
+) {
+  await addSuppressionIn(q, 'instantly-ai', { email, reason, source: 'instantly_webhook', note })
   if (contactId) {
     await q.query('update lp.contacts set subscription_status = $2 where id = $1 and subscription_status is distinct from $2', [contactId, subscriptionStatus])
     await q.query(
@@ -231,7 +243,14 @@ export async function ingestInstantlyEvent(db: Db, e: InstantlyEvent): Promise<I
       actor: 'instantly-ai',
       occurred_at: occurred,
       dedupe_key: `touch:${ins.rows[0].id}`,
-      props: eventType === 'custom' ? { instantly_type: type, suppressed } : { suppressed },
+      props: {
+        ...(eventType === 'custom' ? { instantly_type: type } : {}),
+        suppressed,
+        // Yaakov runs with open/link tracking off on new sends, so an email_opened
+        // event Instantly still fires is a pixel load, not a human — mark it
+        // low-trust rather than drop it (1.6): segments/scoring can exclude it.
+        ...(eventType === 'email_opened' ? { low_trust: true } : {}),
+      },
     })
 
     let taskId: number | null = null

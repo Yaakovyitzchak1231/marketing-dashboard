@@ -6,6 +6,8 @@ import { DbNotConnected, PageFrame } from '@/components/ops/bits'
 import { EmptyNote } from '@/components/dashboard/primitives'
 import { LinkCard, ToolCard } from '@/components/tools/ToolCard'
 import { ToolForm } from '@/components/tools/ToolForm'
+import { DataSourcesSection } from '@/components/sources/DataSourcesSection'
+import { sourcesHealth } from '@/lib/sources/health'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +27,11 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
   const sp = await searchParams
   const campaignId = Number(sp.campaign) > 0 ? Number(sp.campaign) : null
   const now = new Date()
-  const [integrations, metrics, campaigns] = await Promise.all([
+  const [integrations, metrics, campaigns, sources] = await Promise.all([
     listIntegrations(db, { activeOnly: true }),
     latestMetrics(db, { campaignId }),
     listCampaigns(db, {}),
+    sourcesHealth(db),
   ])
 
   const metricsFor = (id: string): LatestMetric[] => metrics.filter((m) => m.integration_id === id)
@@ -82,6 +85,8 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
               </div>
             </div>
           ) : null}
+
+          <DataSourcesSection sources={sources} />
         </div>
 
         <aside>

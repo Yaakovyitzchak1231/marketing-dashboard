@@ -44,12 +44,19 @@ import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
 import { EDIT_OPS } from '../edit/ops.ts'
+import { FIELD_OPS } from '../fields/ops.ts'
+import { IMPORT_OPS } from '../leads/import-ops.ts'
 import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
 import { SETTINGS_OPS } from '../settings/ops.ts'
 import { JOB_OPS } from '../jobs/ops.ts'
 import { LEAD_EVENT_OPS } from '../events/ops.ts'
 import { CAMPAIGN_PROFILE_OPS } from '../campaign-profiles/ops.ts'
 import { POOL_OPS } from '../pools/ops.ts'
+import { SCORING_OPS } from '../scoring/ops.ts'
+import { TAG_OPS } from '../tags/ops.ts'
+import { SEGMENT_OPS } from '../segments/ops.ts'
+import { LEAD_PROFILE_OPS } from '../leads/profile-ops.ts'
+import { TRAIT_OPS } from '../traits/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -59,6 +66,10 @@ import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
 import { INTEGRATION_OPS } from '../integrations/ops.ts'
+import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
+import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
+import { MERGE_OPS } from '../merge/ops.ts'
+import { RETENTION_OPS } from '../retention/ops.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -467,6 +478,8 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_OPS,
   // Universal inline-edit + audit log (lib/edit/ops.ts): update_entity, entity_history, recent_changes.
   ...EDIT_OPS,
+  ...FIELD_OPS,
+  ...IMPORT_OPS,
   // Suppression list (lib/suppressions/ops.ts): suppress/unsuppress/is_suppressed, CSV import/export.
   ...SUPPRESSION_OPS,
   ...SETTINGS_OPS,
@@ -479,6 +492,24 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
+  // Instantly nightly reconcile (lib/instantly/ops.ts): catch-up for per-lead activity the webhook missed (1.6).
+  ...INSTANTLY_RECONCILE_OPS,
+  // Data sources & sync health (lib/sources/ops.ts): one honest row per source (1.11).
+  ...SOURCES_HEALTH_OPS,
+  // Lead scoring (lib/scoring/ops.ts, plan 2.8): Engagement + per-campaign Fit score models, recompute with point expiry.
+  ...SCORING_OPS,
+  // Tags as first-class (lib/tags/ops.ts, plan 2.9): tag manager, rename/merge, colour/description, trends.
+  ...TAG_OPS,
+  // Duplicate detection & merge (lib/merge/ops.ts): merge_candidates, merge.
+  ...MERGE_OPS,
+  // Data retention & delete-a-person (lib/retention/ops.ts): retention policies, forget_contact, retention_sweep.
+  ...RETENTION_OPS,
+  // Segments (lib/segments/ops.ts): the condition-engine DSL compiled to SQL --
+  // list/create/update/archive, segment_preview (counts + readback + samples),
+  // static-list membership, and the snapshot job for 2.12.
+  ...SEGMENT_OPS,
+  ...LEAD_PROFILE_OPS,
+  ...TRAIT_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {

@@ -17,8 +17,36 @@ import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/se
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import Link from 'next/link'
+import { listRetentionPolicies } from '@/lib/retention/store'
+import { RetentionPolicyRow } from '@/components/settings/RetentionPolicyRow'
+import { RunSweepButton } from '@/components/settings/RunSweepButton'
+import { addTeamMemberAction, changeTeamMemberRoleAction, removeTeamMemberAction } from '@/app/actions/team'
+import { TeamSection } from '@/components/settings/TeamSection'
+import { currentRole } from '@/lib/auth/session'
+import { listTeamMembers, type TeamMemberRow } from '@/lib/team/store'
+
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * listTeamMembers() reads lp.actors.role, which migration 0029 adds. Previews
+ * never run migrations (PHASE2_COMMON.md), so a PR #78 preview hits this page
+ * against a database that still has lp.actors without that column -- without
+ * this guard that throws inside the page's Promise.all and the whole Settings
+ * screen crashes to the error boundary. An honest "needs migration" reads the
+ * same as the empty-state convention the rest of the dashboard already uses
+ * (lib/setup/db-status.ts, lib/scoring's Settings page): any other DB error
+ * still surfaces as a real failure rather than being swallowed as "no team".
+ */
+async function listTeamMembersSafe(db: NonNullable<ReturnType<typeof getDb>>): Promise<{ members: TeamMemberRow[]; needsMigration: boolean }> {
+  try {
+    return { members: await listTeamMembers(db), needsMigration: false }
+  } catch (e) {
+    if (/does not exist/i.test((e as Error).message ?? '')) return { members: [], needsMigration: true }
+    throw e
+  }
+}
 
 export default async function SettingsPage() {
   const db = getDb()
@@ -30,7 +58,24 @@ export default async function SettingsPage() {
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db)])
+  const [settingsRows, secretRows, actors, integrations, team, role] = await Promise.all([
+    listSettings(db),
+    listSecretStatuses(db),
+    listActorKinds(db),
+    listIntegrationSettings(db),
+    listTeamMembersSafe(db),
+    currentRole(),
+  ])
+  const { members: teamMembers, needsMigration: needsTeamMigration } = team
+  let retentionPolicies: Awaited<ReturnType<typeof listRetentionPolicies>> = []
+  let retentionNeedsMigration = false
+  try {
+    retentionPolicies = await listRetentionPolicies(db)
+  } catch (e) {
+    if (/does not exist/i.test((e as Error).message ?? '')) retentionNeedsMigration = true
+    else throw e
+  }
+
   const settingsByKey = new Map(settingsRows.map((s) => [s.key, s]))
   const secretsByKey = new Map(secretRows.map((s) => [s.key, s]))
   const groups = settingsByGroup()
@@ -106,6 +151,14 @@ export default async function SettingsPage() {
       ) : null}
 
       <NeedsSetup items={setupItems} />
+
+      <section className="mb-6">
+        <SectionHeader title="More settings" />
+        <Card className="flex flex-wrap gap-4 p-4 text-[13px]">
+          <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
+          <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
+        </Card>
+      </section>
 
       {groups.map(({ group, items }) => {
         const nonSecret = items.filter((s) => !s.secret && s.key !== QUIET_START_KEY && s.key !== QUIET_END_KEY)
@@ -211,6 +264,42 @@ export default async function SettingsPage() {
           </Card>
         </section>
       ) : null}
+
+      <section className="mb-6">
+        <SectionHeader title="Data" meta="Custom fields, import, data tools, retention, and removing a person's data on request" />
+        <Card className="p-4">
+          <Link href="/settings/fields" className="text-[13px] font-medium text-accent hover:underline">
+            Fields →
+          </Link>
+          <p className="mt-1 text-[12px] text-ink-faint">Define your own fields on a company or a contact.</p>
+          <div className="mt-4 border-t border-hairline pt-4">
+            {retentionNeedsMigration ? (
+              <p className="text-[13px] text-ink-muted">Needs migration 0027 — it runs on the next production deploy.</p>
+            ) : (
+              <>
+                {retentionPolicies.map((p) => (
+                  <RetentionPolicyRow key={p.event_category} category={p.event_category} keepDays={p.keep_days} description={p.description} />
+                ))}
+                <RunSweepButton />
+                <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+                  Leave a field blank to keep that kind of event forever. To remove one person&apos;s info entirely, use &quot;Forget this person&quot; on their lead page.
+                </p>
+              </>
+            )}
+          </div>
+        </Card>
+      </section>
+
+      <section className="mb-6">
+        <SectionHeader title="Team" meta="Who can sign in to this dashboard, and what they can do" />
+        <Card className="p-4">
+          {needsTeamMigration ? (
+            <p className="text-[13px] text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
+          ) : (
+            <TeamSection members={teamMembers} isOwner={role === 'owner'} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
+          )}
+        </Card>
+      </section>
 
       <section className="mb-6">
         <SectionHeader title="Agents" meta="Which task kinds each agent picks up" />

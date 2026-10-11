@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { updateEntity, updateEntityFields, RegistryError, LeadEditError } from '@/lib/edit/update'
+import { FieldError } from '@/lib/fields/store'
 import { entityHistory, type HistoryRow } from '@/lib/edit/history'
 
 const ME = 'owner'
@@ -17,7 +18,7 @@ type Fail = { ok: false; error: string }
 const NOT_CONNECTED: Fail = { ok: false, error: 'The database is not connected, so this is not saved.' }
 
 function fail(e: unknown): Fail {
-  if (e instanceof RegistryError || e instanceof LeadEditError) return { ok: false, error: e.message }
+  if (e instanceof RegistryError || e instanceof LeadEditError || e instanceof FieldError) return { ok: false, error: e.message }
   console.error('inline edit failed', (e as Error).message)
   return { ok: false, error: 'That didn\'t save. Try again.' }
 }
