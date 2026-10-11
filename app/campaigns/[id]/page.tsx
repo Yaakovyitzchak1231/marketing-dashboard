@@ -51,12 +51,13 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   } catch {
     pick = null
   }
-  const [list, statuses, ruleSets, counts, actors, editing, preview] = await Promise.all([
+  const [list, statuses, ruleSets, counts, actors, pools, editing, preview] = await Promise.all([
     listCampaignLeads(db, id, filter),
     listStatuses(db, { includeInactive: false }),
     pickableRuleSets(db, campaign.rule_set_id),
     tierCountsFor(db, campaign),
     db.query<{ id: string; display_name: string }>('select id, display_name from lp.actors where active order by kind, display_name').then((r) => r.rows),
+    db.query<{ id: string; label: string }>('select id, label from lp.pools where active order by sort, label').then((r) => r.rows),
     Number.isInteger(leadId) && leadId > 0 ? getCampaignLead(db, id, leadId) : Promise.resolve(null),
     pick ? previewPick(db, id, pick) : Promise.resolve(null),
   ])
@@ -340,7 +341,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                   field="pool"
                   value={campaign.pool}
                   label="Pool"
-                  options={POOLS.map((p) => ({ value: p as string, label: POOL_LABELS[p] })).concat((POOLS as readonly string[]).includes(campaign.pool) ? [] : [{ value: campaign.pool, label: campaign.pool }])}
+                  options={pools.map((p) => ({ value: p.id, label: p.label })).concat(pools.some((p) => p.id === campaign.pool) ? [] : [{ value: campaign.pool, label: campaign.pool }])}
                 />
               </label>
               <label className={LABEL}>
