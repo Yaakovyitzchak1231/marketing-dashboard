@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runAudit, summarize } from '@/lib/seo/audit'
-import { buildFixes } from '@/lib/seo/fixes'
+import { buildFixes, contentDrafts } from '@/lib/seo/fixes'
 import { fakeWeb, healthySite, WALL } from './helpers/seo-fake-web'
 
 const SITE = { base_url: 'https://gempay.test', platform: 'wordpress', host: 'siteground', pages: ['/jewelers/', '/partners/'] }
@@ -12,7 +12,7 @@ describe('runAudit', () => {
     const by = (id: string, page?: string) => r.checks.find((c) => c.id === id && (page === undefined || c.page === page))
     expect(by('bot_wall')?.status).toBe('pass')
     expect(by('robots')?.status).toBe('pass')
-    expect(by('llms_txt')?.status).toBe('pass')
+    expect(by('llms_txt')?.status).toBe('info')
     expect(by('sitemap')?.status).toBe('warn')
     expect(by('sitemap')?.detail).toContain('/test-inner-page-2/')
     expect(by('h1', '/')?.status).toBe('warn')
@@ -55,19 +55,40 @@ describe('runAudit', () => {
     expect(fixes.some((f) => f.check_id === 'llms_txt')).toBe(false)
   })
 
-  it('robots.txt that blocks AI crawlers fails and names them', async () => {
+  it('training opt-outs are policy choices, not search failures', async () => {
     const web = fakeWeb({
       'https://b.test/robots.txt': { body: 'User-agent: GPTBot\nDisallow: /\n\nUser-agent: ClaudeBot\nDisallow: /\n', type: 'text/plain' },
       'https://b.test/': { body: '<html><head><title>B</title></head><body><h1>B</h1></body></html>' },
     })
     const r = await runAudit({ base_url: 'https://b.test' }, { fetcher: web.fetcher })
     const c = r.checks.find((x) => x.id === 'robots')!
-    expect(c.status).toBe('fail')
-    expect(c.detail).toContain('GPTBot')
-    expect(c.detail).toContain('ClaudeBot')
-    expect(c.detail).not.toContain('PerplexityBot')
+    expect(c.status).toBe('pass')
+    const policy = r.checks.find((x) => x.id === 'crawler_policy')!
+    expect(policy.status).toBe('info')
+    expect(policy.detail).toContain('GPTBot')
+    expect(policy.detail).toContain('ClaudeBot')
+    expect(c.fix).toBeUndefined()
     expect(r.checks.find((x) => x.id === 'sitemap')?.status).toBe('fail')
     expect(r.checks.find((x) => x.id === 'thin')?.status).toBe('warn')
+  })
+
+  it('finds search blocking on a tracked page even when the root is allowed', async () => {
+    const web = fakeWeb({ 'https://b.test/robots.txt': { body: 'User-agent: OAI-SearchBot\nDisallow: /jewelers/\n\nUser-agent: GPTBot\nDisallow: /\n', type: 'text/plain' } })
+    const r = await runAudit({ base_url: 'https://b.test', pages: ['/jewelers/'] }, { fetcher: web.fetcher })
+    const c = r.checks.find((x) => x.id === 'robots')!
+    expect(c.status).toBe('fail')
+    expect(c.detail).toContain('OAI-SearchBot at /jewelers/')
+    expect(c.detail).not.toContain('GPTBot')
+    expect(c.fix).toContain('training policy')
+  })
+
+  it('missing llms.txt and absent FAQ text are informational, not required fixes', async () => {
+    const r = await runAudit({ base_url: 'https://b.test' }, { fetcher: fakeWeb({ 'https://b.test/': { body: '<html><body><h1>Business</h1></body></html>' } }).fetcher })
+    expect(r.checks.find((c) => c.id === 'llms_txt')).toMatchObject({ status: 'info' })
+    expect(r.checks.find((c) => c.id === 'schema_faq')).toMatchObject({ status: 'info' })
+    const site = { id: 1, name: 'B', base_url: 'https://b.test', platform: 'wordpress', host: null, campaign: 'jewelers' }
+    expect(buildFixes(site, r.checks, r.pages, r.sitemapUrls).some((f) => ['llms_txt', 'schema_faq', 'crawler_policy'].includes(f.check_id))).toBe(false)
+    expect(contentDrafts(site, null, [{ name: 'Competitor', count: 1 }])).toEqual([])
   })
 
   it('PageSpeed: uses the key when set and reports Google\'s score', async () => {
@@ -109,14 +130,14 @@ describe('buildFixes', () => {
   it('non-WordPress sites get copy-paste files instead of WordPress buttons', () => {
     const fixes = buildFixes(
       { id: 2, name: 'Builders', base_url: 'https://b.lovable.app', platform: 'lovable', host: 'lovable', campaign: 'builders' },
-      [{ id: 'llms_txt', label: 'llms.txt', status: 'warn', detail: 'none' }],
+      [{ id: 'schema_faq', label: 'FAQ schema', status: 'warn', detail: 'Visible FAQ text has no markup', page: '/' }],
       { '/': { url: 'https://b.lovable.app/', title: 'TapDash | Builders', description: 'Pay for builders', canonical: null, h1: ['x'], schemaTypes: [], monthlyPrice: null, wordCount: 900 } },
       null,
     )
     expect(fixes[0].action.type).toBe('copy_file')
     if (fixes[0].action.type === 'copy_file') {
-      expect(fixes[0].action.content).toContain('# TapDash | Builders')
-      expect(fixes[0].action.where).toContain('Lovable')
+      expect(fixes[0].action.content).toContain('FAQPage')
+      expect(fixes[0].action.where).toContain('application/ld+json')
     }
   })
 })
