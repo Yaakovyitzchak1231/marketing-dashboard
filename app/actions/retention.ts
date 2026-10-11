@@ -5,7 +5,7 @@
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
-import { forgetContact, RetentionError, retentionSweep, setRetentionPolicy, type RetentionPolicyRow } from '@/lib/retention/store'
+import { forgetContact, RetentionError, setRetentionPolicy, type RetentionPolicyRow } from '@/lib/retention/store'
 
 const ME = 'owner'
 
@@ -37,18 +37,6 @@ export async function forgetContactAction(input: { contact_id: number; confirm: 
     const result = await forgetContact(db, ME, input)
     revalidatePath('/leads')
     return { ok: true, suppressed: result.suppressed }
-  } catch (e) {
-    return fail(e)
-  }
-}
-
-export async function runRetentionSweepAction(): Promise<{ ok: true; total_deleted: number } | Fail> {
-  const db = getDb()
-  if (!db) return NOT_CONNECTED
-  try {
-    const result = await retentionSweep(db, ME)
-    revalidatePath('/settings')
-    return { ok: true, total_deleted: result.total_deleted }
   } catch (e) {
     return fail(e)
   }

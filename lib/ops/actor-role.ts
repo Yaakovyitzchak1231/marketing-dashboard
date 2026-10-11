@@ -1,55 +1,111 @@
 /**
- * Role gate for ops that change data (Phase 2 review, Viktor + Hermes).
+ * Role gate for ops API keys minted for a PERSON (Phase 2 review, Viktor + Hermes).
  *
- * Agents (kind 'agent', 'system') carry no dashboard role (lp.actors.role is
- * humans-only, migration 0029) and keep working as before. But an ops key can
- * also be minted for a HUMAN actor (lp.agent_keys.actor_id), and then the key
- * must not do more than that person can do in the dashboard: a Viewer's key gets
- * 403 on every op below, an Editor's key on the owner-only ones. A human row
- * that is inactive or has no role is refused too (fails closed).
+ * Deny by default. Agents (kind 'agent') and the runner ('system') carry no
+ * dashboard role (lp.actors.role is humans-only, migration 0029) and are not
+ * gated here: they keep working exactly as before, and the ops that need more
+ * (merge, forget, retention, jobs, ...) still check the actor inside the op.
  *
- * The minimum roles mirror the dashboard's server actions (lib/auth/act.ts
- * actorFor): settings-type changes (fields, scoring, tag renames/merges/styles)
- * need owner; everything else editor. Merge, forget, retention and the Instantly
- * reconcile already require the 'owner' or 'system' actor inside their own ops.
+ * But an ops key can also be minted for a HUMAN actor (lp.agent_keys.actor_id),
+ * and then the key must not do more than that person can do in the dashboard:
+ *  - a Viewer's key may run only the small read-only allowlist VIEWER_OPS;
+ *  - an Editor's key may run every op except the owner-only ones (OWNER_OPS);
+ *  - an Owner's key may run everything.
+ * Any op not on either list (including ops added later) therefore needs Editor,
+ * so a new write op is never open to a Viewer by accident. A human row that is
+ * inactive or has no role is refused (fails closed).
+ *
+ * OWNER_OPS mirror the dashboard's owner-only server actions (actorFor('owner')
+ * in app/actions: fields, scoring, tag renames/merges/styles, integrations,
+ * jobs, merge, retention, settings).
  */
 import type { Queryable } from '../db/types'
 import { OpsError } from './core'
 
-type MinRole = 'editor' | 'owner'
+export type OpRole = 'viewer' | 'editor' | 'owner'
 
-export const OP_MIN_ROLE: Record<string, MinRole> = {
-  // custom fields (settings)
-  define_field: 'owner', update_field: 'owner', archive_field: 'owner',
-  // scoring (settings)
-  upsert_score_model: 'owner', recompute_scores: 'owner',
-  // tags: renaming/merging/styling is settings; tagging a lead is editing it
-  rename_tag: 'owner', merge_tags: 'owner', set_tag_style: 'owner', add_tag: 'editor', remove_tag: 'editor',
-  // imports, lead files
-  import_csv: 'editor', lead_files_add: 'editor', lead_files_remove: 'editor',
-  // segments, lists, traits, campaign sources
-  create_segment: 'editor', update_segment: 'editor', archive_segment: 'editor',
-  segment_add_members: 'editor', segment_remove_members: 'editor', segment_snapshot: 'editor',
-  segment_from_text: 'editor',
-  define_trait: 'editor', archive_trait: 'editor', recompute_traits: 'editor',
-  campaign_add_from_segment: 'editor',
+/** Read-only ops a Viewer's key may run. Nothing here changes data. */
+export const VIEWER_OPS: ReadonlySet<string> = new Set([
+  'whoami', 'list_actors',
+  'list_tasks', 'get_task', 'list_locks', 'recent_events',
+  'get_approval', 'get_instantly_action',
+  'memory_get', 'memory_search', 'inbox', 'feed',
+  'list_rule_sets', 'get_rule_set', 'lead_readiness',
+  'page_comments', 'page_comment_get',
+  'list_campaigns', 'get_campaign', 'list_campaign_statuses', 'list_campaign_leads', 'get_campaign_lead',
+  'entity_history', 'recent_changes', 'list_fields',
+  'is_suppressed', 'list_suppressions',
+  'list_settings', 'get_setting', 'secret_status',
+  'list_integrations', 'get_integration', 'latest_integration_metrics',
+  'campaign_for_newsletter_list', 'campaign_for_utm_campaign',
+  'list_jobs', 'get_job', 'job_runs',
+  'recent_lead_events', 'list_event_types',
+  'get_campaign_profile', 'list_profile_items', 'list_pools', 'sources_health',
+  'list_score_models', 'get_score_model', 'lead_scores',
+  'list_tags', 'tag_trends', 'merge_candidates',
+  'list_retention_policies', 'retention_preview',
+  'list_segments', 'get_segment', 'segment_preview', 'segment_members', 'segment_stats',
+  'lead_profile', 'list_traits', 'get_trait', 'trait_preview',
+])
+
+/** Ops only an Owner's key may run (an Editor's key gets 403). */
+export const OWNER_OPS: ReadonlySet<string> = new Set([
+  // custom fields, scoring, tag renames/merges/styles (settings)
+  'define_field', 'update_field', 'archive_field',
+  'upsert_score_model', 'recompute_scores',
+  'rename_tag', 'merge_tags', 'set_tag_style',
+  // settings, integrations, jobs
+  'put_setting',
+  'put_integration', 'report_integration_health', 'put_integration_snapshots',
+  'put_job', 'set_job_enabled', 'run_job_now', 'claim_jobs', 'finish_job_run', 'reap_stale_jobs',
+  'instantly_reconcile_run',
+  // merge, delete-a-person, retention
+  'merge', 'forget_contact', 'set_retention_policy', 'retention_sweep',
+])
+
+/** The role a human's key needs for `op`: Viewer for the read allowlist, Owner for OWNER_OPS, else Editor. */
+export function requiredRole(op: string): OpRole {
+  if (VIEWER_OPS.has(op)) return 'viewer'
+  if (OWNER_OPS.has(op)) return 'owner'
+  return 'editor'
 }
 
 const RANK: Record<string, number> = { viewer: 0, editor: 1, owner: 2 }
 
-/** Throws OpsError 403 when `actor` is a human whose role is below what `op` needs. */
-export async function checkOpRole(q: Queryable, actor: string, op: string): Promise<void> {
-  const min = OP_MIN_ROLE[op]
-  if (!min) return
+type ActorRow = { kind: string; role: string | null; active: boolean; has_role_col: boolean }
+
+async function readActor(q: Queryable, actor: string): Promise<ActorRow | undefined> {
   // to_jsonb(a)->>'role' reads the column without failing on a database where
   // migration 0029 (which adds it) has not run yet; there the only human is the owner.
-  const row = (await q.query<{ kind: string; role: string | null; active: boolean; has_role_col: boolean }>(
+  return (await q.query<ActorRow>(
     `select a.kind, a.active, to_jsonb(a)->>'role' as role, to_jsonb(a) ? 'role' as has_role_col from lp.actors a where a.id = $1`,
     [actor],
   )).rows[0]
+}
+
+/** Throws OpsError 403 when `actor` is a human whose role is below what `op` needs. */
+export async function checkOpRole(q: Queryable, actor: string, op: string): Promise<void> {
+  const min = requiredRole(op)
+  const row = await readActor(q, actor)
   if (!row || row.kind !== 'human' || !row.has_role_col) return
   const rank = row.role != null ? RANK[row.role] : undefined
   if (!row.active || rank === undefined || rank < RANK[min]) {
     throw new OpsError(`${op} needs ${min} access; this key belongs to a ${row.active ? (row.role ?? 'no-role') : 'deactivated'} account.`, 403)
   }
+}
+
+/**
+ * True when `actor` is an Owner: the built-in 'owner' actor, or any active human
+ * whose role is 'owner' (a second human Owner). Replaces literal actor === 'owner'
+ * checks in the owner-only ops (merge, forget, retention).
+ */
+export async function isOwnerActor(q: Queryable, actor: string): Promise<boolean> {
+  if (actor === 'owner') return true
+  const row = await readActor(q, actor)
+  return !!row && row.kind === 'human' && row.active && row.has_role_col && row.role === 'owner'
+}
+
+/** Throws OpsError 403 unless `actor` is an Owner (see isOwnerActor). */
+export async function requireOwnerActor(q: Queryable, actor: string, message: string): Promise<void> {
+  if (!(await isOwnerActor(q, actor))) throw new OpsError(message, 403)
 }

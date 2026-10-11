@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { createTestDb } from './helpers/pglite-db'
-import { runOp } from '@/lib/ops/dispatch'
-import { OP_MIN_ROLE } from '@/lib/ops/actor-role'
+import { OPS, runOp } from '@/lib/ops/dispatch'
+import { VIEWER_OPS } from '@/lib/ops/actor-role'
 import { createCampaign } from '@/lib/campaigns/store'
 import { parseCampaignPatch } from '@/lib/campaigns/types'
 
@@ -36,7 +36,7 @@ describe('review fix: /api/ops write ops respect a human key-holder\'s role', ()
   }
 
   it('a Viewer\'s key gets 403 on every gated write op (import_csv, recompute_scores, rename_tag, merge_tags, campaign_add_from_segment, ...)', async () => {
-    for (const op of Object.keys(OP_MIN_ROLE)) {
+    for (const op of Object.keys(OPS).filter((o) => !VIEWER_OPS.has(o))) {
       expect([op, await status('vera', op, {})]).toEqual([op, 403])
     }
     // A deactivated account is refused too.
