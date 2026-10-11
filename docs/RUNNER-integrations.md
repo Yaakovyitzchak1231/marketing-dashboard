@@ -42,9 +42,13 @@ MINIFLUX_API_KEY=
 CHANGEDETECTION_API_URL=  # optional; defaults to the "changedetection" integration's api_url
 CHANGEDETECTION_API_KEY=
 
-# Umami (Settings -> API keys) -- x-umami-api-key header
+# Umami -- set ONE auth option. Self-hosted Umami (Yaakov's OVH box) needs Bearer;
+# it answers the Cloud-style x-umami-api-key header with 401.
 UMAMI_API_URL=            # optional; defaults to the "umami" integration's api_url
-UMAMI_API_KEY=
+UMAMI_API_TOKEN=          # self-hosted: login token (POST /api/auth/login -> token), sent as Authorization: Bearer
+UMAMI_USERNAME=           # self-hosted alternative: the handler logs in each run and uses the token
+UMAMI_PASSWORD=
+UMAMI_API_KEY=            # Umami Cloud only: API key, sent as x-umami-api-key
 UMAMI_WEBSITE_ID=         # the website to read stats for (none exists until a site is set up in Umami)
 ```
 

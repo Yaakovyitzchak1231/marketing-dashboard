@@ -3,19 +3,25 @@
 // campaign value to a dashboard campaign via lp.campaign_profiles.utm.campaign
 // (campaign_for_utm_campaign).
 // Env: UMAMI_API_URL (falls back to the integration's api_url),
-// UMAMI_API_KEY (an Umami API key, header x-umami-api-key),
 // UMAMI_WEBSITE_ID (the website to read stats for -- Umami needs at least one
-// website set up and the tracker reachable before this returns real numbers).
+// website set up and the tracker reachable before this returns real numbers),
+// and ONE way to authenticate, tried in this order:
+//   UMAMI_API_TOKEN      self-hosted Umami: a login token, sent as Authorization: Bearer
+//   UMAMI_USERNAME + UMAMI_PASSWORD  self-hosted: the handler logs in (POST /api/auth/login)
+//                        each run and uses the returned token as Bearer
+//   UMAMI_API_KEY        Umami Cloud: an API key, sent as x-umami-api-key
+// (Self-hosted Umami answers x-umami-api-key with 401 -- found on Yaakov's OVH box, Oct 11.)
 export const kind = 'integration_umami'
 
 const HOUR_MS = 60 * 60 * 1000
 
 export async function handle(ctx) {
   const integrationId = (ctx.payload && ctx.payload.integration_id) || 'umami'
-  const apiKey = process.env.UMAMI_API_KEY
-  const websiteId = process.env.UMAMI_WEBSITE_ID
-  if (!apiKey || !websiteId) {
-    ctx.log('UMAMI_API_KEY / UMAMI_WEBSITE_ID not set in the runner env -- nothing read')
+  const env = process.env
+  const websiteId = env.UMAMI_WEBSITE_ID
+  const hasAuth = Boolean(env.UMAMI_API_TOKEN || (env.UMAMI_USERNAME && env.UMAMI_PASSWORD) || env.UMAMI_API_KEY)
+  if (!hasAuth || !websiteId) {
+    ctx.log('Umami auth (UMAMI_API_TOKEN, UMAMI_USERNAME+UMAMI_PASSWORD or UMAMI_API_KEY) / UMAMI_WEBSITE_ID not set in the runner env -- nothing read')
     return { ok: false, reason: 'not configured' }
   }
   let baseUrl = process.env.UMAMI_API_URL
@@ -26,11 +32,11 @@ export async function handle(ctx) {
   if (!baseUrl) throw new Error('no Umami API URL (set UMAMI_API_URL or the integration\'s api_url)')
   baseUrl = baseUrl.replace(/\/+$/, '')
 
-  const headers = { 'x-umami-api-key': apiKey }
   const controller = new AbortController()
   const onAbort = () => controller.abort(new Error('job timeout'))
   ctx.signal.addEventListener('abort', onAbort, { once: true })
   try {
+    const headers = await umamiAuthHeaders(baseUrl, env, controller.signal)
     const now = Date.now()
     const since24h = now - 24 * HOUR_MS
     const snapshots = []
@@ -75,4 +81,22 @@ export async function handle(ctx) {
   } finally {
     ctx.signal.removeEventListener('abort', onAbort)
   }
+}
+
+/** The auth header for this Umami: Bearer for self-hosted (a given token, or one from logging in), x-umami-api-key for Umami Cloud. Never logs a secret. */
+export async function umamiAuthHeaders(baseUrl, env, signal) {
+  if (env.UMAMI_API_TOKEN) return { authorization: `Bearer ${env.UMAMI_API_TOKEN}` }
+  if (env.UMAMI_USERNAME && env.UMAMI_PASSWORD) {
+    const res = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: env.UMAMI_USERNAME, password: env.UMAMI_PASSWORD }),
+      signal,
+    })
+    if (!res.ok) throw new Error(`Umami login -> HTTP ${res.status}`)
+    const body = await res.json()
+    if (!body || typeof body.token !== 'string' || !body.token) throw new Error('Umami login returned no token')
+    return { authorization: `Bearer ${body.token}` }
+  }
+  return { 'x-umami-api-key': env.UMAMI_API_KEY }
 }
