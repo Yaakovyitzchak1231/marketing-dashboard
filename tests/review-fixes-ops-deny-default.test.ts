@@ -3,7 +3,7 @@ vi.mock('server-only', () => ({}))
 import { createTestDb } from './helpers/pglite-db'
 import { addCompany } from './helpers/lead-fixtures'
 import { OPS, runOp } from '@/lib/ops/dispatch'
-import { OWNER_OPS, VIEWER_OPS, isOwnerActor, requiredRole } from '@/lib/ops/actor-role'
+import { EDITOR_OPS_NAMED, OWNER_OPS, VIEWER_OPS, isOwnerActor, requiredRole } from '@/lib/ops/actor-role'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
@@ -37,12 +37,20 @@ describe('review fix: ops keys for a person are deny-by-default by role', () => 
   }
 
   it('every op on the allow/owner lists is a real op, and an unlisted op needs Editor', () => {
-    const names = new Set(Object.keys(OPS))
+    // count_tagged / change_tag ship in #87 (roles); listed ahead so person keys keep them after the merge.
+    const names = new Set([...Object.keys(OPS), 'count_tagged', 'change_tag'])
     for (const op of VIEWER_OPS) expect([op, names.has(op)]).toEqual([op, true])
     for (const op of OWNER_OPS) expect([op, names.has(op)]).toEqual([op, true])
+    for (const op of EDITOR_OPS_NAMED) expect([op, names.has(op)]).toEqual([op, true])
     for (const op of VIEWER_OPS) expect(OWNER_OPS.has(op)).toBe(false)
     expect(requiredRole('suppress')).toBe('editor')
     expect(requiredRole('some_op_added_next_month')).toBe('editor')
+    // #87's tag ops (Viktor, 4:30 PM): count_tagged viewer, change_tag editor, rename/merge owner.
+    expect(requiredRole('count_tagged')).toBe('viewer')
+    expect(requiredRole('change_tag')).toBe('editor')
+    expect(requiredRole('rename_tag')).toBe('owner')
+    expect(requiredRole('merge_tags')).toBe('owner')
+    for (const op of EDITOR_OPS_NAMED) expect(requiredRole(op)).toBe('editor')
   })
 
   it("a Viewer's key is refused (403) on suppress, unsuppress and update_entity, and on every op off the read-only list", async () => {

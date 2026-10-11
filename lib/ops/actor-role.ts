@@ -43,6 +43,7 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'get_campaign_profile', 'list_profile_items', 'list_pools', 'sources_health',
   'list_score_models', 'get_score_model', 'lead_scores',
   'list_tags', 'tag_trends', 'merge_candidates',
+  'count_tagged', // #87: counts leads with a tag before a change (read-only)
   'list_retention_policies', 'retention_preview',
   'list_segments', 'get_segment', 'segment_preview', 'segment_members', 'segment_stats',
   'lead_profile', 'list_traits', 'get_trait', 'trait_preview',
@@ -62,6 +63,12 @@ export const OWNER_OPS: ReadonlySet<string> = new Set([
   // merge, delete-a-person, retention
   'merge', 'forget_contact', 'set_retention_policy', 'retention_sweep',
 ])
+
+/**
+ * Editor ops named explicitly for clarity (any op not listed above already needs
+ * Editor). change_tag arrives with #87 (tag one lead / selected leads / a segment).
+ */
+export const EDITOR_OPS_NAMED: ReadonlySet<string> = new Set(['change_tag', 'add_tag', 'remove_tag', 'suppress', 'unsuppress', 'update_entity'])
 
 /** The role a human's key needs for `op`: Viewer for the read allowlist, Owner for OWNER_OPS, else Editor. */
 export function requiredRole(op: string): OpRole {
