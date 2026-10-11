@@ -10,6 +10,8 @@ export const IDLE_MS = 15 * 60_000
 export interface LiveChange {
   unread: number
   last_event_id: number | null
+  /** Newest stored Instantly reply / interested / meeting event. */
+  last_reply_id: number | null
   first: boolean
 }
 type Listener = (c: LiveChange) => void

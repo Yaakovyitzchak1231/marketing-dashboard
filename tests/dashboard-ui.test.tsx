@@ -1,12 +1,24 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
 import type { DashboardData } from '@/lib/dashboard/types'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { bestStep, sortCampaigns } from '@/components/dashboard/CampaignTable'
+import { AutoRefresh } from '@/components/ops/AutoRefresh'
+import type { LiveChange } from '@/components/ops/live'
+import { refreshCount } from './mock-navigation'
+
+const live = vi.hoisted(() => ({ listener: null as ((c: LiveChange) => void) | null, connected: true }))
+vi.mock('@/components/ops/live', () => ({
+  subscribeLive: (l: (c: LiveChange) => void) => {
+    live.listener = l
+    return () => { live.listener = null }
+  },
+  liveConnected: () => live.connected,
+}))
 
 const fixture = (): DashboardData =>
   JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/dashboard.sample.json'), 'utf8'))
@@ -140,5 +152,48 @@ describe('campaign helpers', () => {
     expect(bestStep(steps)?.step).toBe(1)
     expect(bestStep(steps.slice(0, 1))).toBeNull()
     expect(bestStep(steps.map((s) => ({ ...s, sent: 10 })))).toBeNull()
+  })
+})
+
+describe('AutoRefresh on the campaign performance page', () => {
+  const change = (last_reply_id: number | null, first = false): LiveChange => ({ unread: 0, last_event_id: 1, last_reply_id, first })
+  afterEach(() => {
+    vi.useRealTimers()
+    live.connected = true
+  })
+
+  it('on="reply" re-reads only when a new reply is stored, never for other activity', () => {
+    vi.useFakeTimers()
+    render(<AutoRefresh on="reply" poll="always" seconds={300} />)
+    act(() => live.listener!(change(7, true)))
+    act(() => live.listener!(change(7)))
+    act(() => { vi.advanceTimersByTime(5000) })
+    expect(refreshCount()).toBe(0)
+    act(() => live.listener!(change(8)))
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(refreshCount()).toBe(1)
+  })
+
+  it('a reply that lands while the stream reconnects still triggers a re-read', () => {
+    vi.useFakeTimers()
+    render(<AutoRefresh on="reply" poll="always" seconds={300} />)
+    act(() => live.listener!(change(7, true)))
+    act(() => live.listener!(change(9, true)))
+    act(() => { vi.advanceTimersByTime(2000) })
+    expect(refreshCount()).toBe(1)
+  })
+
+  it('poll="always" re-reads on the timer even with the stream connected; the default only as a fallback', () => {
+    vi.useFakeTimers()
+    const { unmount } = render(<AutoRefresh on="reply" poll="always" seconds={300} />)
+    act(() => { vi.advanceTimersByTime(300_000) })
+    expect(refreshCount()).toBe(1)
+    unmount()
+    render(<AutoRefresh seconds={30} />)
+    act(() => { vi.advanceTimersByTime(30_000) })
+    expect(refreshCount()).toBe(1)
+    live.connected = false
+    act(() => { vi.advanceTimersByTime(30_000) })
+    expect(refreshCount()).toBe(2)
   })
 })

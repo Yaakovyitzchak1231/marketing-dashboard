@@ -55,7 +55,7 @@ const CONTACT_STATUS_FOR_EVENT: Record<string, string> = {
   lead_unsubscribed: 'do-not-contact',
 }
 
-const REPLY_EVENTS = new Set(['reply_received', 'lead_interested', 'lead_meeting_booked'])
+export const REPLY_EVENTS = new Set(['reply_received', 'lead_interested', 'lead_meeting_booked'])
 
 export function externalId(e: InstantlyEvent): string {
   const key = [e.event_type, normalizeEmail(e.lead_email) ?? '', e.campaign_id ?? '', e.timestamp ?? '', e.email_id ?? '', e.step ?? '', e.variant ?? ''].join('|')

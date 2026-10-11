@@ -14,13 +14,13 @@ function client(fetchImpl: typeof fetch, extra: Partial<ConstructorParameters<ty
 beforeEach(() => clearInstantlyMemo())
 
 describe('InstantlyClient', () => {
-  it('sends Bearer auth to the v2 base URL and asks Next to cache GETs for 5 minutes', async () => {
+  it('sends Bearer auth to the v2 base URL and asks Next to cache GETs for 5 minutes under the instantly tag', async () => {
     const f = vi.fn(async (_u: RequestInfo | URL, _i?: RequestInit) => ok({ a: 1 }))
     await client(f as unknown as typeof fetch).get('/campaigns/analytics', { start_date: '2026-10-01', id: undefined })
     const [url, init] = f.mock.calls[0]
     expect(String(url)).toBe('https://api.instantly.ai/api/v2/campaigns/analytics?start_date=2026-10-01')
     expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${KEY}`)
-    expect((init as { next?: { revalidate: number } }).next).toEqual({ revalidate: 300 })
+    expect((init as { next?: { revalidate: number } }).next).toEqual({ revalidate: 300, tags: ['instantly'] })
   })
 
   it('follows next_starting_after across pages until the cursor runs out', async () => {
@@ -114,6 +114,22 @@ describe('InstantlyClient', () => {
     t = 2000
     await c.get('/accounts')
     expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it('memoises GETs for at most 30 s (the shared Next cache covers the rest); POSTs for the full TTL', async () => {
+    let t = 0
+    const f = vi.fn(async () => ok({ items: [] }))
+    const c = client(f as unknown as typeof fetch, { memoTtlMs: 300_000, now: () => t })
+    await c.get('/accounts')
+    await c.post('/leads/list', { contacts: ['a@x.com'] })
+    expect(f).toHaveBeenCalledTimes(2)
+    t = 31_000
+    await c.get('/accounts')
+    await c.post('/leads/list', { contacts: ['a@x.com'] })
+    expect(f).toHaveBeenCalledTimes(3)
+    clearInstantlyMemo()
+    await c.post('/leads/list', { contacts: ['a@x.com'] })
+    expect(f).toHaveBeenCalledTimes(4)
   })
 
   it('joins array query values with commas and drops empty values', () => {

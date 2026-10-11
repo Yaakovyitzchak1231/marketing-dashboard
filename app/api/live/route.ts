@@ -1,12 +1,13 @@
 /**
  * Live updates for the signed-in person (the login gate in middleware.ts protects this route).
  * Server-Sent Events: `event: change` whenever anything new lands (activity, notifications,
- * delivery status), carrying {unread, last_event_id}. The page then re-reads its data.
+ * delivery status), carrying {unread, last_event_id, last_reply_id}. The page then re-reads its data.
  * Closes after ~50 s with retry: 1000 so the browser reconnects at once. While a page is open,
  * it also pushes anything due to agents (retries need no cron).
  */
 import { getDb } from '@/lib/db'
 import { dispatchDue } from '@/lib/notify/deliver'
+import { REPLY_EVENTS } from '@/lib/webhooks/instantly'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -31,17 +32,18 @@ export async function GET(req: Request) {
       let lastDispatch = 0
       try {
         while (Date.now() - started < WINDOW_MS && !req.signal.aborted) {
-          const { rows } = await db.query<{ ev: number | null; unread: number; n: number | null; d: string | null }>(
+          const { rows } = await db.query<{ ev: number | null; unread: number; n: number | null; d: string | null; rp: number | null }>(
             `select (select max(id) from lp.events) as ev,
                     (select count(*)::int from lp.notifications where recipient = $1 and read_at is null) as unread,
                     (select max(id) from lp.notifications) as n,
-                    (select max(updated_at)::text from lp.deliveries) as d`,
-            [ME],
+                    (select max(updated_at)::text from lp.deliveries) as d,
+                    (select max(id) from lp.campaign_touches where event_type = any($2::text[])) as rp`,
+            [ME, [...REPLY_EVENTS]],
           )
           const r = rows[0]
-          const sig = `${r.ev}|${r.unread}|${r.n}|${r.d}`
+          const sig = `${r.ev}|${r.unread}|${r.n}|${r.d}|${r.rp}`
           if (sig !== last) {
-            send(`event: change\ndata: ${JSON.stringify({ unread: r.unread, last_event_id: r.ev, first: last === '' })}\n\n`)
+            send(`event: change\ndata: ${JSON.stringify({ unread: r.unread, last_event_id: r.ev, last_reply_id: r.rp, first: last === '' })}\n\n`)
             last = sig
           }
           if (Date.now() - lastDispatch >= 10_000) {

@@ -12,9 +12,10 @@ import { vi, beforeEach } from 'vitest'
  * asserting what it wrote. `toString()` returning a hardcoded '' would make
  * every such test pass for the wrong reason.
  */
-const { pushMock, replaceMock, pathnameMock, store } = vi.hoisted(() => ({
+const { pushMock, replaceMock, refreshMock, pathnameMock, store } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
+  refreshMock: vi.fn(),
   pathnameMock: vi.fn(),
   store: { params: new URLSearchParams() },
 }))
@@ -32,10 +33,16 @@ export function replaceCalls(): string[] {
   return replaceMock.mock.calls.map((call) => String(call[0]))
 }
 
+/** How many times router.refresh() was called since the last test started. */
+export function refreshCount(): number {
+  return refreshMock.mock.calls.length
+}
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: pushMock,
     replace: replaceMock,
+    refresh: refreshMock,
   }),
   usePathname: () => pathnameMock(),
   useSearchParams: () => ({
@@ -47,6 +54,7 @@ vi.mock('next/navigation', () => ({
 beforeEach(() => {
   pushMock.mockClear()
   replaceMock.mockClear()
+  refreshMock.mockClear()
   pathnameMock.mockReturnValue('/')
   store.params = new URLSearchParams()
 })

@@ -23,7 +23,10 @@ browser ──login (Supabase email + password)──▶ middleware.ts (allow-li
 - **Live data, server-side only.** The Next.js server calls Instantly directly.
   The API key never reaches the browser. Responses are cached for about five
   minutes (Next `fetch` revalidation), so the page is fast and Instantly's rate
-  limits are respected; numbers are at most a few minutes old.
+  limits are respected; numbers are at most a few minutes old. While the
+  campaign performance page is open it re-reads every five minutes, and a new
+  reply arriving through the Instantly webhook clears the cache and refreshes
+  it at once. The Overview refreshes itself whenever the lead database changes.
 - **Read-only.** The dashboard only reads from Instantly. It never creates,
   edits, pauses or sends anything.
 - **Honest numbers.** `null` means "Instantly didn't report it" and is shown as

@@ -9,6 +9,9 @@ let contactId: number
 let companyId: number
 
 vi.mock('@/lib/db', () => ({ getDb: () => db }))
+vi.mock('server-only', () => ({}))
+const { revalidateTag } = vi.hoisted(() => ({ revalidateTag: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidateTag }))
 
 beforeAll(async () => {
   db = await createTestDb()
@@ -98,6 +101,20 @@ describe('POST /api/webhooks/instantly', () => {
     expect(j.results[0].stored).toBe(true)
     const bad = await call({ 'x-webhook-secret': SECRET }, { nope: 1 })
     expect(bad.status).toBe(400)
+    vi.unstubAllEnvs()
+  })
+  it('a newly stored reply clears the cached Instantly reads; a send or a duplicate does not', async () => {
+    vi.stubEnv('INSTANTLY_WEBHOOK_SECRET', SECRET)
+    const auth = { authorization: `Bearer ${SECRET}` }
+    revalidateTag.mockClear()
+    await call(auth, { ...base, event_type: 'email_sent', lead_email: 'owner@gemco.example', timestamp: '2026-10-09T09:00:00Z', step: 2 })
+    expect(revalidateTag).not.toHaveBeenCalled()
+    const reply = { ...base, event_type: 'reply_received', lead_email: 'owner@gemco.example', timestamp: '2026-10-09T10:00:00Z' }
+    expect((await call(auth, reply)).status).toBe(200)
+    expect(revalidateTag).toHaveBeenCalledWith('instantly')
+    revalidateTag.mockClear()
+    await call(auth, reply)
+    expect(revalidateTag).not.toHaveBeenCalled()
     vi.unstubAllEnvs()
   })
 })

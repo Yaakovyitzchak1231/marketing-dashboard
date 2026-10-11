@@ -7,11 +7,16 @@
  * header on the webhook: `Authorization: Bearer <secret>` (or `x-webhook-secret`).
  * The login gate lets /api/webhooks/* through; this route rejects anything
  * without the secret.
+ *
+ * A newly stored reply clears the cached Instantly reads, so the campaign
+ * performance page shows it on its next refresh instead of up to 5 minutes later.
  */
+import { revalidateTag } from 'next/cache'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
+import { INSTANTLY_CACHE_TAG, clearInstantlyMemo } from '@/lib/instantly/client'
 import { secretMatches } from '@/lib/ops/auth'
-import { ingestInstantlyEvent, type InstantlyEvent } from '@/lib/webhooks/instantly'
+import { REPLY_EVENTS, ingestInstantlyEvent, type InstantlyEvent } from '@/lib/webhooks/instantly'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +47,14 @@ export async function POST(req: NextRequest) {
   try {
     const results = []
     for (const e of events.slice(0, 100)) results.push(await ingestInstantlyEvent(db, e))
+    if (results.some((r) => r.stored && REPLY_EVENTS.has(r.event_type))) {
+      clearInstantlyMemo()
+      try {
+        revalidateTag(INSTANTLY_CACHE_TAG)
+      } catch (e) {
+        console.error('instantly cache refresh failed', (e as Error).message)
+      }
+    }
     return NextResponse.json({ ok: true, results })
   } catch (e) {
     const msg = (e as Error).message
