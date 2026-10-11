@@ -583,7 +583,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
                     <button type="button" onClick={() => goTo(p)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate text-[13px] text-ink">{p.body.trim() ? p.body : <em className="text-ink-faint">Empty draft</em>}</span>
                       <span className="block truncate text-[11px] text-ink-faint">
-                        {pinLabel(p)} · to {p.recipient_name} · {when(p.updated_at)}
+                        {pinLabel(p)} · to {p.recipient_name} · <span suppressHydrationWarning>{when(p.updated_at)}</span>
                       </span>
                     </button>
                     <button
@@ -610,7 +610,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
                         <span className={`shrink-0 text-[11px] font-medium ${STATUS_CLS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
                       </span>
                       <span className="block truncate text-[11px] text-ink-faint">
-                        {pinLabel(p)} · to {p.recipient_name} · {when(p.sent_at)}
+                        {pinLabel(p)} · to {p.recipient_name} · <span suppressHydrationWarning>{when(p.sent_at)}</span>
                         {p.replies.length ? ` · ${p.replies.length} repl${p.replies.length === 1 ? 'y' : 'ies'}` : ''}
                       </span>
                     </button>
@@ -704,7 +704,7 @@ function Composer({
           </p>
           <p className={`text-[11px] font-medium ${STATUS_CLS[pin.status]}`}>
             {STATUS_LABEL[pin.status]}
-            {!isDraft ? <span className="font-normal text-ink-faint"> · to {pin.recipient_name} · {when(pin.sent_at)}{pin.delivery === 'failed' ? ' · delivery failed' : ''}</span> : null}
+            {!isDraft ? <span className="font-normal text-ink-faint"> · to {pin.recipient_name} · <span suppressHydrationWarning>{when(pin.sent_at)}</span>{pin.delivery === 'failed' ? ' · delivery failed' : ''}</span> : null}
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 rounded-md px-1.5 py-0.5 text-[16px] leading-none text-ink-muted hover:text-ink">
@@ -765,7 +765,7 @@ function Composer({
                 {pin.replies.map((r) => (
                   <li key={r.id} className={r.author_kind === 'agent' ? 'rounded-md bg-accent-soft px-2.5 py-2' : 'px-2.5'}>
                     <p className="text-[11px] text-ink-muted">
-                      <span className="font-medium text-ink">{r.author_name}</span> · {when(r.created_at)}
+                      <span className="font-medium text-ink">{r.author_name}</span> · <span suppressHydrationWarning>{when(r.created_at)}</span>
                     </p>
                     <p className="whitespace-pre-wrap text-[13px] text-ink">{r.body}</p>
                   </li>

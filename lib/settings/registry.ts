@@ -5,9 +5,20 @@
  * today). Adding a new setting is adding one entry here.
  */
 
-export type SettingGroup = 'Workspace' | 'Sending' | 'Verification' | 'AI' | 'Google' | 'Webhooks' | 'Integrations'
+export type SettingGroup = 'Workspace' | 'Email sending' | 'Sending' | 'Verification' | 'AI' | 'Google' | 'Webhooks' | 'Integrations'
 
-export const SETTING_GROUPS: SettingGroup[] = ['Workspace', 'Sending', 'Verification', 'AI', 'Google', 'Webhooks', 'Integrations']
+export const SETTING_GROUPS: SettingGroup[] = ['Workspace', 'Email sending', 'Sending', 'Verification', 'AI', 'Google', 'Webhooks', 'Integrations']
+
+/** One plain line under a group's heading on /settings, where the group needs explaining. */
+export const SETTING_GROUP_HELP: Partial<Record<SettingGroup, string>> = {
+  'Email sending':
+    'The dashboard emails a notice the moment something needs attention, like a new page comment or a task handed to an agent. It sends through a free Resend or Brevo account. Right now sending reads its settings from Vercel, shown under In use now. Until those are set, the emails wait, then go out once they are.',
+}
+
+export interface SettingOption {
+  value: string
+  label: string
+}
 
 export interface SettingSpec {
   key: string
@@ -19,6 +30,10 @@ export interface SettingSpec {
   help?: string
   placeholder?: string
   multiline?: boolean
+  /** A fixed set of choices: the field renders as a dropdown and only these values are accepted. */
+  options?: SettingOption[]
+  /** Not needed for the dashboard to work (shown as optional in the Needs setup list, not counted). */
+  optional?: boolean
   /** Returns an error message, or null when the value is fine. Non-secret fields only get this in the UI; secrets validate on their own shape (non-empty) only, since their real shape is the provider's business. */
   validate?: (value: string) => string | null
   /** Has a "Test" button on the settings page. Keyed the same as here so store/ops can look it up. */
@@ -55,6 +70,11 @@ function isSheetId(value: string): string | null {
   return /^[A-Za-z0-9_-]{20,100}$/.test(value.trim()) ? null : 'That does not look like a Google Sheet id (the long id in the sheet’s URL).'
 }
 
+export const MAIL_PROVIDER_OPTIONS: SettingOption[] = [
+  { value: 'resend', label: 'Resend' },
+  { value: 'brevo', label: 'Brevo' },
+]
+
 export const SETTINGS_REGISTRY: SettingSpec[] = [
   // ---------------------------------------------------------------- Workspace
   {
@@ -82,7 +102,7 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     group: 'Workspace',
     secret: false,
     placeholder: '21:00',
-    help: 'Default start of quiet hours (24-hour, workspace timezone). Individual campaigns can override this.',
+    help: 'No emails go out between these hours, in your timezone; a campaign can override.',
     validate: isHHMM,
   },
   {
@@ -91,8 +111,37 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     group: 'Workspace',
     secret: false,
     placeholder: '08:00',
-    help: 'Default end of quiet hours (24-hour, workspace timezone).',
+    help: 'No emails go out between these hours, in your timezone; a campaign can override.',
     validate: isHHMM,
+  },
+  // ------------------------------------------------------------ Email sending
+  {
+    key: 'mail.provider',
+    label: 'Mail provider',
+    group: 'Email sending',
+    secret: false,
+    envFallback: 'MAIL_PROVIDER',
+    options: MAIL_PROVIDER_OPTIONS,
+    help: 'The service that sends these emails. Pick the one you have an account with.',
+    validate: (v) => (MAIL_PROVIDER_OPTIONS.some((o) => o.value === v.trim().toLowerCase()) ? null : 'Pick Resend or Brevo.'),
+  },
+  {
+    key: 'mail.api_key',
+    label: 'Mail API key',
+    group: 'Email sending',
+    secret: true,
+    envFallback: 'MAIL_API_KEY',
+    help: 'The API key from your Resend or Brevo account (whichever you picked in Mail provider). Find it in that account under API Keys.',
+  },
+  {
+    key: 'mail.from',
+    label: 'Mail sender',
+    group: 'Email sending',
+    secret: false,
+    envFallback: 'MAIL_FROM',
+    placeholder: 'Dashboard <alerts@yourdomain.com>',
+    help: 'Who the emails say they are from. Use an address your Resend or Brevo account is allowed to send from.',
+    validate: nonEmpty,
   },
   // ------------------------------------------------------------------ Sending
   {
@@ -103,34 +152,6 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     envFallback: 'INSTANTLY_API_KEY',
     help: 'Reads campaigns, accounts and replies live from Instantly (all:read is enough).',
     testable: true,
-  },
-  {
-    key: 'mail.provider',
-    label: 'Mail provider',
-    group: 'Sending',
-    secret: false,
-    envFallback: 'MAIL_PROVIDER',
-    placeholder: 'resend or brevo',
-    help: 'Which free API sends notification mail (bounces, digests).',
-    validate: (v) => (['resend', 'brevo'].includes(v.trim().toLowerCase()) ? null : 'Use "resend" or "brevo".'),
-  },
-  {
-    key: 'mail.api_key',
-    label: 'Mail API key',
-    group: 'Sending',
-    secret: true,
-    envFallback: 'MAIL_API_KEY',
-    help: 'The API key for the mail provider above.',
-  },
-  {
-    key: 'mail.from',
-    label: 'Mail sender',
-    group: 'Sending',
-    secret: false,
-    envFallback: 'MAIL_FROM',
-    placeholder: 'Dashboard <alerts@example.com>',
-    help: 'The From line on notification mail.',
-    validate: nonEmpty,
   },
   {
     key: 'warmbly.url',
@@ -184,6 +205,7 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     group: 'AI',
     secret: true,
     envFallback: 'AI_API_KEY',
+    optional: true,
     help: 'Optional for a local Ollama; required for a hosted free tier.',
   },
   {

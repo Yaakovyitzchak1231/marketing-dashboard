@@ -42,8 +42,8 @@ export async function getAnalyticsOverview(c: InstantlyClient, w: DayWindow | nu
 }
 
 /** GET /campaigns/analytics/daily — all campaigns. Days with no activity are omitted by the API. */
-export async function getDailyAnalytics(c: InstantlyClient, w: { start: string; end: string }): Promise<ApiDailyRow[]> {
-  const rows = await c.get<ApiDailyRow[]>('/campaigns/analytics/daily', { start_date: w.start, end_date: w.end })
+export async function getDailyAnalytics(c: InstantlyClient, w: { start: string; end: string }, campaignId?: string): Promise<ApiDailyRow[]> {
+  const rows = await c.get<ApiDailyRow[]>('/campaigns/analytics/daily', { start_date: w.start, end_date: w.end, campaign_id: campaignId })
   if (!Array.isArray(rows)) throw new InstantlyError('Instantly returned daily analytics in an unexpected shape.', '/campaigns/analytics/daily', 200)
   return rows
 }

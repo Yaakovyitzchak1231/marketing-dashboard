@@ -20,6 +20,8 @@ export interface ApiCampaign {
     steps?: Array<{
       type?: string
       delay?: number
+      /** 'days' (default), 'hours' or 'minutes'. */
+      delay_unit?: string
       variants?: Array<{ subject?: string | null; body?: string; v_disabled?: boolean }>
     }>
   }>

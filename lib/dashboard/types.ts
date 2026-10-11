@@ -69,6 +69,40 @@ export interface CampaignRow {
   leadsTotal: number | null
   leadsRemaining: number | null // leads not yet contacted
   lifetime?: { counts: Counts; rates: Rates } | null // all-time totals (GET /campaigns/analytics with no dates)
+  /** Every sequence step (incl. upcoming) with dates, plus send days. See lib/dashboard/sequence.ts. */
+  plan?: SequencePlan | null
+}
+
+/** Campaign sequence plan (lib/dashboard/sequence.ts). */
+export interface PlannedStep {
+  step: number
+  /** Subject of the first enabled variant; null = same thread (follow-up). */
+  subject: string | null
+  variants: number
+  /** Days after a lead's first email that this step goes out (step 1 = 0). */
+  dayOffset: number
+  /** Emails sent for this step in the range (all variants); null = not reported. */
+  sent: number | null
+  /** 'sent' once any email for this step went out; 'upcoming' before that. */
+  status: 'sent' | 'upcoming'
+  /** First day this step went out or is scheduled to go out (YYYY-MM-DD). */
+  firstDate: string | null
+  /** Next day on or after today this step is scheduled for, if any. */
+  nextDate: string | null
+}
+
+export interface SendDay {
+  date: string
+  /** Emails sent that day, all steps. */
+  sent: number
+  /** Leads that got their first email that day. */
+  newLeads: number
+}
+
+export interface SequencePlan {
+  steps: PlannedStep[]
+  /** Days with any send, oldest first. null = daily numbers were not available. */
+  days: SendDay[] | null
 }
 
 export interface DailyPoint {

@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { listJobRuns, listJobs } from '@/lib/jobs/store'
+import { loadRunnerSignals, runnerLabel, runnerStatus, type RunnerStatus } from '@/lib/jobs/runner-status'
 import { Card, EmptyNote, Pill, SectionHeader, type PillTone } from '@/components/dashboard/primitives'
 import { saveJobAction, runJobNowAction, toggleJobAction } from '@/app/actions/jobs'
 
@@ -65,6 +66,8 @@ const STATUS_TONE: Record<string, PillTone> = {
   skipped: 'warn',
 }
 
+const RUNNER_TONE: Record<RunnerStatus['state'], PillTone> = { online: 'good', offline: 'warn', never: 'neutral' }
+
 export default async function JobsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams
   const error = one(sp.error)
@@ -83,7 +86,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     )
   }
 
-  const [jobs, runs, campaigns] = await Promise.all([listJobs(db), listJobRuns(db, { limit: 40 }), listCampaigns(db, {})])
+  const [jobs, runs, campaigns, runnerSignals] = await Promise.all([
+    listJobs(db),
+    listJobRuns(db, { limit: 40 }),
+    listCampaigns(db, {}),
+    loadRunnerSignals(db).catch(() => null),
+  ])
+  const now = new Date()
+  const runner: RunnerStatus | null = runnerSignals ? runnerStatus(runnerSignals, now) : null
   const campaignName = new Map(campaigns.map((c) => [c.id, c.name]))
   const runsByJob = new Map<string, typeof runs>()
   for (const r of runs) {
@@ -98,9 +108,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       <header className="mb-6">
         <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Jobs</h1>
         <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">
-          The background runner on the OVH server: what runs, on what schedule, and how its last run went. Not deployed yet &mdash;
-          this page works once Yaakov turns the runner on (docs/RUNNER.md).
+          The background runner on the OVH server: what runs, on what schedule, and how its last run went.
         </p>
+        <div className="mt-2">
+          {runner ? (
+            <Pill
+              tone={RUNNER_TONE[runner.state]}
+              title={runner.lastSeen ? `Last heartbeat ${abs(runner.lastSeen)}` : 'No heartbeat yet. See docs/RUNNER.md to start it.'}
+            >
+              {runnerLabel(runner, now)}
+            </Pill>
+          ) : (
+            <Pill tone="neutral">Runner status unavailable</Pill>
+          )}
+        </div>
       </header>
 
       {error ? (

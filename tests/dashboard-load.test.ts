@@ -52,6 +52,13 @@ describe('getDashboardData', () => {
     expect(d.totals.rates.replyRate).toBeCloseTo(10 / 705, 10)
     expect(d.totals.rates.openRate).toBeNull() // tracking off on every campaign that sent
 
+    // Sequence plan: every step of the listed sequence, from a per-campaign 60-day daily call.
+    const planCall = calls.find((c) => c.path === '/campaigns/analytics/daily' && c.query.get('campaign_id'))
+    expect(planCall?.query.get('end_date')).toBe('2026-10-08')
+    expect(planCall?.query.get('start_date')).toBe('2026-08-10')
+    const withPlan = d.campaigns.find((c) => c.plan && c.plan.steps.length >= 3)
+    expect(withPlan?.plan?.steps.map((s) => s.step)).toEqual([1, 2, 3])
+
     // Previous period: the 30 days before, for deltas.
     const prevCall = calls.find((c) => c.path === '/campaigns/analytics/overview' && c.query.get('start_date') === '2026-08-10')
     expect(prevCall?.query.get('end_date')).toBe('2026-09-08')

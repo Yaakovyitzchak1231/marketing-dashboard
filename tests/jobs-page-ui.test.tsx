@@ -93,4 +93,20 @@ describe('/jobs page', () => {
     render(jsx)
     expect(screen.getByText('bad schedule: minute: 60 is out of range')).toBeInTheDocument()
   })
+  it('shows real runner status from the heartbeat, not "Not deployed yet"', async () => {
+    const seen = new Date(Date.now() - 30_000)
+    holder.db = { query: async () => ({ rows: [{ actor_seen: seen, key_used: seen, runner: 'ovh-runner-1', run_at: null }] }) }
+    const { default: JobsPage } = await import('@/app/jobs/page')
+    render(await JobsPage({ searchParams: Promise.resolve({}) }))
+    expect(screen.getByText('Runner online (ovh-runner-1) · last seen just now')).toBeInTheDocument()
+    expect(screen.queryByText(/Not deployed yet/)).toBeNull()
+    expect(screen.queryByText(/Yaakov/)).toBeNull()
+  })
+
+  it('says the runner never connected when there is no heartbeat', async () => {
+    holder.db = { query: async () => ({ rows: [{ actor_seen: null, key_used: null, runner: null, run_at: null }] }) }
+    const { default: JobsPage } = await import('@/app/jobs/page')
+    render(await JobsPage({ searchParams: Promise.resolve({}) }))
+    expect(screen.getByText('Runner never connected')).toBeInTheDocument()
+  })
 })
