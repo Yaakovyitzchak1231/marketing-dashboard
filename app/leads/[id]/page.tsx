@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { getDb } from '@/lib/db'
-import { getLeadDetail, type LeadDetail } from '@/lib/leads/detail'
+import type { LeadDetail } from '@/lib/leads/detail'
+import { getLeadProfile } from '@/lib/leads/profile'
 import { PageShell, DbNotConnected } from '@/components/app/PageShell'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { StagePill, VerificationPill, ResearchPill, place, dateTime, shortDate } from '@/components/leads/pills'
@@ -17,7 +18,19 @@ import type { Stage, VerificationStatus } from '@/lib/leads/types'
 import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
 import { TierPill } from '@/components/rules/bits'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
-import { LeadTimeline } from '@/components/leads/LeadTimeline'
+import { LeadTimeline, TimelineFilters, filterEvents } from '@/components/leads/LeadTimeline'
+import { ProfileTabs, type ProfileTab } from '@/components/leads/ProfileTabs'
+import { Milestones } from '@/components/leads/Milestones'
+import { Reachability } from '@/components/leads/Reachability'
+import { SegmentsCard } from '@/components/leads/SegmentsCard'
+import { CampaignsCard } from '@/components/leads/CampaignsCard'
+import { FilesCard } from '@/components/leads/FilesCard'
+import { PlaceholderCards } from '@/components/leads/PlaceholderCards'
+import { EngagementPanel } from '@/components/leads/EngagementPanel'
+import { CustomFieldsBlock } from '@/components/leads/CustomFieldsBlock'
+import { listFieldDefsSafe } from '@/lib/fields/registry'
+import { ForgetContactButton } from '@/components/leads/ForgetContactButton'
+import { LeadListsCard } from '@/components/leads/LeadListsCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,8 +70,33 @@ function safeHref(u: string | null): string | null {
   }
 }
 
-export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
+function scoreValue(row: Record<string, unknown> | null): number | null {
+  if (!row) return null
+  for (const k of ['total', 'score', 'points']) {
+    const v = row[k]
+    if (typeof v === 'number') return v
+  }
+  return null
+}
+
+function parseTab(v: string | string[] | undefined): ProfileTab {
+  const s = Array.isArray(v) ? v[0] : v
+  return s === 'timeline' || s === 'engagement' || s === 'details' ? s : 'overview'
+}
+function oneOf(v: string | string[] | undefined): string | null {
+  const s = Array.isArray(v) ? v[0] : v
+  return s && s.trim() ? s.trim() : null
+}
+
+export default async function LeadPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { id } = await params
+  const sp = await searchParams
   const db = getDb()
   if (!db) {
     return (
@@ -68,10 +106,24 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     )
   }
   if (!/^\d{1,15}$/.test(id)) notFound()
-  const [d, readiness] = await Promise.all([getLeadDetail(db, Number(id)), leadReadiness(db, Number(id))])
-  if (!d) notFound()
+  const [profile, readiness, companyFieldsRead, contactFieldsRead] = await Promise.all([
+    getLeadProfile(db, Number(id)),
+    leadReadiness(db, Number(id)),
+    listFieldDefsSafe(db, { entity: 'company' }),
+    listFieldDefsSafe(db, { entity: 'contact' }),
+  ])
+  if (!profile) notFound()
+  const companyFields = companyFieldsRead.defs
+  const contactFields = contactFieldsRead.defs
+  const d: LeadDetail = profile.detail
   const c = d.company
   const site = safeHref(c.website)
+  const tab = parseTab(sp.tab)
+  const tlCategory = oneOf(sp.tl_cat)
+  const tlQuery = oneOf(sp.tl_q)
+  const filteredEvents = filterEvents(d.events, { category: tlCategory, q: tlQuery })
+  const score = scoreValue(profile.score.row)
+
   return (
     <PageShell
       title={c.name}
@@ -85,122 +137,89 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         </>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex min-w-0 flex-col gap-6">
-          <Card className="px-4 py-3">
-            <div className="mb-2 flex items-center justify-end gap-3">
-              <HistoryDrawer type="company" id={c.id} />
-              <EditFields
-                endpoint={`/api/leads/${c.id}`}
-                title="store details"
-                fields={[
-                  { name: 'name', label: 'Name', value: c.name },
-                  { name: 'website', label: 'Website', value: c.website, type: 'url' },
-                  { name: 'phone', label: 'Phone', value: c.phone, type: 'tel' },
-                  { name: 'city', label: 'City', value: c.city },
-                  { name: 'state', label: 'State', value: c.state },
-                ]}
-              />
-            </div>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
-              <Fact label="Stage"><StagePill stage={c.stage} /></Fact>
-              <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
-              <Fact label="Owner">{c.owner_name}</Fact>
-              <Fact label="Website">{site ? <a href={site} target="_blank" rel="noreferrer noopener" className="text-accent">{c.website_domain ?? c.website}</a> : c.website}</Fact>
-              <Fact label="Phone"><InlineEditCell type="company" id={c.id} field="phone" value={c.phone} label="Phone" /></Fact>
-              <Fact label="Address">{[c.address_line, place(c.city, c.state), c.postal_code].filter(Boolean).join(', ') || null}</Fact>
-              {c.vertical ? <Fact label="Type">{c.vertical}</Fact> : null}
-              {c.notes ? <Fact label="Notes">{c.notes}</Fact> : null}
-            </dl>
-          </Card>
+      {/* The profile header (plan 2.10): stage, score, owner, suppression, at a glance. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <StagePill stage={c.stage} />
+        <Pill tone={score != null ? 'accent' : 'neutral'} title={!profile.score.available ? (profile.score.needs_migration ?? undefined) : (profile.score.model?.name ?? undefined)}>
+          {score != null ? `${profile.score.model?.kind === 'fit' ? 'Fit' : 'Engagement'} score ${score}` : 'Not scored yet'}
+        </Pill>
+        <Pill tone="neutral">{c.owner_name ? `Owner: ${c.owner_name}` : 'No owner on file'}</Pill>
+        {profile.suppression.checked && profile.suppression.no_email ? (
+          <Pill tone="neutral">No email on file</Pill>
+        ) : profile.suppression.checked ? (
+          <Pill tone={profile.suppression.suppressed ? 'bad' : 'good'} title={profile.suppression.reason ?? undefined}>
+            {profile.suppression.suppressed ? 'Suppressed' : 'Sendable'}
+          </Pill>
+        ) : (
+          <Pill tone="neutral">Suppression not checked</Pill>
+        )}
+      </div>
 
-          <Readiness list={readiness} contacts={d.contacts} />
-          <Card className="px-4 py-3">
-            <OwnerResearchToggle
-              companyId={c.id}
-              exhausted={Boolean(c.owner_research_exhausted_at)}
-              at={c.owner_research_exhausted_at ? shortDate(c.owner_research_exhausted_at) : null}
-              by={c.owner_research_exhausted_by ? (d.actors.find((a) => a.id === c.owner_research_exhausted_by)?.display_name ?? c.owner_research_exhausted_by) : null}
-            />
-          </Card>
+      <ProfileTabs companyId={c.id} active={tab} />
 
-          <Section title="Contacts" meta={`${d.contacts.length}`}>
-            {d.contacts.length ? (
-              <ul className="divide-y divide-line-soft">
-                {d.contacts.map((ct) => (
-                  <li key={ct.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-ink">{ct.email ?? 'No email'}</div>
-                      <div className="text-[12px] text-ink-faint">
-                        {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
-                          .filter(Boolean)
-                          .join(' · ')}
+      {tab === 'overview' ? (
+        <div className="flex flex-col gap-6">
+          <Milestones data={profile.milestones} />
+          <Reachability items={profile.reachability} />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <SegmentsCard data={profile.segments} />
+            <CampaignsCard data={profile.campaigns} />
+            <LeadListsCard db={db} companyId={c.id} />
+            <Section title="Tasks" meta={`${d.tasks.length}`}>
+              {d.tasks.length ? (
+                <ul className="divide-y divide-line-soft">
+                  {d.tasks.map((t) => (
+                    <li key={t.id} className="px-4 py-2.5 text-[13px]">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate text-ink">{t.title}</span>
+                        <Pill tone={t.status === 'done' ? 'good' : t.status === 'failed' ? 'bad' : t.status === 'needs_approval' ? 'warn' : 'neutral'}>{t.status.replace(/_/g, ' ')}</Pill>
                       </div>
-                      <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
-                    </div>
-                    <span className="flex items-center gap-1.5">
-                      {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
-                      <VerificationPill status={ct.verification_status} />
-                      <HistoryDrawer type="contact" id={ct.id} label="History" />
-                      <EditFields
-                        endpoint={`/api/leads/${c.id}/contacts/${ct.id}`}
-                        title={`contact ${ct.email ?? ct.id}`}
-                        confirmEmailChange
-                        fields={[
-                          { name: 'first_name', label: 'First name', value: ct.first_name },
-                          { name: 'last_name', label: 'Last name', value: ct.last_name },
-                          { name: 'email', label: 'Email', value: ct.email, type: 'email' },
-                          { name: 'title', label: 'Title / role', value: ct.title },
-                          { name: 'phone', label: 'Phone', value: ct.phone, type: 'tel' },
-                          { name: 'status', label: 'Status', value: ct.status, type: 'select', options: EDITABLE_CONTACT_STATUSES },
-                        ]}
-                      />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyNote>No email addresses yet. Research this lead to look for some.</EmptyNote>
-            )}
-          </Section>
+                      <div className="text-[12px] text-ink-faint">
+                        {[t.claimed_by ? `by ${t.claimed_by}` : t.assigned_to ? `for ${t.assigned_to}` : 'unclaimed', shortDate(t.updated_at)].join(' · ')}
+                      </div>
+                      {t.report ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted">{t.report}</p> : null}
+                      {t.error ? <p className="mt-1 text-[12px] text-bad">{t.error}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyNote>No tasks for this lead.</EmptyNote>
+              )}
+            </Section>
+            <FilesCard companyId={c.id} data={profile.files} />
+            <Section title="Comments" meta={`${d.comments.length}`}>
+              <div className="px-4 py-3">
+                {d.comments.length ? (
+                  <ul className="flex flex-col gap-3">
+                    {d.comments.map((cm) => (
+                      <li key={cm.id} className="text-[13px]">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-medium text-ink">{cm.author_name}</span>
+                          <span className="text-[11px] tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap break-words text-ink-muted">{cm.body}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[12px] text-ink-faint">No comments yet.</p>
+                )}
+                <CommentForm companyId={c.id} handles={d.actors.filter((a) => a.kind === 'agent').map((a) => a.id)} />
+              </div>
+            </Section>
+          </div>
+          <PlaceholderCards placeholders={profile.placeholders} />
+        </div>
+      ) : null}
 
-          <Section title="Research findings" meta={`${d.enrichment.length}`}>
-            {d.enrichment.length ? (
-              <Table head={['Field', 'Value', 'Confidence', 'How', 'Last checked', 'Evidence']}>
-                {d.enrichment.map((e) => (
-                  <tr key={e.id}>
-                    <Td className="whitespace-nowrap text-ink-muted">{e.field.replace(/_/g, ' ')}</Td>
-                    <Td className="max-w-[240px] text-ink [overflow-wrap:anywhere]">{e.value}</Td>
-                    <Td>{e.confidence ? <Pill tone={e.confidence === 'high' ? 'good' : e.confidence === 'medium' ? 'neutral' : 'warn'}>{e.confidence}</Pill> : <Dash />}</Td>
-                    <Td className="min-w-[120px] text-[12px] text-ink-muted">{[e.method.replace(/_/g, ' '), e.actor_name].filter(Boolean).join(' · ')}</Td>
-                    <Td className="whitespace-nowrap tabular-nums text-[12px] text-ink-faint">{e.last_checked_at ? shortDate(e.last_checked_at) : <Dash />}</Td>
-                    <Td>{safeHref(e.evidence_url) ? <a href={safeHref(e.evidence_url)!} target="_blank" rel="noreferrer noopener" className="text-accent">source</a> : <Dash />}</Td>
-                  </tr>
-                ))}
-              </Table>
-            ) : (
-              <EmptyNote>No research findings yet.</EmptyNote>
-            )}
+      {tab === 'timeline' ? (
+        <div className="flex flex-col gap-6">
+          <Section title="Lead timeline" meta={`${filteredEvents.length} of ${d.events.length}${d.events.length >= 200 ? ' (latest 200)' : ''}`}>
+            <div className="px-4 pt-3">
+              <TimelineFilters category={tlCategory} q={tlQuery} />
+            </div>
+            <LeadTimeline events={filteredEvents} />
           </Section>
-
-          <Section title="Verification history" meta={verificationMeta(d)}>
-            {d.verification.length ? (
-              <Table head={['Email', 'Checked by', 'Result', 'Cost', 'When']}>
-                {d.verification.map((v) => (
-                  <tr key={v.id}>
-                    <Td className="max-w-[200px] truncate text-ink">{v.email}</Td>
-                    <Td className="whitespace-nowrap text-ink-muted">{PROVIDER_LABEL[v.provider] ?? v.provider}</Td>
-                    <Td className="whitespace-nowrap"><VerificationPill status={v.verdict === 'pass' ? null : (v.verdict as VerificationStatus)} />{v.verdict === 'pass' ? <Pill tone="neutral">Passed free check</Pill> : null} <span className="ml-1 text-[11px] text-ink-faint">{v.result}{v.sub_result ? ` / ${v.sub_result}` : ''}</span></Td>
-                    <Td className="whitespace-nowrap text-right tabular-nums text-ink-muted">${Number(v.cost_usd).toFixed(4)}</Td>
-                    <Td className="whitespace-nowrap tabular-nums text-ink-faint">{dateTime(v.checked_at)}</Td>
-                  </tr>
-                ))}
-              </Table>
-            ) : (
-              <EmptyNote>No email on this lead has been checked yet.</EmptyNote>
-            )}
-          </Section>
-
           <Section title="Campaign activity" meta={`${d.touches.length}`}>
             {d.touches.length ? (
               <ol className="divide-y divide-line-soft">
@@ -222,95 +241,174 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <EmptyNote>Not in any Instantly campaign yet.</EmptyNote>
             )}
           </Section>
-
-          <Section title="Lead timeline" meta={`${d.events.length}`}>
-            <LeadTimeline events={d.events} />
-          </Section>
         </div>
+      ) : null}
 
-        <aside className="flex min-w-0 flex-col gap-6">
-          <Section title="Comments" meta={`${d.comments.length}`}>
-            <div className="px-4 py-3">
-              {d.comments.length ? (
-                <ul className="flex flex-col gap-3">
-                  {d.comments.map((cm) => (
-                    <li key={cm.id} className="text-[13px]">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-medium text-ink">{cm.author_name}</span>
-                        <span className="text-[11px] tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
+      {tab === 'engagement' ? <EngagementPanel data={profile.engagement} /> : null}
+
+      {tab === 'details' ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-6">
+            <Card className="px-4 py-3">
+              <div className="mb-2 flex items-center justify-end gap-3">
+                <HistoryDrawer type="company" id={c.id} />
+                <EditFields
+                  endpoint={`/api/leads/${c.id}`}
+                  title="store details"
+                  fields={[
+                    { name: 'name', label: 'Name', value: c.name },
+                    { name: 'website', label: 'Website', value: c.website, type: 'url' },
+                    { name: 'phone', label: 'Phone', value: c.phone, type: 'tel' },
+                    { name: 'city', label: 'City', value: c.city },
+                    { name: 'state', label: 'State', value: c.state },
+                  ]}
+                />
+              </div>
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+                <Fact label="Stage"><StagePill stage={c.stage} /></Fact>
+                <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
+                <Fact label="Owner">{c.owner_name}</Fact>
+                <Fact label="Website">{site ? <a href={site} target="_blank" rel="noreferrer noopener" className="text-accent">{c.website_domain ?? c.website}</a> : c.website}</Fact>
+                <Fact label="Phone"><InlineEditCell type="company" id={c.id} field="phone" value={c.phone} label="Phone" /></Fact>
+                <Fact label="Address">{[c.address_line, place(c.city, c.state), c.postal_code].filter(Boolean).join(', ') || null}</Fact>
+                {c.vertical ? <Fact label="Type">{c.vertical}</Fact> : null}
+                {c.notes ? <Fact label="Notes">{c.notes}</Fact> : null}
+              </dl>
+              <CustomFieldsBlock entity="company" id={c.id} defs={companyFields} values={c.custom} label="Custom fields" />
+            </Card>
+
+            <Readiness list={readiness} contacts={d.contacts} />
+            <Card className="px-4 py-3">
+              <OwnerResearchToggle
+                companyId={c.id}
+                exhausted={Boolean(c.owner_research_exhausted_at)}
+                at={c.owner_research_exhausted_at ? shortDate(c.owner_research_exhausted_at) : null}
+                by={c.owner_research_exhausted_by ? (d.actors.find((a) => a.id === c.owner_research_exhausted_by)?.display_name ?? c.owner_research_exhausted_by) : null}
+              />
+            </Card>
+
+            <Section title="Contacts" meta={`${d.contacts.length}`}>
+              {d.contacts.length ? (
+                <ul className="divide-y divide-line-soft">
+                  {d.contacts.map((ct) => (
+                    <li key={ct.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-ink">{ct.email ?? 'No email'}</div>
+                        <div className="text-[12px] text-ink-faint">
+                          {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                        <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
+                        <CustomFieldsBlock entity="contact" id={ct.id} defs={contactFields} values={ct.custom} label="Custom fields" />
+                        <div className="mt-1"><ForgetContactButton contactId={ct.id} email={ct.email} /></div>
+
                       </div>
-                      <p className="whitespace-pre-wrap break-words text-ink-muted">{cm.body}</p>
+                      <span className="flex items-center gap-1.5">
+                        {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
+                        <VerificationPill status={ct.verification_status} />
+                        <HistoryDrawer type="contact" id={ct.id} label="History" />
+                        <EditFields
+                          endpoint={`/api/leads/${c.id}/contacts/${ct.id}`}
+                          title={`contact ${ct.email ?? ct.id}`}
+                          confirmEmailChange
+                          fields={[
+                            { name: 'first_name', label: 'First name', value: ct.first_name },
+                            { name: 'last_name', label: 'Last name', value: ct.last_name },
+                            { name: 'email', label: 'Email', value: ct.email, type: 'email' },
+                            { name: 'title', label: 'Title / role', value: ct.title },
+                            { name: 'phone', label: 'Phone', value: ct.phone, type: 'tel' },
+                            { name: 'status', label: 'Status', value: ct.status, type: 'select', options: EDITABLE_CONTACT_STATUSES },
+                          ]}
+                        />
+                      </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[12px] text-ink-faint">No comments yet.</p>
+                <EmptyNote>No email addresses yet. Research this lead to look for some.</EmptyNote>
               )}
-              <CommentForm companyId={c.id} handles={d.actors.filter((a) => a.kind === 'agent').map((a) => a.id)} />
-            </div>
-          </Section>
+            </Section>
 
-          <Section title="Tasks" meta={`${d.tasks.length}`}>
-            {d.tasks.length ? (
-              <ul className="divide-y divide-line-soft">
-                {d.tasks.map((t) => (
-                  <li key={t.id} className="px-4 py-2.5 text-[13px]">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 truncate text-ink">{t.title}</span>
-                      <Pill tone={t.status === 'done' ? 'good' : t.status === 'failed' ? 'bad' : t.status === 'needs_approval' ? 'warn' : 'neutral'}>{t.status.replace(/_/g, ' ')}</Pill>
-                    </div>
-                    <div className="text-[12px] text-ink-faint">
-                      {[t.claimed_by ? `by ${t.claimed_by}` : t.assigned_to ? `for ${t.assigned_to}` : 'unclaimed', shortDate(t.updated_at)].join(' · ')}
-                    </div>
-                    {t.report ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted">{t.report}</p> : null}
-                    {t.error ? <p className="mt-1 text-[12px] text-bad">{t.error}</p> : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyNote>No tasks for this lead.</EmptyNote>
-            )}
-          </Section>
+            <Section title="Research findings" meta={`${d.enrichment.length}`}>
+              {d.enrichment.length ? (
+                <Table head={['Field', 'Value', 'Confidence', 'How', 'Last checked', 'Evidence']}>
+                  {d.enrichment.map((e) => (
+                    <tr key={e.id}>
+                      <Td className="whitespace-nowrap text-ink-muted">{e.field.replace(/_/g, ' ')}</Td>
+                      <Td className="max-w-[240px] text-ink [overflow-wrap:anywhere]">{e.value}</Td>
+                      <Td>{e.confidence ? <Pill tone={e.confidence === 'high' ? 'good' : e.confidence === 'medium' ? 'neutral' : 'warn'}>{e.confidence}</Pill> : <Dash />}</Td>
+                      <Td className="min-w-[120px] text-[12px] text-ink-muted">{[e.method.replace(/_/g, ' '), e.actor_name].filter(Boolean).join(' · ')}</Td>
+                      <Td className="whitespace-nowrap tabular-nums text-[12px] text-ink-faint">{e.last_checked_at ? shortDate(e.last_checked_at) : <Dash />}</Td>
+                      <Td>{safeHref(e.evidence_url) ? <a href={safeHref(e.evidence_url)!} target="_blank" rel="noreferrer noopener" className="text-accent">source</a> : <Dash />}</Td>
+                    </tr>
+                  ))}
+                </Table>
+              ) : (
+                <EmptyNote>No research findings yet.</EmptyNote>
+              )}
+            </Section>
 
-          <Section title="History" meta={`${d.history.length}`}>
-            {d.history.length ? (
-              <ol className="divide-y divide-line-soft">
-                {d.history.map((h) => (
-                  <li key={h.id} className="px-4 py-2 text-[12px]">
-                    <div className="text-ink-muted">
-                      {h.entity_type === 'contact' ? <span className="text-ink-faint">{h.email ?? 'contact'} · </span> : null}
-                      {historyLine(h.field, h.old_value, h.new_value)}
-                    </div>
-                    <div className="tabular-nums text-ink-faint">
-                      {dateTime(h.changed_at)} · {h.changed_by_name ?? h.changed_by ?? 'not recorded'}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <EmptyNote>No changes recorded.</EmptyNote>
-            )}
-          </Section>
+            <Section title="Verification history" meta={verificationMeta(d)}>
+              {d.verification.length ? (
+                <Table head={['Email', 'Checked by', 'Result', 'Cost', 'When']}>
+                  {d.verification.map((v) => (
+                    <tr key={v.id}>
+                      <Td className="max-w-[200px] truncate text-ink">{v.email}</Td>
+                      <Td className="whitespace-nowrap text-ink-muted">{PROVIDER_LABEL[v.provider] ?? v.provider}</Td>
+                      <Td className="whitespace-nowrap"><VerificationPill status={v.verdict === 'pass' ? null : (v.verdict as VerificationStatus)} />{v.verdict === 'pass' ? <Pill tone="neutral">Passed free check</Pill> : null} <span className="ml-1 text-[11px] text-ink-faint">{v.result}{v.sub_result ? ` / ${v.sub_result}` : ''}</span></Td>
+                      <Td className="whitespace-nowrap text-right tabular-nums text-ink-muted">${Number(v.cost_usd).toFixed(4)}</Td>
+                      <Td className="whitespace-nowrap tabular-nums text-ink-faint">{dateTime(v.checked_at)}</Td>
+                    </tr>
+                  ))}
+                </Table>
+              ) : (
+                <EmptyNote>No email on this lead has been checked yet.</EmptyNote>
+              )}
+            </Section>
+          </div>
 
-          <Section title="Sources" meta={`${d.sources.length}`}>
-            {d.sources.length ? (
-              <ul className="divide-y divide-line-soft">
-                {d.sources.map((s) => (
-                  <li key={s.id} className="px-4 py-2 text-[12px]">
-                    <div className="text-ink">{s.kind.replace(/_/g, ' ')}{s.source_ref ? <span className="text-ink-faint"> · {s.source_ref}</span> : null}</div>
-                    <div className="flex justify-between gap-2 text-ink-faint">
-                      {safeHref(s.url) ? <a className="truncate text-accent" href={safeHref(s.url)!} target="_blank" rel="noreferrer noopener">{s.url}</a> : <span />}
-                      <span className="shrink-0 tabular-nums">{shortDate(s.observed_at)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyNote>No sources recorded.</EmptyNote>
-            )}
-          </Section>
-        </aside>
-      </div>
+          <aside className="flex min-w-0 flex-col gap-6">
+            <Section title="History" meta={`${d.history.length}`}>
+              {d.history.length ? (
+                <ol className="divide-y divide-line-soft">
+                  {d.history.map((h) => (
+                    <li key={h.id} className="px-4 py-2 text-[12px]">
+                      <div className="text-ink-muted">
+                        {h.entity_type === 'contact' ? <span className="text-ink-faint">{h.email ?? 'contact'} · </span> : null}
+                        {historyLine(h.field, h.old_value, h.new_value)}
+                      </div>
+                      <div className="tabular-nums text-ink-faint">
+                        {dateTime(h.changed_at)} · {h.changed_by_name ?? h.changed_by ?? 'not recorded'}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <EmptyNote>No changes recorded.</EmptyNote>
+              )}
+            </Section>
+
+            <Section title="Sources" meta={`${d.sources.length}`}>
+              {d.sources.length ? (
+                <ul className="divide-y divide-line-soft">
+                  {d.sources.map((s) => (
+                    <li key={s.id} className="px-4 py-2 text-[12px]">
+                      <div className="text-ink">{s.kind.replace(/_/g, ' ')}{s.source_ref ? <span className="text-ink-faint"> · {s.source_ref}</span> : null}</div>
+                      <div className="flex justify-between gap-2 text-ink-faint">
+                        {safeHref(s.url) ? <a className="truncate text-accent" href={safeHref(s.url)!} target="_blank" rel="noreferrer noopener">{s.url}</a> : <span />}
+                        <span className="shrink-0 tabular-nums">{shortDate(s.observed_at)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyNote>No sources recorded.</EmptyNote>
+              )}
+            </Section>
+          </aside>
+        </div>
+      ) : null}
     </PageShell>
   )
 }

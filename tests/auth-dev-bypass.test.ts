@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
+// See tests/auth-gate.test.ts: middleware.ts now reaches lib/auth/roles, which is 'server-only'.
+vi.mock('server-only', () => ({}))
+
 /**
  * DASHBOARD_DEV_NO_AUTH=1 lets a developer run the dashboard locally without a
  * Supabase project. These tests prove it can never open the gate in production

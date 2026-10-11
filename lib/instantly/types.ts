@@ -153,4 +153,6 @@ export interface ApiEmail {
   subject?: string
   content_preview?: string | null
   thread_id?: string | null
+  /** Instantly's own autoresponder flag, when it sends one (0/1 or boolean). */
+  is_auto_reply?: boolean | number | null
 }

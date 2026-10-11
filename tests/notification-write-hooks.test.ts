@@ -8,6 +8,8 @@ vi.mock('@/lib/seo/store', () => ({ getFixTask: mocks.task }))
 vi.mock('@/lib/seo/citations', () => ({ createCitationTask: mocks.citation }))
 vi.mock('@/lib/ops/core', async (original) => ({ ...await original<object>(), updateTask: mocks.update }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+// The SEO actions now check the role and record the signed-in person (actorFor).
+vi.mock('@/lib/auth/session', () => ({ currentRole: async () => 'owner', currentActorId: async () => 'owner', currentEmail: async () => null }))
 vi.mock('next/navigation', () => ({ redirect: (url: string) => { throw new Error(`redirect:${url}`) } }))
 import { POST as find } from '@/app/api/find/jobs/route'
 import { POST as research } from '@/app/api/research/enqueue/route'

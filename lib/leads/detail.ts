@@ -34,7 +34,7 @@ export interface HistoryRow {
   new_value: string | null; changed_by: string | null; changed_by_name: string | null; changed_at: Date; email: string | null
 }
 export interface LeadEventRow {
-  id: number; type: string; type_label: string | null; occurred_at: Date; campaign_id: number | null
+  id: number; type: string; type_label: string | null; category: string | null; occurred_at: Date; campaign_id: number | null
   campaign_name: string | null; source: string; props: Record<string, unknown> | null
 }
 export interface LeadTaskRow {
@@ -91,7 +91,7 @@ export async function getLeadDetail(db: Queryable, id: number): Promise<LeadDeta
       [id],
     ),
     db.query<LeadEventRow>(
-      `select e.id, e.type, et.label as type_label, e.occurred_at, e.campaign_id, c.name as campaign_name, e.source, e.props
+      `select e.id, e.type, et.label as type_label, et.category, e.occurred_at, e.campaign_id, c.name as campaign_name, e.source, e.props
          from lp.lead_events e
          left join lp.event_types et on et.key = e.type
          left join lp.campaigns c on c.id = e.campaign_id

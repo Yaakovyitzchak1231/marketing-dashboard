@@ -14,6 +14,10 @@ import {
 } from '@/lib/campaigns/store'
 import { addLeadsByFilter, addLeadsByIds, parseLeadPatch, removeLeads, updateCampaignLead } from '@/lib/campaigns/leads'
 import { CampaignError, parseCampaignPatch, parseIds, parsePick } from '@/lib/campaigns/types'
+import { runOp } from '@/lib/ops/dispatch'
+import { OpsError } from '@/lib/ops/core'
+import { currentRole } from '@/lib/auth/session'
+import { requireRole } from '@/lib/auth/roles'
 
 const ME = 'owner'
 
@@ -163,5 +167,29 @@ export async function makeOwnRulesAction(f: FormData) {
     await makeOwnRules(db(), ME, id)
     revalidatePath(`/campaigns/${id}`)
     return `/campaigns/${id}?saved=1`
+  })
+}
+
+export async function addFromSegmentAction(f: FormData) {
+  requireRole(await currentRole(), 'editor')
+  const id = idOf(f)
+  await guarded(`/campaigns/${id}`, async () => {
+    const segmentId = Number(s(f, 'segment_id'))
+    if (!Number.isInteger(segmentId) || segmentId <= 0) throw new CampaignError('Pick a segment.')
+    const excludeIds = f.getAll('exclude_segment_id').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)
+    try {
+      const r = (await runOp(db(), ME, 'campaign_add_from_segment', {
+        campaign_id: id,
+        segment_id: segmentId,
+        exclude_segment_ids: excludeIds,
+        keep_syncing: s(f, 'keep_syncing') === 'on',
+      })) as { added: number; already: number; skipped_by_rule: number; skipped_suppressed: number; skipped_excluded: number }
+      revalidatePath(`/campaigns/${id}`)
+      const skipped = r.skipped_by_rule + r.skipped_suppressed + r.skipped_excluded
+      return `/campaigns/${id}?added=${r.added}&already=${r.already}${skipped ? `&seg_skipped=${skipped}` : ''}`
+    } catch (e) {
+      if (e instanceof OpsError) throw new CampaignError(e.message, e.status as 400 | 403 | 404 | 409)
+      throw e
+    }
   })
 }

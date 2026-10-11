@@ -52,6 +52,8 @@ export interface CompanyRow {
   owner_research_exhausted_by?: string | null
   owner_research_note?: string | null
   notes: string | null
+  /** Custom fields (plan 1.7), keyed by lp.field_defs.key. */
+  custom: Record<string, unknown>
   created_at: Date
   updated_at: Date
 }
@@ -79,6 +81,8 @@ export interface ContactRow {
   verified_by: string | null
   personalization: string | null
   do_not_contact: boolean
+  /** Custom fields (plan 1.7), keyed by lp.field_defs.key. */
+  custom: Record<string, unknown>
   created_at: Date
   updated_at: Date
 }

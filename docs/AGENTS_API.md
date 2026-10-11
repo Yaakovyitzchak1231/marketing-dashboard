@@ -187,3 +187,352 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+
+## Instantly reconcile & data sources health (P2-D, plan 1.6 + 1.11)
+
+| op | args |
+|---|---|
+| `instantly_reconcile_run` | `{since_days?}` (default 14) — the runner (`system`) or the owner only. Pulls per-lead Instantly activity (`POST /leads/list` interest status, `GET /emails` latest replies) for every contact the webhook already knows about, and inserts any `lp.lead_events` the live webhook missed, idempotently (same dedupe-key story as the webhook). Returns `{contacts_checked, leads_fetched, threads_fetched, events_considered, events_inserted, events_skipped_duplicate, errors}`. Runs nightly as runner job `instantly_reconcile` (seeded by `0028_instantly_reconcile_job.sql`); see `lib/instantly/reconcile.ts`. |
+| `sources_health` | `{}` → one row per data source feeding the platform (Instantly webhook, Instantly nightly reconcile, email verifiers, the find-leads engine, imports, exports, Search Console, the background runner's own heartbeat, plus every row in `lp.integrations`): `{id, label, last_event_at, count_24h, by_type_24h, error_count_24h, last_error, last_error_at}`. Every field a stored row doesn't answer comes back `null` ("No data yet" in the UI), never a guessed number. See `lib/sources/health.ts`; shown on `/tools` under "Data sources". |
+## 8. Lead scoring (plan 2.8)
+
+Rule-based point scores beside the AI fit tiers (`lib/rules/evaluate.ts` stays the Fit
+*gate*). Two kinds of score model, one row per model in `lp.score_models`:
+`engagement` (how much a lead has engaged — opens, clicks, replies, meetings) and
+`fit` (how well a lead matches a campaign's own ICP/buying-signal rules). A model
+with `campaign_id: null` is the workspace default used by every campaign without
+its own; a Fit model's rules are built from the campaign's own
+`lp.campaign_profiles`/`lp.campaign_profile_items` (`signal_rule` items), never
+hard-coded to an industry (`lib/scoring/rules.ts#fitRulesFromProfile`,
+`lib/scoring/engine.ts#fitModelForCampaign`). Points can expire
+(`expires_after_days` on a rule); `recompute_scores` re-evaluates events, drops
+expired points from the live sum, and is safe to call repeatedly (idempotent —
+re-processing the same events never double-awards). Crossing a threshold (e.g.
+"hot" ≥ 25) writes a `score_threshold_crossed` lead event exactly once per
+crossing (deduped), so journeys can trigger on it later. A nightly job
+(`score_refresh`, seeded in `lp.jobs`) calls `lib/scoring/engine.ts#recomputeAllScores`.
+
+| op | args |
+|---|---|
+| `list_score_models` | `{campaign_id?, kind?: engagement\|fit, active_only?}` |
+| `get_score_model` | `{id}` |
+| `upsert_score_model` | `{id?, name, entity: company\|contact, kind: engagement\|fit, campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}` — create (omit id) or edit (give id); writes one `lp.status_history` row (`entity_type: 'score_model'`). At most one default (campaign_id null) model per entity+kind, one per-campaign model per entity+kind+campaign. |
+| `recompute_scores` | `{model_id?, company_id?, contact_id?}` — omit everything to recompute every active model for every lead it covers (the nightly job's call). |
+| `lead_scores` | `{company_id}` → every active model's current score + threshold for one lead, for the lead page / a leads-table column. |
+
+`lib/scoring/fields.ts#scoreFieldDescriptors` is the hand-off point for the segment
+condition engine (plan 2.1) to register score fields later — not wired in, so it
+doesn't collide with `lib/segments`.
+
+## 9. Tags as first-class (plan 2.9)
+
+`lp.companies.tags` (text[], since 0011) stays the tag storage; `lp.tag_defs`
+(0031_tags.sql) adds an optional colour + description per tag. Rename and merge
+update every company row carrying the tag in one transaction, write one
+`lp.status_history` row (`entity_type: 'tag'`, `entity_key` = the tag), and emit
+`tag_added`/`tag_removed` lead events per affected lead (both event types already
+existed since 0018_lead_events.sql).
+
+| op | args |
+|---|---|
+| `list_tags` | `{}` → every tag with its live count (from `companies.tags`) and any styling. |
+| `add_tag` / `remove_tag` | `{company_id, tag, colour?, description?}` / `{company_id, tag}` — one company, emits `tag_added`/`tag_removed`. |
+| `rename_tag` | `{from, to}` — updates every company carrying `from`; audited; `tag_removed`+`tag_added` per affected lead. |
+| `merge_tags` | `{tags: [...], into}` — updates every company carrying any listed tag; audited; events per affected lead. |
+| `set_tag_style` | `{tag, colour?: "#rrggbb", description?}` |
+| `tag_trends` | `{weeks?}` → tag-added counts per week (default last 8 weeks), from `lp.lead_events`. |
+
+UI: Settings → Scoring (`/settings/scoring`) and Settings → Data → Tags
+(`/settings/tags`), linked from the main Settings page. Both pages render an
+honest "Needs migration 00NN" empty state on a preview deploy, where migrations
+0030/0031 haven't run yet.
+## 8. Custom fields, and CSV import (plan 1.7 + 1.13)
+
+Custom fields let Yaakov define his own fields on a company or a contact (store
+size, a rating, a trade show, anything) without a code change. Values live in
+`companies.custom` / `contacts.custom` (jsonb, keyed by the field's slug); a
+field's key is unique per entity regardless of which campaign it is scoped to
+(`campaign_id` only filters where the field is *shown*, not where its value lives).
+
+| op | args |
+|---|---|
+| `list_fields` | `{entity?: company\|contact, campaign_id?, include_archived?}` |
+| `define_field` | `{entity, key, label, type: text\|number\|date\|select\|multi_select\|url\|boolean, options? (select/multi_select), campaign_id? (null = every campaign), sort?}` |
+| `update_field` | `{id, label?, options?, sort?, campaign_id?}` — type and key are permanent once created |
+| `archive_field` | `{id}` |
+
+A value is written through the normal `update_entity` op (see section on inline
+edit), with field named `custom.<key>` — e.g. `update_entity {type: 'contact', id: 42, field: 'custom.store_size', value: 'large'}`.
+It is validated against the field's type the same way every other field is, and
+audited in `lp.status_history` (entity_type `company`/`contact`, field `custom.<key>`).
+Defining, renaming, re-scoping or archiving a field is itself audited (entity_type
+`field_def`). `lib/fields/registry.ts`'s `listFieldDefs` is the one function other
+features (the segment engine, the lead-edit UI, the CSV importer) should read from.
+
+CSV import (plan 1.13), with a dry-run preview:
+
+| op | args |
+|---|---|
+| `import_csv` | `{csv: string, mapping: {csv_column: target_field}, pool?, campaign_id?, dry_run?}` |
+
+`target_field` is one of `email, first_name, last_name, title, phone` (contact),
+`company_name, website, company_phone, city, state` (company), or
+`contact_custom.<key>` / `company_custom.<key>` for a defined custom field; any
+other mapping value is ignored. `pool` sets a new company's `segment`;
+`campaign_id` also enrolls each row's company in that campaign
+(`lp.campaign_leads`). `dry_run: true` runs the whole import for real inside a
+transaction and rolls it back, so the counts — `would_create`, `would_update`,
+`skipped_duplicate` (same email/phone seen earlier in this file),
+`skipped_suppressed` (on `lp.suppressions`), `invalid` (no email or phone, a bad
+email/phone, or an unknown/invalid custom-field value) — are exactly what a real
+run right now would do, and nothing is written. A per-row `reason` rides every
+non-created/updated row. A contact needs an email **or** a phone, not both — the
+same phone-only contacts CSV import creates are usable everywhere else on the
+dashboard (call tasks, the lead page, exports).
+
+The dashboard's own UI: `/leads/import` (map → preview → import) and an
+"Add lead" button on `/leads` (one row through the same pipeline, so it gets the
+same dedupe/suppression/validation); `/settings/fields` (Settings → Data → Fields)
+to define, rename and archive fields.
+
+## 8. Duplicate detection & merge, and data retention
+
+**Merge** (`lib/merge/ops.ts`) finds likely-duplicate companies or contacts and
+collapses one into the other. Candidates are recomputed live from
+`lib/leads/normalize.ts` against the raw fields (not read off the stored,
+already-unique-indexed columns), so near-duplicates that drifted from the
+current normalizer still turn up. A merge moves every dependent row (contacts,
+campaign touches, sources, enrichment, comments, tasks, verification results)
+to the kept id, applies the human's field-by-field choices, soft-deletes the
+loser (`merged_into`), and writes `lp.merge_log` + `lp.status_history`. A
+merged row is excluded from every dedupe unique index and from normal lists.
+
+| op | args | what |
+|---|---|---|
+| `merge_candidates` | `{entity: company\|contact, limit?}` | Likely-duplicate pairs: same recomputed website domain, phone, name+address key (companies) or email (contacts). |
+| `merge` | `{entity: company\|contact, keep, merge, choices?: {field: "keep"\|"merge"\|value}}` | **Owner only.** Collapses `merge` into `keep`. Unlisted fields default to `keep`'s value (falling back to `merge`'s when `keep`'s is empty). Rejects a self-merge or an id that is already a merge loser. |
+
+UI: `app/leads/duplicates` — a side-by-side compare per candidate pair, pick
+which side's value wins per field, then Merge.
+
+**Retention & "Forget this person"** (`lib/retention/ops.ts`): `lp.retention_policies`
+says how long raw `lp.campaign_touches` rows are kept per `event_type` (null
+`keep_days` = forever; opens/clicks default to 540 days, everything else to
+forever). `forget_contact` wipes PII from a contact in place (the row and its
+company membership survive as an anonymized tombstone), scrubs the PII copies
+elsewhere (campaign-touch email, verification-result email, enrichment,
+sources) and clears that contact's own edit history, then suppresses the
+address by a **sha256 hash** — never the plaintext — so the Lead Master import
+(and any future import) never recreates them.
+
+| op | args | what |
+|---|---|---|
+| `list_retention_policies` | `{}` | Every category and its `keep_days`. |
+| `set_retention_policy` | `{event_category, keep_days: number\|null}` | **Owner only.** `null` = forever. |
+| `forget_contact` | `{contact_id, confirm}` | **Owner only.** `confirm` must be the contact's own (normalized) email, or `"forget"` when it has none — a typed confirmation, not a one-click delete. |
+| `retention_sweep` | `{}` | **Owner or `system` (the job runner) only.** Deletes `lp.campaign_touches` rows past their category's `keep_days`. Registered as a job definition (`name: 'retention_sweep'`, disabled, no schedule) the way `lib/jobs` registers any job; the OVH runner needs a handler for `kind: 'retention_sweep'` to fire it on a schedule — until then, Settings → Data has a "Run sweep now" button that calls the op directly. |
+
+UI: a lead's contact row has "Forget this person" (typed confirmation);
+Settings → Data lists every category with an editable `keep_days` field and
+the manual sweep button.
+## 8. Segments: the condition engine (plan 2.1)
+
+`lp.segments` (migration 0024) is one definition compiled to one parameterized SQL
+query (`lib/segments/compile.ts`) -- no segment's match is ever string-built from a
+value, only from the field registry's own identifiers (`lib/segments/fields.ts`), so
+a value with SQL-looking characters in it just becomes a literal value, never a
+clause. A segment is `dynamic` (membership = whatever the definition matches, right
+now) or `static` (a hand-picked list in `lp.segment_members`, plan 2.4's backend).
+`campaign_id` null means "all campaigns"; set, the segment is scoped to one.
+
+**Definition shape** (`lib/segments/definition.ts`, `validateDefinition` rejects
+anything else with a plain error):
+```
+{
+  "entity": "company" | "contact",
+  "include": [ { "conditions": [ <condition>, ... ] }, ... ],   // OR across groups, AND within a group
+  "exclude": [ { "conditions": [ <condition>, ... ] }, ... ]    // a record matching ANY exclude group is dropped
+}
+```
+`include: []` means "match everyone" (useful for an exclude-only segment, e.g.
+"everyone except suppressed"). A condition is one of:
+
+- `{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]}` -- a field
+  from the registry (`company.*` / `contact.*`; `segment_fields` below) with an operator
+  for its type: text/array get `is, is_not, contains, not_contains, in, not_in, exists,
+  not_exists`; number adds `gt, gte, lt, lte, between`; date adds `before, after,
+  within_last_days, more_than_days_ago, between`; boolean is `is, is_not, exists,
+  not_exists`.
+- `{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}`
+  -- a count of `lp.lead_events` of one type in a window, compared with `eq/gt/gte/lt/lte`.
+  `"prop":{"path":"props.url","op":"contains","value":"/pricing"}` filters on one
+  top-level key of the event's `props` jsonb.
+- `{"kind":"relative_date","field":"contact.verified_at","op":"after","days":7,"compare_to":"company.created_at"}`
+  -- one date field vs another date field (or `"now"`, the default), offset by N days.
+- `{"kind":"in_segment","segment_id":12}` / `{"kind":"not_in_segment","segment_id":12}`
+  -- membership in another segment of the SAME entity. Nesting is checked for cycles
+  and capped at 3 levels deep.
+- `{"kind":"campaign_membership","mode":"in_campaign","campaign_id":5}` (or
+  `"any_active_campaign"` / `"never_contacted"`, no `campaign_id` needed).
+- `{"kind":"quality","op":"suppressed" | "not_suppressed" | "verified_sendable" | "not_verified_sendable"}`
+  -- "sendable" = verified email, not suppressed, not unsubscribed, not do-not-contact.
+
+Geography is `company.state` / `company.city` (plain field conditions) only --
+`lp.companies` has no lat/lng yet, so radius search is deferred until it does.
+Custom fields (1.7), scores (2.8) and computed traits (2.7) plug into the SAME
+compiler with no changes there: call `registerField` (`lib/segments/fields.ts`) with
+a `sql` expression reading the new column (e.g. `"c.custom ->> 'ring_brand'"`) and the
+key shows up in `segment_fields` and works in every condition kind above.
+
+**Three examples**, with their readback (`lib/segments/readback.ts`):
+1. `{"entity":"company","include":[{"conditions":[{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]},{"kind":"quality","op":"verified_sendable"},{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}]}],"exclude":[{"conditions":[{"kind":"campaign_membership","mode":"any_active_campaign"}]}]}`
+   → "Leads where State is NY or NJ and verified email, sendable and "reply_received" exactly 0 times in the last 30 days, excluding in an active campaign."
+2. `{"entity":"contact","include":[{"conditions":[{"kind":"event","event_type":"email_opened","count_op":"gte","count":3,"within_last_days":14}]}]}`
+   → "Contacts where "email_opened" at least 3 times in the last 14 days."
+3. `{"entity":"company","include":[{"conditions":[{"kind":"in_segment","segment_id":3}]}],"exclude":[{"conditions":[{"kind":"quality","op":"suppressed"}]}]}`
+   → "Leads where in segment #3, excluding suppressed."
+
+| op | args | what |
+|---|---|---|
+| `segment_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
+| `list_segments` | `{include_archived?, campaign_id?}` | every live segment (or scoped to one campaign, plus un-scoped ones) |
+| `get_segment` | `{id}` | one segment, with its readback |
+| `create_segment` | `{name, entity, definition, description?, kind? ('dynamic' default), campaign_id?}` | validates the definition before writing; `definition.entity` must match `entity` |
+| `update_segment` | `{id, name?, description?, campaign_id?, definition?}` | entity cannot change after creation |
+| `archive_segment` | `{id}` | soft delete (`archived_at`); idempotent |
+| `segment_preview` | `{definition}` or `{entity, include?, exclude?}` | compiles a definition that need not be saved yet -> `{entity, counts: {companies, contacts, verified_sendable}, sample (10 rows), readback}` |
+| `segment_members` | `{id, limit?, offset?}` | static: the stored rows; dynamic: the live compiled match |
+| `segment_add_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_joined` lead events |
+| `segment_remove_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_left` lead events |
+| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job (1.10) calls for 2.12's size-over-time |
+
+Deferred from this slice (left for the builder UI / later plan items, not started
+here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
+(2.5), using a segment as a campaign source (2.6), computed traits and scoring as
+field-registry entries (2.7/2.8 -- the registry is ready for them), the "describe a
+segment" AI box (2.11), and the analytics UI on top of `segment_snapshot` (2.12).
+
+
+## Full lead profile (plan 2.10)
+
+One call returns the whole 360 view of a lead for an agent: everything
+`lib/leads/detail.ts` already reads (contacts, sources, enrichment,
+verification, campaign touches, status history, comments, tasks), plus
+milestones, a reachability strip, segment/list membership, this lead's
+campaigns, its suppression status, its attached file links, its score (when
+plan 2.8's `lp.scores` is merged on this deploy), and an engagement benchmark
+against its campaigns' averages -- every number straight from stored rows,
+never invented.
+
+Optional tables (`lp.segments`/`lp.segment_members`, `lp.scores`, `lp.files`)
+are read defensively: on a deploy that hasn't run their migration yet, that
+section of the response comes back `{available: false, needs_migration: "..."}`
+instead of throwing.
+
+| op | args | what |
+|---|---|---|
+| `lead_profile` | `{company_id}` | the whole profile in one call (shape below) |
+| `lead_files_add` | `{company_id, name, url, contact_id?, note?}` | add a file LINK to the lead's Notes & files card (no paid storage -- `url` points wherever the file already lives); audited |
+| `lead_files_remove` | `{id}` | remove a file link; audited |
+
+`lead_profile`'s response:
+
+```
+{
+  detail: { company, contacts, sources, enrichment, verification, touches, history, events, comments, tasks, actors },
+  milestones: { first_touch, first_open, first_reply, last_activity },   // ISO strings or null; from lp.lead_events + lp.campaign_touches only
+  reachability: [{ key, label, value, ok }],                              // verified_email, store_phone, owner_phone, linkedin
+  segments: { available, needs_migration, memberships: [{ id, name, kind, campaign_id }] },
+  campaigns: { available, needs_migration, memberships: [{ campaign_id, campaign_name, status, added_at }] },
+  files: { available, needs_migration, rows: [{ id, company_id, contact_id, name, url, note, uploaded_by, uploaded_by_name, created_at }] },
+  score: { available, needs_migration, row },                            // row is whatever plan 2.8's lp.scores has, once merged
+  suppression: { checked, suppressed, reason },
+  engagement: { available, benchmarks: [{ campaign_id, campaign_name, lead: {opens, replies, steps}, campaign_average: {opens, replies, steps} }] },
+  placeholders: { journeys: "Not built yet", deals: "Not built yet", conversions: "Not built yet" },
+}
+```
+
+**UI:** `app/leads/[id]/page.tsx` is now tabbed (`?tab=overview|timeline|engagement|details`,
+plain query params, no client JS to switch): Overview (header with stage/score/owner/
+suppression, milestones, reachability, Segments & lists, Campaigns, Tasks, Notes &
+files, Comments, and the Journeys/Deals/Conversions placeholders), Timeline (lead
+events with a category filter + search, plus campaign activity), Engagement (the
+benchmark), Details (the previous deep-dive: store facts, readiness, contacts,
+research findings, verification history, change history, sources) -- every existing
+feature (inline edit, comments, the history drawer, the "Forget" menu if present)
+still lives there, just regrouped.
+
+**Extends:** `lib/leads/detail.ts` (added `category` to each timeline event, from
+`lp.event_types`), `components/leads/LeadTimeline.tsx` (category + search filter,
+exported as the pure `filterEvents` for testing), `components/leads/CommentForm.tsx`
+and `components/comments/*` keep working unchanged.
+
+**Migration:** `0034_lead_files.sql` -- `lp.files` (file links only; id, company_id,
+contact_id nullable, name, url, note, uploaded_by, created_at), and the canonical
+`status_history_entity_type_check` superset (this is the migration that uses it,
+since file links need the `'file'` entity type).
+
+Deferred from this slice: the per-campaign deal pipeline (Deals is a placeholder
+until plan 3.x/4.x), journeys and conversions likewise (3.x), and the score card
+reads plan 2.8's `lp.scores` table read-only -- scoring itself is built elsewhere.
+## Computed traits (2.7) and segment analytics (2.12) — P2-I
+
+Traits are per-lead numbers computed once from `lp.lead_events` and reused everywhere:
+in a segment condition (`trait.<key>`, registered into the SAME field registry
+`segment_preview`/`create_segment` already read -- no new condition kind), on a score
+rule, on the lead profile. Five campaign-agnostic traits ship seeded (migration 0033):
+`replies_30d`, `opens_14d`, `days_since_last_touch`, `steps_received`, `total_meetings`.
+
+A trait definition: `{"event_types":["reply_received"],"aggregation":"count"|"sum"|
+"min"|"max"|"last"|"days_since","prop":"minutes","window_days":30,"prop_filters":
+[{"path":"url","op":"is"|"contains","value":"..."}]}`. `prop` is required for
+sum/min/max/last (the jsonb prop key to read off each event, cast numeric); `count`
+and `days_since` ignore it. `window_days` omitted/null = all time. `days_since` and
+sum/min/max/last come back `null` (never 0) for an entity the event has never
+happened to -- NULL is not 0 is the house rule here too.
+
+| op | args | what |
+|---|---|---|
+| `list_traits` | `{include_archived?}` | every trait |
+| `get_trait` | `{key}` | one trait |
+| `define_trait` | `{key, label, entity, definition}` | create, or redefine an existing key's rules (upsert); resets `last_computed_at` so the next recompute is a full one under the new rules |
+| `archive_trait` | `{key}` | soft delete; also drops its segment field (an already-saved condition naming it just stops matching) |
+| `recompute_traits` | `{key?, full?}` | recomputes one trait or every active one; incremental (only entities with a new `lp.lead_events` row since the last run) unless `full: true` |
+| `trait_preview` | `{entity, definition, sample_size?}` | values this (not-necessarily-saved) definition produces for up to 20 (default 5) sample leads -- writes nothing |
+
+The `traits_refresh` runner job (hourly) calls `recompute_traits` with no args
+(every active trait, incremental). Defining or redefining a trait through `define_trait`
+makes it usable in a segment condition immediately, before the next job run.
+
+Segment analytics (2.12) extend `segment_snapshot` (already in this doc, P2-A): a
+segment with `alert_rule` set (`{"enabled":true,"shrink_pct":20,"grow_pct":50}`, a
+plain column on `lp.segments`) gets checked against its two most recent daily
+snapshots right after they're written, and a crossing writes one ordinary
+notification to `owner` (`kind: 'segment_alert'`) -- at most once per day's snapshot,
+never a repeat for a crossing that persists.
+
+| op | args | what |
+|---|---|---|
+| `segment_stats` | `{id, days?}` | `{history: [{taken_on, companies, contacts, sendable}, ...], metrics: {sample_size, sample_capped, reply_rate, meetings, avg_score, avg_score_field}}` -- `avg_score`/`avg_score_field` are `null` when no score field is registered yet (lead scoring, 2.8, is a sibling PR; this never invents a number) |
+
+UI: `app/segments/traits/page.tsx` (list, define, archive, preview-on-5-leads) and
+`app/segments/[id]/stats/page.tsx` (sparkline + the metrics card,
+`components/segments/SegmentStats.tsx` + `SizeSparkline.tsx` -- a self-contained
+component another screen can drop in directly).
+
+Deferred from this slice: the alert UI (configuring `alert_rule` is DB/ops-only for
+now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).
+
+<!-- retrigger: Vercel git_info_fail on first branch deploy -->
+
+## Tags: changing a tag is an explicit, counted choice (Oct 11, 2026)
+
+A tag is never silently changed on every lead.
+
+- `change_tag` `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}` changes the tag only on one lead, on the leads you list, or on a segment's leads. A static list uses its members; a dynamic segment uses its rules. `preview: true` returns `{count, scope}` and changes nothing. A change to more than one lead needs `expected_count` equal to that count, and a moved count is refused with 409. It writes one audit entry (who, old name, new name, how many leads) and no per-lead timeline rows.
+- `rename_tag` `{from, to, expected_count}` and `merge_tags` `{tags, into, expected_count}` change the tag on every lead. They are owner-only: an agent key gets 403, and agents use `change_tag`. They also need `expected_count`, and each writes one audit entry with no per-lead timeline rows.
+- `count_tagged` `{tags: [string,...]}` returns how many leads carry any of the tags now.
+
+Roles, also Oct 11: managing people and roles, agent keys, agents, the Tools hub and jobs is owner-only in the dashboard. No ops-API op changes people or roles, and the database refuses such a change from any non-owner (migration 0050).
+

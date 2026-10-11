@@ -9,6 +9,8 @@ import { STAGES } from '@/lib/leads/types'
 import { dateTime } from '@/components/leads/pills'
 import { kickRecompute } from '@/lib/rules/kick'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
+import { SetupChecklist } from '@/components/app/SetupChecklist'
+import { evaluateChecklist, checklistComplete, readChecklistInputs } from '@/lib/setup/checklist'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,8 @@ export default async function OverviewPage() {
     )
   }
   const o = await loadOverview(db)
+  const checklistItems = evaluateChecklist(await readChecklistInputs(db))
+  const setupComplete = checklistComplete(checklistItems)
   // Keep stored Ready/Parked scores fresh without making this page wait.
   if (o.readiness && (o.readiness.rescoring || o.readiness.stale || o.readiness.scored < o.readiness.companies)) kickRecompute(db)
   const maxStage = Math.max(1, ...STAGES.map((s) => o.byStage[s]))
@@ -32,6 +36,7 @@ export default async function OverviewPage() {
     <PageShell title="Overview" meta={`${fmt(o.companies)} leads · ${fmt(o.contacts)} email addresses`}>
       <AutoRefresh seconds={30} />
       <div className="flex flex-col gap-7 sm:gap-8">
+        <SetupChecklist items={checklistItems} complete={setupComplete} />
         <section aria-labelledby="next-h">
           <SectionHeader id="next-h" title="What needs you" />
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card md:grid-cols-3 xl:grid-cols-6">

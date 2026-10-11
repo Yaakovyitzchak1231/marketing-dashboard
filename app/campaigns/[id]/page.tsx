@@ -14,9 +14,10 @@ import { overridesToLines, parsePick, type LeadPick } from '@/lib/campaigns/type
 import { listPools } from '@/lib/pools/store'
 import { CONTACT_STATUSES, STAGES, VERIFICATION_STATUSES } from '@/lib/leads/types'
 import {
-  addLeadsByFilterAction, addLeadsByIdsAction, archiveCampaignAction, duplicateCampaignAction, makeOwnRulesAction, removeLeadsAction,
-  updateCampaignLeadAction,
+  addFromSegmentAction, addLeadsByFilterAction, addLeadsByIdsAction, archiveCampaignAction, duplicateCampaignAction, makeOwnRulesAction,
+  removeLeadsAction, updateCampaignLeadAction,
 } from '@/app/actions/campaigns'
+import { listSegments, type Segment } from '@/lib/segments/store'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
 
@@ -53,7 +54,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   } catch {
     pick = null
   }
-  const [list, statuses, ruleSets, counts, actors, editing, preview, pools] = await Promise.all([
+  const [list, statuses, ruleSets, counts, actors, editing, preview, pools, segmentState] = await Promise.all([
     listCampaignLeads(db, id, filter),
     listStatuses(db, { includeInactive: false }),
     pickableRuleSets(db, campaign.rule_set_id),
@@ -62,7 +63,14 @@ export default async function CampaignPage({ params, searchParams }: { params: P
     Number.isInteger(leadId) && leadId > 0 ? getCampaignLead(db, id, leadId) : Promise.resolve(null),
     pick ? previewPick(db, id, pick) : Promise.resolve(null),
     listPools(db),
+    listSegments(db, { includeArchived: false })
+      .then((segments) => ({ segments, needsMigration: false }))
+      .catch((e) => {
+        if (/does not exist/i.test((e as Error).message ?? '')) return { segments: [] as Segment[], needsMigration: true }
+        throw e
+      }),
   ])
+  const { segments, needsMigration: segmentsNeedMigration } = segmentState
   const poolLabel: Record<string, string> = Object.fromEntries(pools.map((p) => [p.id, p.label]))
   const err = one(sp.error)
   const qs = (patch: Record<string, string | null>) => {
@@ -78,7 +86,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
 
   const notices: string[] = []
   if (one(sp.saved) && !one(sp.lead)) notices.push(one(sp.saved) === '0' ? 'Nothing changed.' : 'Saved.')
-  if (one(sp.added)) notices.push(`Added ${fmt(Number(one(sp.added)))} lead${one(sp.added) === '1' ? '' : 's'}${Number(one(sp.already)) ? ` (${fmt(Number(one(sp.already)))} were already in it)` : ''}.${one(sp.missing) ? ` Not found: ${one(sp.missing)}.` : ''}`)
+  if (one(sp.added)) notices.push(`Added ${fmt(Number(one(sp.added)))} lead${one(sp.added) === '1' ? '' : 's'}${Number(one(sp.already)) ? ` (${fmt(Number(one(sp.already)))} were already in it)` : ''}.${one(sp.missing) ? ` Not found: ${one(sp.missing)}.` : ''}${one(sp.seg_skipped) ? ` ${fmt(Number(one(sp.seg_skipped)))} from the segment were skipped (excluded, do-not-contact, or suppressed).` : ''}`)
   if (one(sp.removed)) notices.push(`Removed ${fmt(Number(one(sp.removed)))} lead${one(sp.removed) === '1' ? '' : 's'} from this campaign. The leads themselves are unchanged.`)
 
   return (
@@ -319,6 +327,41 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 </label>
                 <button className={BUTTON}>Add</button>
               </form>
+
+              <div className="border-t border-line-soft pt-3">
+                <p className={LABEL}>From segment</p>
+                {segmentsNeedMigration ? (
+                  <EmptyNote>Needs migration 0024 — it runs on the next production deploy.</EmptyNote>
+                ) : segments.length === 0 ? (
+                  <EmptyNote>No segments yet — build one from Leads → Advanced filters → Save as segment.</EmptyNote>
+                ) : (
+                  <form action={addFromSegmentAction} className="space-y-2">
+                    <input type="hidden" name="campaign_id" value={id} />
+                    <label className={LABEL}>Segment
+                      <select name="segment_id" required className={INPUT} defaultValue="">
+                        <option value="" disabled>Pick a segment…</option>
+                        {segments.map((seg) => <option key={seg.id} value={seg.id}>{seg.name}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-1 text-[12px] text-ink-muted">
+                      <input type="checkbox" name="keep_syncing" /> keep syncing (re-running this later adds any new matches; already-added leads are untouched)
+                    </label>
+                    {segments.length > 1 ? (
+                      <fieldset className={LABEL}>
+                        <legend>Exclude segments (never added, even if they also match)</legend>
+                        <div className="mt-1 max-h-28 space-y-1 overflow-y-auto rounded border border-line-soft p-2">
+                          {segments.map((seg) => (
+                            <label key={seg.id} className="flex items-center gap-1 text-[12px] text-ink-muted">
+                              <input type="checkbox" name="exclude_segment_id" value={seg.id} /> {seg.name}
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                    ) : null}
+                    <button className={BUTTON}>Add from segment</button>
+                  </form>
+                )}
+              </div>
             </Card>
           </section>
 

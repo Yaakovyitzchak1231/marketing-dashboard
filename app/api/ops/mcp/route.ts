@@ -9,6 +9,9 @@ import { handleMcp } from '@/lib/notify/mcp'
 import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
+// Same budget as /api/ops: an agent's long op (recompute_scores, recompute_traits) over MCP
+// must not be cut off at the default function time (review fix, Hermes).
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   const gate = await opsGate(req)

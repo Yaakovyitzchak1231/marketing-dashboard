@@ -67,6 +67,10 @@ export const FREE_PROVIDERS: ReadonlySet<string> = new Set([
   'att.net', 'sbcglobal.net', 'bellsouth.net', 'cox.net', 'charter.net', 'earthlink.net',
   'optonline.net', 'frontier.com', 'windstream.net', 'juno.com', 'netzero.net', 'roadrunner.com',
   'rr.com', 'q.com', 'centurylink.net', 'fastmail.com', 'hey.com', 'tutanota.com',
+  // Canadian / UK variants (Viktor's #89 re-check): without them a row from one of these
+  // would become a "company" named after the mail provider and group strangers under it.
+  'yahoo.ca', 'hotmail.ca', 'live.ca', 'outlook.co.uk', 'live.co.uk', 'btinternet.com',
+  'sympatico.ca', 'shaw.ca', 'rogers.com', 'videotron.ca', 'telus.net', 'sky.com',
 ])
 
 // Local part: RFC 5322 "atext" dot-atoms (no quoted strings: no real lead uses them).

@@ -80,8 +80,30 @@ const VIEW_WHERE: Partial<Record<LeadView, string>> = {
   verify: `exists (select 1 from lp.contacts v where v.company_id = c.id and v.email_norm is not null and v.verification_status = 'unverified')`,
 }
 
-export function buildLeadWhere(f: LeadFilters, view: LeadView, p: Params): string {
-  const w: string[] = []
+/**
+ * Merge (0026) adds companies.merged_into / contacts.merged_into. Previews never
+ * run migrations, so a preview deployment of a PR that lands after this one can
+ * still be missing the column -- check once per db connection and cache a `true`
+ * (a migration never un-applies) so the existing Leads screens keep working
+ * instead of throwing "column ... does not exist".
+ */
+let mergedIntoReady: boolean | null = null
+export async function hasMergedIntoColumn(db: Queryable): Promise<boolean> {
+  if (mergedIntoReady) return true
+  try {
+    const { rows } = await db.query<{ e: boolean }>(
+      `select exists (select 1 from information_schema.columns
+         where table_schema = 'lp' and table_name = 'companies' and column_name = 'merged_into') as e`,
+    )
+    mergedIntoReady = Boolean(rows[0]?.e)
+  } catch {
+    mergedIntoReady = false
+  }
+  return mergedIntoReady
+}
+
+export function buildLeadWhere(f: LeadFilters, view: LeadView, p: Params, mergedReady = true): string {
+  const w: string[] = mergedReady ? [`c.merged_into is null`] : []
   if (f.q) {
     const like = p.add(`%${escapeLike(f.q.toLowerCase())}%`)
     w.push(`(lower(c.name) like ${like} or c.website_domain like ${like} or lower(coalesce(c.city, '')) like ${like}
@@ -101,6 +123,12 @@ export function buildLeadWhere(f: LeadFilters, view: LeadView, p: Params): strin
     w.push(`exists (select 1 from lp.sources js where js.company_id = c.id and js.kind = 'engine' and js.source_ref = ${p.add(`find_leads:${f.job}`)})`)
   if (f.campaign === NONE) w.push(`c.id not in (select lc.co from ${LATEST_CAMPAIGN_REL} lc)`)
   else if (f.campaign) w.push(`c.id in (select lc.co from ${LATEST_CAMPAIGN_REL} lc where lc.campaign_name = ${p.add(f.campaign)})`)
+  // Advanced filters (plan 2.5): a saved segment (?seg=) or an ad-hoc definition
+  // (?f=) computed by the page into exact company ids (lib/leads/filters.ts
+  // decodeAdvancedFilter / app/leads/page.tsx). An empty array (the segment
+  // matched nothing) must show zero rows, not "no restriction" -- hence the
+  // explicit 'false' rather than skipping the clause.
+  if (f.companyIds) w.push(f.companyIds.length ? `c.id = any(${p.add(f.companyIds)}::bigint[])` : 'false')
   const vw = VIEW_WHERE[view]
   if (vw) w.push(vw)
   return w.length ? `where ${w.join('\n  and ')}` : ''
@@ -173,7 +201,7 @@ const COMPANY_SORT: Partial<Record<SortKey, string>> = {
 
 export async function listLeads(db: Queryable, q: LeadQuery): Promise<LeadPage> {
   const p = new Params()
-  const where = buildLeadWhere(q.filters, q.view, p)
+  const where = buildLeadWhere(q.filters, q.view, p, await hasMergedIntoColumn(db))
   const countRes = await db.query<{ n: number }>(`select count(*)::int as n from lp.companies c ${where}`, p.values)
   const total = Number(countRes.rows[0]?.n ?? 0)
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -204,7 +232,7 @@ export interface KanbanColumn {
 
 export async function kanbanLeads(db: Queryable, f: LeadFilters, perColumn = 25): Promise<KanbanColumn[]> {
   const p = new Params()
-  const where = buildLeadWhere(f, 'kanban', p)
+  const where = buildLeadWhere(f, 'kanban', p, await hasMergedIntoColumn(db))
   const counts = await db.query<{ stage: Stage; n: number }>(
     `select c.stage, count(*)::int as n from lp.companies c ${where} group by c.stage`,
     p.values,
@@ -249,7 +277,7 @@ async function groupLeads(
   sampleSize: number,
 ): Promise<LeadGroup[]> {
   const p = new Params()
-  const where = buildLeadWhere(f, view, p)
+  const where = buildLeadWhere(f, view, p, await hasMergedIntoColumn(db))
   const agg = await db.query<{ k: string | null; stage: Stage; n: number; unverified: number }>(
     `select ${keySql} as k, c.stage, count(*)::int as n, coalesce(sum(u.n), 0)::int as unverified
        from lp.companies c
@@ -349,10 +377,13 @@ export interface LeadFacets {
 }
 
 export async function leadFacets(db: Queryable): Promise<LeadFacets> {
+  const mergedReady = await hasMergedIntoColumn(db)
+  const mergedAnd = mergedReady ? 'merged_into is null and ' : ''
+  const mergedWhere = mergedReady ? 'where merged_into is null' : ''
   const [states, campaigns, total] = await Promise.all([
-    db.query<{ s: string }>(`select distinct upper(trim(state)) as s from lp.companies where nullif(trim(state), '') is not null order by 1`),
+    db.query<{ s: string }>(`select distinct upper(trim(state)) as s from lp.companies where ${mergedAnd}nullif(trim(state), '') is not null order by 1`),
     db.query<{ s: string }>(`select distinct campaign_name as s from lp.campaign_touches where campaign_name is not null order by 1 limit 200`),
-    db.query<{ n: number }>(`select count(*)::int as n from lp.companies`),
+    db.query<{ n: number }>(`select count(*)::int as n from lp.companies ${mergedWhere}`),
   ])
   return { states: states.rows.map((r) => r.s), campaigns: campaigns.rows.map((r) => r.s), total: Number(total.rows[0]?.n ?? 0) }
 }

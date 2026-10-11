@@ -28,6 +28,13 @@ export function makeOps({ dashboardUrl, runnerKey, fetchImpl = fetch }) {
   }
 }
 
+/** How long a job HANDLER's own ops call may run (review fix, Hermes Oct 11): /api/ops now
+ *  allows 300 s (maxDuration), so a long op such as recompute_scores / recompute_traits /
+ *  instantly reconcile gets the same budget plus a little slack, instead of the 30 s the
+ *  runner's own polling calls (claim_jobs, finish_job_run) use. Still bounded by the job's
+ *  own timeout_s, which aborts the handler. */
+export const HANDLER_OPS_TIMEOUT_MS = 310_000
+
 /** Run one claimed job: its handler, under a timeout, then report the outcome via ops(). Never throws. */
 export async function runOne(claim, { handlers, ops, log = () => {} }) {
   const { job, run_id } = claim
@@ -48,7 +55,7 @@ export async function runOne(claim, { handlers, ops, log = () => {} }) {
       campaignId: job.campaign_id ?? null,
       payload: job.payload ?? {},
       signal: controller.signal,
-      ops,
+      ops: (op, args = {}, o = {}) => ops(op, args, { timeoutMs: HANDLER_OPS_TIMEOUT_MS, ...o }),
       log: (m) => log(`${job.name} (run ${run_id}): ${m}`),
     })
     await ops('finish_job_run', { run_id, status: 'ok', output: output ?? {} })

@@ -8,13 +8,15 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
+import { isOwnerActor } from '../ops/actor-role.ts'
 import { claimDueJobs, finishRun, getJob, listJobRuns, listJobs, reapStale, runNow, setEnabled, upsertJob, type JobStatus } from './store.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
 
-function requireOwnerOrSystem(actor: string): void {
-  if (actor !== 'owner' && actor !== 'system') throw new OpsError('only the owner or the system actor can manage job definitions', 403)
+/** An Owner (the built-in 'owner' or any active human Owner, see isOwnerActor) or the runner ('system'). */
+async function requireOwnerOrSystem(db: Db, actor: string): Promise<void> {
+  if (actor !== 'system' && !(await isOwnerActor(db, actor))) throw new OpsError('only an owner or the system actor can manage job definitions', 403)
 }
 function requireSystem(actor: string): void {
   if (actor !== 'system') throw new OpsError("only actor 'system' (the runner's own key) can do this", 403)
@@ -48,7 +50,7 @@ export const JOB_OPS: Record<string, Op> = {
   put_job: {
     args: '{name, kind, description?, schedule_cron?, timezone?, campaign_id?, payload?, enabled?, timeout_s?}  -- owner or system only',
     run: async (db, actor, a) => {
-      requireOwnerOrSystem(actor)
+      await requireOwnerOrSystem(db, actor)
       return upsertJob(db, actor, {
         name: requireName(a.name),
         kind: String(a.kind ?? ''),
@@ -65,14 +67,14 @@ export const JOB_OPS: Record<string, Op> = {
   set_job_enabled: {
     args: '{name, enabled}  -- owner or system only',
     run: async (db, actor, a) => {
-      requireOwnerOrSystem(actor)
+      await requireOwnerOrSystem(db, actor)
       return setEnabled(db, actor, requireName(a.name), a.enabled !== false)
     },
   },
   run_job_now: {
     args: '{name}  -- queues an immediate run; the runner picks it up on its next poll',
     run: async (db, actor, a) => {
-      requireOwnerOrSystem(actor)
+      await requireOwnerOrSystem(db, actor)
       return runNow(db, actor, requireName(a.name))
     },
   },
@@ -101,7 +103,7 @@ export const JOB_OPS: Record<string, Op> = {
   reap_stale_jobs: {
     args: "{}  -- marks runs whose lock expired as 'timeout'; owner or system only",
     run: async (db, actor) => {
-      requireOwnerOrSystem(actor)
+      await requireOwnerOrSystem(db, actor)
       return reapStale(db, 'system')
     },
   },

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { STAGES, type Stage } from '@/lib/leads/types'
 import { STAGE_LABELS } from '@/lib/leads/filters'
@@ -20,6 +20,16 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   const [stage, setStage] = useState<Stage | ''>('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null)
+  const [lists, setLists] = useState<{ id: number; name: string }[]>([])
+  const [listChoice, setListChoice] = useState('')
+  const [newListName, setNewListName] = useState('')
+
+  useEffect(() => {
+    fetch('/api/leads/lists')
+      .then((r) => r.json())
+      .then((b: { lists?: { id: number; name: string }[] }) => setLists(b.lists ?? []))
+      .catch(() => {})
+  }, [])
   const n = selected.companyIds.length
   if (n === 0) {
     // The selection clears after an action; its result stays readable.
@@ -79,6 +89,36 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
     }
   }
 
+  async function addToList() {
+    if (!listChoice && !newListName.trim()) return
+    setBusy(true)
+    setNote(null)
+    try {
+      const body: Record<string, unknown> = { company_ids: selected.companyIds }
+      if (listChoice) body.list_id = Number(listChoice)
+      else body.new_list_name = newListName.trim()
+      const res = await fetch('/api/leads/lists', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const resBody = (await res.json().catch(() => null)) as Record<string, unknown> | null
+      if (!res.ok) setNote({ tone: 'bad', text: String(resBody?.error ?? `Couldn\u2019t add to the list (${res.status}).`) })
+      else {
+        const list = resBody?.list as { name?: string } | undefined
+        setNote({ tone: 'good', text: `Added ${resBody?.added ?? ''} lead${resBody?.added === 1 ? '' : 's'} to \u201C${list?.name ?? 'the list'}\u201D.` })
+        setListChoice('')
+        setNewListName('')
+        onDone()
+        router.refresh?.()
+      }
+    } catch {
+      setNote({ tone: 'bad', text: 'Couldn\u2019t reach the server.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const verifyIds = selected.unverifiedContactIds
   return (
     <div
@@ -97,6 +137,39 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
           Verify selected
         </span>
       )}
+      <span className="flex items-center gap-1">
+        <label className="sr-only" htmlFor="bulk-list">
+          Add to list
+        </label>
+        <select
+          id="bulk-list"
+          value={listChoice}
+          onChange={(e) => {
+            setListChoice(e.target.value)
+            if (e.target.value) setNewListName('')
+          }}
+          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+        >
+          <option value="">Add to list…</option>
+          {lists.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+          <option value="">New list…</option>
+        </select>
+        {!listChoice ? (
+          <input
+            value={newListName}
+            onChange={(e) => setNewListName(e.target.value)}
+            placeholder="New list name"
+            className="w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+          />
+        ) : null}
+        <button type="button" className={BUTTON} disabled={busy || (!listChoice && !newListName.trim())} onClick={addToList}>
+          Add
+        </button>
+      </span>
       <Link
         href={`/leads/instantly?companies=${selected.companyIds.join(',')}`}
         prefetch={false}

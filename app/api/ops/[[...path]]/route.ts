@@ -18,6 +18,9 @@ import { OpsError } from '@/lib/ops/core'
 import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
+// Long ops (recompute_scores / recompute_traits over every lead, the Instantly reconcile)
+// called by the job runner need more than the default function time (review fix, Hermes).
+export const maxDuration = 300
 
 type Ctx = { params: Promise<{ path?: string[] }> }
 

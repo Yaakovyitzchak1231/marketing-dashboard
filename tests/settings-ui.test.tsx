@@ -12,7 +12,6 @@ import type { FormResult } from '@/app/actions/settings'
 afterEach(() => cleanup())
 
 const noopForm = async (): Promise<FormResult> => ({ ok: true })
-const noopVoid = async () => {}
 
 describe('SettingTextField', () => {
   it('shows the current value and an env badge when the value comes from env', () => {
@@ -106,7 +105,7 @@ describe('SecretField', () => {
         testable
         settingsKeyReady
         replaceAction={noopForm}
-        clearAction={noopVoid}
+        clearAction={noopForm}
         testAction={noopForm}
       />,
     )
@@ -126,7 +125,7 @@ describe('SecretField', () => {
         testable
         settingsKeyReady
         replaceAction={noopForm}
-        clearAction={noopVoid}
+        clearAction={noopForm}
         testAction={noopForm}
       />,
     )
@@ -147,7 +146,7 @@ describe('SecretField', () => {
         testable
         settingsKeyReady={false}
         replaceAction={noopForm}
-        clearAction={noopVoid}
+        clearAction={noopForm}
         testAction={noopForm}
       />,
     )
@@ -165,7 +164,7 @@ describe('SecretField', () => {
         testable={false}
         settingsKeyReady
         replaceAction={noopForm}
-        clearAction={noopVoid}
+        clearAction={noopForm}
         testAction={noopForm}
       />,
     )

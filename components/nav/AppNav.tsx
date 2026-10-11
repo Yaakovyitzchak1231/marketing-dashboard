@@ -15,6 +15,7 @@ export const NAV_ITEMS = [
   { href: '/verify', label: 'Verification' },
   { href: '/campaigns', label: 'Campaigns' },
   { href: '/rules', label: 'Lead rules' },
+  { href: '/segments', label: 'Segments' },
   { href: '/suppressions', label: 'Suppressions' },
   { href: '/replies', label: 'Replies' },
   { href: '/seo', label: 'SEO / AI' },
