@@ -5,11 +5,13 @@ import { allFields } from '@/lib/segments/fields'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { isSegmentAiConfigured } from '@/lib/segments/ai'
 import { SegmentBuilder } from '@/components/segments/SegmentBuilder'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
+/** Only SQLSTATE 42P01 (table not migrated yet); a missing column/function is a real error and is rethrown. */
 function isMissingTable(e: unknown): boolean {
-  return /does not exist/i.test((e as Error)?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 export default async function NewSegmentPage() {

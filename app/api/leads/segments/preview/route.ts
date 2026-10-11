@@ -10,11 +10,13 @@ import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
+/** Only SQLSTATE 42P01 (table not migrated yet); a missing column/function is a real error and is rethrown. */
 function tableMissing(e: unknown): boolean {
-  return /does not exist/i.test((e as Error)?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 export async function POST(req: Request) {

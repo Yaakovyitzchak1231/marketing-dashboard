@@ -5,7 +5,9 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => ({ query: vi.fn() }) }))
 vi.mock('@/lib/segments/store', () => ({
   listSegments: vi.fn(async () => {
-    throw new Error('relation "lp.segments" does not exist')
+    // Real pg/PGlite errors carry SQLSTATE 42P01 for a missing table; the page
+    // keys off the code, not the message (Instinct #86 finding 2).
+    throw Object.assign(new Error('relation "lp.segments" does not exist'), { code: '42P01' })
   }),
 }))
 vi.mock('@/lib/campaigns/store', () => ({ listCampaigns: vi.fn(async () => []) }))

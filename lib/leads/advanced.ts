@@ -10,6 +10,7 @@ import type { Queryable } from '../db/types'
 import type { SegmentDefinition } from '../segments/definition'
 import { getSegment } from '../segments/store'
 import { companyIdsForDefinition, companyIdsForSegment } from '../segments/match-companies'
+import { isUndefinedTable } from '../db/errors.ts'
 
 export interface AdvancedFilter {
   /** What narrowed the list: a saved segment's id and name, or an ad-hoc definition. */
@@ -18,8 +19,9 @@ export interface AdvancedFilter {
   companyIds: number[] | null
 }
 
+/** Only SQLSTATE 42P01 (table not migrated yet); a missing column/function is a real error and is rethrown. */
 function tableMissing(e: unknown): boolean {
-  return /does not exist/i.test((e as Error)?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 export async function resolveAdvancedFilter(db: Queryable, segId: number | null, def: SegmentDefinition | null): Promise<AdvancedFilter> {
