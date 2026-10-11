@@ -55,6 +55,9 @@ export interface ImportOptions {
   via?: 'ui' | 'ops_api'
   /** Cap on how many per-row results come back in detail; the summary counts are always exact. */
   maxDetailRows?: number
+  /** Replace values an existing contact/company already has (default false: only fill empty
+   *  fields). Every overwritten value is written to the audit log with its old value. */
+  overwrite?: boolean
 }
 
 const CONTACT_FIELDS = new Set(['email', 'first_name', 'last_name', 'title', 'phone'])
@@ -103,6 +106,33 @@ function applyMapping(row: Record<string, string>, mapping: Record<string, strin
     }
   }
   return { contact, company, contactCustom, companyCustom, customError }
+}
+
+const asText = (v: unknown): string | null => (v == null ? null : typeof v === 'string' ? v : JSON.stringify(v))
+
+/** One audit row (lp.status_history) for a value a CSV import replaced, so it can be recovered. */
+async function auditOverwrite(q: Queryable, entity: 'contact' | 'company', id: number, field: string, before: unknown, after: unknown, actor: string): Promise<void> {
+  await q.query(
+    `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by, via, note)
+     values ($1, $2, $3, $4, $5, $6, 'import', 'CSV import replaced this value')`,
+    [entity, id, field, asText(before), asText(after), actor],
+  )
+}
+
+/** Merge imported custom-field values. Default: existing keys win (fill only the empty ones).
+ *  overwrite: imported values win, and each changed key is audited with its old value. */
+async function mergeCustom(q: Queryable, entity: 'contact' | 'company', id: number, incoming: Record<string, unknown>, overwrite: boolean, actor: string): Promise<void> {
+  const table = entity === 'contact' ? 'lp.contacts' : 'lp.companies'
+  if (!overwrite) {
+    await q.query(`update ${table} set custom = $2::jsonb || custom where id = $1`, [id, JSON.stringify(incoming)])
+    return
+  }
+  const { rows } = await q.query<{ custom: Record<string, unknown> | null }>(`select custom from ${table} where id = $1`, [id])
+  const cur = rows[0]?.custom ?? {}
+  for (const [k, v] of Object.entries(incoming)) {
+    if (cur[k] != null && cur[k] !== '' && JSON.stringify(cur[k]) !== JSON.stringify(v)) await auditOverwrite(q, entity, id, `custom.${k}`, cur[k], v, actor)
+  }
+  await q.query(`update ${table} set custom = custom || $2::jsonb where id = $1`, [id, JSON.stringify(incoming)])
 }
 
 async function findCompany(q: Queryable, domain: string | null, phone: string | null, nameAddr: string | null): Promise<number | null> {
@@ -223,18 +253,28 @@ async function processRows(
         }
       }
       if (Object.keys(mapped.companyCustom).length) {
-        await db.query(`update lp.companies set custom = custom || $2::jsonb where id = $1`, [companyId, JSON.stringify(mapped.companyCustom)])
+        await mergeCustom(db, 'company', companyId, mapped.companyCustom, Boolean(opts.overwrite), opts.actor)
       }
 
       if (willUpdate) {
         contactId = existing.rows[0].id
+        // Review fix (8b, e2e test): by default an import only FILLS empty fields on an
+        // existing contact; it never overwrites a name/title someone already has. With
+        // overwrite: true it replaces them, and writes the old and new value to the audit log.
+        const { rows: curRows } = await db.query<Record<string, string | null>>('select first_name, last_name, title from lp.contacts where id = $1', [contactId])
+        const cur = curRows[0] ?? {}
         const sets: string[] = []
         const params: unknown[] = []
         for (const [col, val] of Object.entries({ first_name: mapped.contact.first_name, last_name: mapped.contact.last_name, title: mapped.contact.title })) {
-          if (val) {
-            params.push(val)
-            sets.push(`${col} = $${params.length}`)
+          if (!val) continue
+          const before = cur[col] ?? null
+          if (before === val) continue
+          if (before != null && before !== '') {
+            if (!opts.overwrite) continue
+            await auditOverwrite(db, 'contact', contactId, col, before, val, opts.actor)
           }
+          params.push(val)
+          sets.push(`${col} = $${params.length}`)
         }
         if (phone && !email) {
           params.push(phone)
@@ -255,7 +295,7 @@ async function processRows(
         contactId = ctRows[0].id
       }
       if (Object.keys(mapped.contactCustom).length) {
-        await db.query(`update lp.contacts set custom = custom || $2::jsonb where id = $1`, [contactId, JSON.stringify(mapped.contactCustom)])
+        await mergeCustom(db, 'contact', contactId, mapped.contactCustom, Boolean(opts.overwrite), opts.actor)
       }
 
       if (campaignId) {
