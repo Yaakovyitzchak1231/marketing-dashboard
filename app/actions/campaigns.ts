@@ -16,6 +16,8 @@ import { addLeadsByFilter, addLeadsByIds, parseLeadPatch, removeLeads, updateCam
 import { CampaignError, parseCampaignPatch, parseIds, parsePick } from '@/lib/campaigns/types'
 import { runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
+import { currentRole } from '@/lib/auth/session'
+import { requireRole } from '@/lib/auth/roles'
 
 const ME = 'owner'
 
@@ -169,6 +171,7 @@ export async function makeOwnRulesAction(f: FormData) {
 }
 
 export async function addFromSegmentAction(f: FormData) {
+  requireRole(await currentRole(), 'editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const segmentId = Number(s(f, 'segment_id'))

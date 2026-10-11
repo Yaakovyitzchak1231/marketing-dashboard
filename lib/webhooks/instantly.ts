@@ -245,6 +245,8 @@ export async function ingestInstantlyEvent(db: Db, e: InstantlyEvent): Promise<I
       dedupe_key: `touch:${ins.rows[0].id}`,
       props: {
         ...(eventType === 'custom' ? { instantly_type: type } : {}),
+        // Instantly's email id, so the nightly reconcile recognises this exact message.
+        ...(e.email_id ? { instantly_email_id: e.email_id } : {}),
         suppressed,
         // Yaakov runs with open/link tracking off on new sends, so an email_opened
         // event Instantly still fires is a pixel load, not a human — mark it

@@ -4,6 +4,7 @@
  */
 import type { Db } from '../db/types'
 import { OpsError } from '../ops/core'
+import { requireOwnerActor } from '../ops/actor-role'
 import { findCandidates, type MergeEntity } from './candidates'
 import { MergeError, merge as runMerge } from './merge'
 
@@ -33,8 +34,8 @@ const RAW: Record<string, Op> = {
   },
   merge: {
     args: '{entity: company|contact, keep, merge, choices?: {field: "keep"|"merge"|value}}  -- owner only; moves events/membership/comments/sources/enrichment to `keep`, soft-deletes `merge`',
-    run: (db, actor, a) => {
-      if (actor !== 'owner') throw new OpsError('only the owner can merge records', 403)
+    run: async (db, actor, a) => {
+      await requireOwnerActor(db, actor, 'only an owner can merge records')
       return runMerge(db, actor, {
         entity: requireEntity(a.entity),
         keep: Number(a.keep),

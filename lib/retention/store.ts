@@ -113,27 +113,60 @@ export async function forgetContact(db: Db, actor: string, input: ForgetContactI
     // The maintenance escape hatch (0017): the only way status_history rows may be deleted.
     await q.query("select set_config('lp.maintenance', 'on', true)")
 
+    // The person = this row plus every row ever merged into it (directly or through a chain):
+    // a merged-away row still holds its own plaintext email/name/phone.
+    const { rows: personRows } = await q.query<{ id: number; email: string | null }>(
+      `with recursive person as (
+         select id, email from lp.contacts where id = $1
+         union
+         select c.id, c.email from lp.contacts c join person p on c.merged_into = p.id
+       ) select id, email from person`,
+      [contactId],
+    )
+    const ids = personRows.map((r) => Number(r.id))
+    const emails = [...new Set(personRows.map((r) => normalizeEmail(r.email)).filter((e): e is string => Boolean(e)))]
+
     await q.query(
       `update lp.contacts set email = null, email_norm = null, first_name = null, last_name = null, suggested_first_name = null,
               title = null, phone = null, phone_e164 = null, personalization = null, name_evidence_url = null,
-              do_not_contact = true, status = 'do-not-contact', updated_at = now()
-         where id = $1`,
-      [contactId],
+              custom = '{}'::jsonb, do_not_contact = true, status = 'do-not-contact', updated_at = now()
+         where id = any($1::bigint[])`,
+      [ids],
     )
-    await q.query(`delete from lp.enrichment where contact_id = $1`, [contactId])
-    await q.query(`delete from lp.sources where contact_id = $1`, [contactId])
-    await q.query(`update lp.campaign_touches set email = null, payload = coalesce(payload, '{}'::jsonb) - 'email' - 'personalization' where contact_id = $1`, [contactId])
-    await q.query(`update lp.verification_results set email = '[forgotten]' where contact_id = $1`, [contactId])
+    await q.query(`delete from lp.enrichment where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`delete from lp.sources where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`update lp.campaign_touches set email = null, payload = coalesce(payload, '{}'::jsonb) - 'email' - 'personalization' where contact_id = any($1::bigint[])`, [ids])
+    await q.query(`update lp.verification_results set email = '[forgotten]' where contact_id = any($1::bigint[])`, [ids])
+    // The timeline keeps the event (counts stay true) but not the address.
+    await q.query(
+      `update lp.lead_events set email_norm = null, props = props - 'email' - 'lead_email'
+        where contact_id = any($1::bigint[]) or email_norm = any($2::text[])`,
+      [ids, emails],
+    )
+    await q.query(`update lp.consent_log set evidence = null where contact_id = any($1::bigint[])`, [ids])
     // The contact's own edit history can hold the same PII (an old email in an InlineEditCell change); clear it.
-    await q.query(`delete from lp.status_history where entity_type = 'contact' and entity_id = $1 and field = any($2::text[])`, [contactId, PII_HISTORY_FIELDS])
+    await q.query(`delete from lp.status_history where entity_type = 'contact' and entity_id = any($1::bigint[]) and field = any($2::text[])`, [ids, PII_HISTORY_FIELDS])
+
+    // Plaintext suppressions for any of the person's addresses become hashed ones (same
+    // reason / campaign scope), so the block survives without keeping the address.
+    for (const e of emails) {
+      await q.query(
+        `insert into lp.suppressions (email_hash, campaign_id, reason, source, note, created_by, expires_at)
+         select $1, s.campaign_id, s.reason, s.source, 'Hashed when the person was forgotten', $3, s.expires_at
+           from lp.suppressions s where s.email_norm = $2 and s.lifted_at is null
+         on conflict do nothing`,
+        [emailHash(e), e, actor],
+      )
+    }
+    if (emails.length) await q.query(`delete from lp.suppressions where email_norm = any($1::text[])`, [emails])
 
     let suppressed = false
-    if (norm) {
+    for (const e of emails) {
       await q.query(
         `insert into lp.suppressions (email_hash, reason, source, note, created_by)
            values ($1, 'do_not_contact', 'manual', 'Forgotten via Settings/lead page (data retention request)', $2)
          on conflict do nothing`,
-        [emailHash(norm), actor],
+        [emailHash(e), actor],
       )
       suppressed = true
     }
@@ -150,18 +183,77 @@ export async function forgetContact(db: Db, actor: string, input: ForgetContactI
 // ---------------------------------------------------------------------------
 // retention_sweep
 // ---------------------------------------------------------------------------
-export interface RetentionSweepResult {
-  swept: { event_category: string; keep_days: number; deleted: number }[]
-  total_deleted: number
+export interface RetentionPreviewRow {
+  event_category: string
+  keep_days: number
+  /** Raw campaign-touch rows past the window: what a sweep deletes. */
+  touches: number
+  /** Timeline (lp.lead_events) rows of the same type past the window: deleted only when the owner opts in. */
+  timeline_events: number
 }
 
-export async function retentionSweep(db: Db, actor: string): Promise<RetentionSweepResult> {
+export interface RetentionPreview {
+  categories: RetentionPreviewRow[]
+  total_touches: number
+  total_timeline_events: number
+}
+
+/** What a sweep would delete right now, per category. Deletes nothing. */
+export async function retentionPreview(q: Queryable): Promise<RetentionPreview> {
+  const { rows } = await q.query<{ event_category: string; keep_days: number; touches: number; timeline_events: number }>(
+    `select p.event_category, p.keep_days,
+            (select count(*)::int from lp.campaign_touches t
+              where t.event_type = p.event_category and t.occurred_at < now() - (p.keep_days || ' days')::interval) as touches,
+            (select count(*)::int from lp.lead_events e
+              where e.type = p.event_category and e.occurred_at < now() - (p.keep_days || ' days')::interval) as timeline_events
+       from lp.retention_policies p
+      where p.keep_days is not null
+      order by p.event_category`,
+  )
+  const categories = rows.map((r) => ({ event_category: r.event_category, keep_days: Number(r.keep_days), touches: Number(r.touches), timeline_events: Number(r.timeline_events) }))
+  return {
+    categories,
+    total_touches: categories.reduce((n, c) => n + c.touches, 0),
+    total_timeline_events: categories.reduce((n, c) => n + c.timeline_events, 0),
+  }
+}
+
+export interface RetentionSweepResult {
+  swept: { event_category: string; keep_days: number; deleted: number; timeline_deleted: number }[]
+  total_deleted: number
+  total_timeline_deleted: number
+}
+
+export interface RetentionSweepOptions {
+  /** The owner reviewed the preview and said yes. Without it nothing is deleted. */
+  confirm?: boolean
+  /** Also delete timeline history (lp.lead_events) past each window. Off unless the owner ticks it. */
+  include_timeline?: boolean
+}
+
+/**
+ * Deletes raw campaign-touch events past each category's keep_days -- only when the
+ * owner confirmed this run (Yaakov, Oct 11: the owner chooses every time it runs).
+ * Timeline history is deleted only with include_timeline. Scores keep working: a
+ * score point whose source event is deleted keeps its points (score_points.source_event_id
+ * is set null by its FK), so totals do not change.
+ */
+export async function retentionSweep(db: Db, actor: string, opts: RetentionSweepOptions = {}): Promise<RetentionSweepResult> {
+  if (opts.confirm !== true) {
+    throw new RetentionError('Review what this sweep will delete first, then confirm it. Nothing was deleted.', 409)
+  }
+  const includeTimeline = opts.include_timeline === true
   return db.tx(async (q) => {
     const { rows: policies } = await q.query<{ event_category: string; keep_days: number }>(
       `select event_category, keep_days from lp.retention_policies where keep_days is not null`,
     )
+    if (includeTimeline) {
+      // The maintenance escape hatch (0017/0018): the only way lead_events rows may be deleted.
+      await q.query("select set_config('lp.maintenance', 'on', true)")
+    }
     const swept: RetentionSweepResult['swept'] = []
     let total = 0
+    let totalTimeline = 0
     for (const p of policies) {
       const { rows } = await q.query<{ n: number }>(
         `with gone as (
@@ -170,14 +262,27 @@ export async function retentionSweep(db: Db, actor: string): Promise<RetentionSw
         [p.event_category, p.keep_days],
       )
       const deleted = Number(rows[0]?.n ?? 0)
-      swept.push({ event_category: p.event_category, keep_days: p.keep_days, deleted })
+      let timelineDeleted = 0
+      if (includeTimeline) {
+        const t = await q.query<{ n: number }>(
+          `with gone as (
+             delete from lp.lead_events where type = $1 and occurred_at < now() - ($2 || ' days')::interval returning id
+           ) select count(*)::int as n from gone`,
+          [p.event_category, p.keep_days],
+        )
+        timelineDeleted = Number(t.rows[0]?.n ?? 0)
+      }
+      swept.push({ event_category: p.event_category, keep_days: p.keep_days, deleted, timeline_deleted: timelineDeleted })
       total += deleted
+      totalTimeline += timelineDeleted
     }
+    if (includeTimeline) await q.query("select set_config('lp.maintenance', 'off', true)")
     await q.query(
       `insert into lp.status_history (entity_type, entity_key, field, new_value, changed_by, via, note)
          values ('job', 'retention_sweep', 'run', $1, $2, 'ops_api', $3)`,
-      [String(total), actor, `Retention sweep deleted ${total} event row(s) across ${swept.length} categor${swept.length === 1 ? 'y' : 'ies'}`],
+      [String(total + totalTimeline), actor,
+       `Retention sweep (confirmed by ${actor}) deleted ${total} event row(s)${includeTimeline ? ` and ${totalTimeline} timeline row(s)` : ', timeline kept'} across ${swept.length} categor${swept.length === 1 ? 'y' : 'ies'}`],
     )
-    return { swept, total_deleted: total }
+    return { swept, total_deleted: total, total_timeline_deleted: totalTimeline }
   }, actor)
 }

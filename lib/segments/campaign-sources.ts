@@ -34,7 +34,7 @@ import { logEvent } from '../ops/events.ts'
 import { getCampaign } from '../campaigns/store.ts'
 import { addLeadsByIds } from '../campaigns/leads.ts'
 import { getSegment, type Segment } from './store.ts'
-import { companyIdsForDefinition } from './match-companies.ts'
+import { companyIdsForSegment, companyIdsInSegment } from './match-companies.ts'
 import { checkEmails } from '../suppressions/store.ts'
 
 type Args = Record<string, unknown>
@@ -69,7 +69,7 @@ async function requireCampaign(q: Queryable, id: number) {
 
 /** Every company id a segment matches, up to MAX_SOURCE_ADD + 1 (so an over-large segment is detected, not silently truncated). */
 async function segmentCompanyIds(q: Queryable, seg: Segment): Promise<number[]> {
-  return companyIdsForDefinition(q, seg.definition, MAX_SOURCE_ADD)
+  return companyIdsForSegment(q, seg, MAX_SOURCE_ADD)
 }
 
 export interface SegmentSourceResult {
@@ -106,8 +106,10 @@ async function addFromSegment(db: Db, actor: string, a: Args): Promise<SegmentSo
     }
 
     const excludedSet = new Set<number>()
+    // Exclusions are decided in SQL against the candidate ids, with no row cap: an
+    // excluded lead is never added, however large the exclusion segment is.
     for (const es of excludeSegs) {
-      for (const id of await segmentCompanyIds(q, es)) excludedSet.add(id)
+      for (const id of await companyIdsInSegment(q, es, matching)) excludedSet.add(id)
     }
 
     const remaining1 = matching.filter((id) => !excludedSet.has(id))

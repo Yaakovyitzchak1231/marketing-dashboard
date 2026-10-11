@@ -6,6 +6,8 @@
  * wrapper over the already-tested segment engine ops (lib/ops/dispatch.ts).
  */
 import { NextResponse } from 'next/server'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { getDb } from '@/lib/db'
 import { runOp } from '@/lib/ops/dispatch'
 import { listSegments } from '@/lib/segments/store'
@@ -30,6 +32,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // A Viewer can read lists/segments but not create or change them.
+  if (!canAtLeast(await currentRole(), 'editor')) return NextResponse.json({ error: 'This needs editor access.' }, { status: 403 })
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { name?: unknown; definition?: unknown } | null

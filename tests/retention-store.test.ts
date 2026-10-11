@@ -111,7 +111,7 @@ describe('lib/retention/store', () => {
     await addTouch(db, { companyId: co, event: 'email_sent', at: old }) // forever category: never swept
     await addTouch(db, { companyId: co, event: 'reply_received', at: old }) // forever category: never swept
 
-    const result = await retentionSweep(db, 'system')
+    const result = await retentionSweep(db, 'owner', { confirm: true })
     const opened = result.swept.find((s) => s.event_category === 'email_opened')
     expect(opened?.deleted).toBe(1)
     expect(result.total_deleted).toBe(1)

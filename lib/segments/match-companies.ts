@@ -6,7 +6,7 @@
  * reimplementing the company/contact-entity split.
  */
 import type { Queryable } from '../db/types.ts'
-import { compileSegment, matchQuerySql, type CompiledSegment } from './compile.ts'
+import { compileSegment, compileStoredSegment, matchQuerySql, type CompiledSegment, type StoredSegmentLike } from './compile.ts'
 import type { SegmentDefinition } from './definition.ts'
 
 async function idsFromCompiled(q: Queryable, compiled: CompiledSegment, limit: number | null): Promise<number[]> {
@@ -33,4 +33,34 @@ async function idsFromCompiled(q: Queryable, compiled: CompiledSegment, limit: n
 export async function companyIdsForDefinition(q: Queryable, definition: unknown, limit: number | null = null): Promise<number[]> {
   const compiled = await compileSegment(q, definition as SegmentDefinition)
   return idsFromCompiled(q, compiled, limit)
+}
+
+/** Every company id a STORED segment matches (a static list = its member rows; a
+ *  dynamic segment = its compiled definition). Use this whenever you hold a segment row. */
+export async function companyIdsForSegment(q: Queryable, seg: StoredSegmentLike, limit: number | null = null): Promise<number[]> {
+  const compiled = await compileStoredSegment(q, seg)
+  return idsFromCompiled(q, compiled, limit)
+}
+
+/** SQL selecting the company ids a compiled segment matches (contact segments mapped to
+ *  their company). Its placeholders are the compiled params ($1..$n). */
+function companyIdSubquery(compiled: CompiledSegment): string {
+  const match = matchQuerySql(compiled)
+  if (compiled.entity === 'company') return match
+  return `select ct.company_id as id from lp.contacts ct join (${match}) m on m.id = ct.id where ct.company_id is not null`
+}
+
+/**
+ * Of `candidateIds`, the ones a stored segment matches -- decided set-based in SQL, with
+ * NO row cap (an exclusion list of any size excludes every one of its leads).
+ */
+export async function companyIdsInSegment(q: Queryable, seg: StoredSegmentLike, candidateIds: number[]): Promise<number[]> {
+  if (!candidateIds.length) return []
+  const compiled = await compileStoredSegment(q, seg)
+  const p = compiled.params.length + 1
+  const { rows } = await q.query<{ id: string | number }>(
+    `select x.id from unnest($${p}::bigint[]) as x(id) where x.id in (${companyIdSubquery(compiled)})`,
+    [...compiled.params, candidateIds],
+  )
+  return rows.map((r) => Number(r.id))
 }

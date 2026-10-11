@@ -6,6 +6,8 @@
  * The bulk bar's "Add to list..." (plan 2.4). Human route; actor is the owner.
  */
 import { NextResponse } from 'next/server'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { getDb } from '@/lib/db'
 import { listStaticLists, addCompaniesToList, ListsError } from '@/lib/segments/lists'
 import { OpsError } from '@/lib/ops/core'
@@ -30,6 +32,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // A Viewer can read lists/segments but not create or change them.
+  if (!canAtLeast(await currentRole(), 'editor')) return NextResponse.json({ error: 'This needs editor access.' }, { status: 403 })
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { company_ids?: unknown; list_id?: unknown; new_list_name?: unknown } | null

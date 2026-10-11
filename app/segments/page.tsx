@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db'
 import { PageFrame, DbNotConnected, primaryBtnCls } from '@/components/ops/bits'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { listSegments } from '@/lib/segments/store'
-import { compileSegment, countSegment } from '@/lib/segments/compile'
+import { compileStoredSegment, countSegment } from '@/lib/segments/compile'
 import { readback } from '@/lib/segments/readback'
 import { listPresets } from '@/lib/segments/presets'
 import { listCampaigns } from '@/lib/campaigns/store'
@@ -58,7 +58,7 @@ export default async function SegmentsPage() {
     segments.map(async (seg) => {
       let counts = { companies: 0, contacts: 0, verified_sendable: 0 }
       try {
-        const compiled = await compileSegment(db, seg.definition)
+        const compiled = await compileStoredSegment(db, seg)
         counts = await countSegment(db, compiled)
       } catch {
         // a segment referencing something since removed (e.g. an archived nested segment) still lists, with 0 counts

@@ -50,10 +50,14 @@ describe('merge + retention ops (via dispatch)', () => {
     expect(forgot.ok).toBe(true)
   })
 
-  it('retention_sweep: the "system" actor (the job runner) may call it; a random agent may not', async () => {
-    const denied = await runOp(db, 'tab', 'retention_sweep', {}).catch((e) => e)
+  it('retention_sweep: only the owner, and only after confirming (Yaakov, Oct 11: the owner chooses every run)', async () => {
+    const denied = await runOp(db, 'tab', 'retention_sweep', { confirm: true }).catch((e) => e)
     expect(denied).toBeInstanceOf(OpsError)
-    const ok = (await runOp(db, 'system', 'retention_sweep', {})) as { total_deleted: number }
+    const system = await runOp(db, 'system', 'retention_sweep', { confirm: true }).catch((e) => e)
+    expect(system).toBeInstanceOf(OpsError)
+    const unconfirmed = await runOp(db, 'owner', 'retention_sweep', {}).catch((e) => e)
+    expect((unconfirmed as OpsError).status).toBe(409)
+    const ok = (await runOp(db, 'owner', 'retention_sweep', { confirm: true })) as { total_deleted: number }
     expect(typeof ok.total_deleted).toBe('number')
   })
 })

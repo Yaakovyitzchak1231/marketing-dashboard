@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { actorFor } from '@/lib/auth/act'
 import { AuthError } from '@/lib/auth/roles'
-import { forgetContact, RetentionError, retentionSweep, setRetentionPolicy, type RetentionPolicyRow } from '@/lib/retention/store'
+import { forgetContact, RetentionError, setRetentionPolicy, type RetentionPolicyRow } from '@/lib/retention/store'
 
 type Fail = { ok: false; error: string }
 const NOT_CONNECTED: Fail = { ok: false, error: 'The database is not connected, so this is not saved.' }
@@ -40,19 +40,6 @@ export async function forgetContactAction(input: { contact_id: number; confirm: 
     const result = await forgetContact(db, ME, input)
     revalidatePath('/leads')
     return { ok: true, suppressed: result.suppressed }
-  } catch (e) {
-    return fail(e)
-  }
-}
-
-export async function runRetentionSweepAction(): Promise<{ ok: true; total_deleted: number } | Fail> {
-  const db = getDb()
-  if (!db) return NOT_CONNECTED
-  try {
-    const ME = await actorFor('owner')
-    const result = await retentionSweep(db, ME)
-    revalidatePath('/settings')
-    return { ok: true, total_deleted: result.total_deleted }
   } catch (e) {
     return fail(e)
   }

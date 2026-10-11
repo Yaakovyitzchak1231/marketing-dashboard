@@ -7,7 +7,7 @@
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
 import { DefinitionError, validateDefinition } from './definition.ts'
-import { compileSegment, countSegment, matchingIds, sampleRows } from './compile.ts'
+import { compileSegment, compileStoredSegment, countSegment, matchingIds, sampleRows } from './compile.ts'
 import { readback } from './readback.ts'
 import { archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment } from './store.ts'
 import { emitLeadEvents } from '../events/emit.ts'
@@ -210,7 +210,7 @@ export const SEGMENT_OPS: Record<string, Op> = {
       const segs = await listSegments(db, { includeArchived: false })
       const results: { segment_id: number; written: boolean }[] = []
       for (const seg of segs) {
-        const compiled = await compileSegment(db, seg.definition)
+        const compiled = await compileStoredSegment(db, seg)
         const counts = await countSegment(db, compiled)
         const { rowCount } = await db.query(
           `insert into lp.segment_snapshots (segment_id, companies, contacts, sendable)

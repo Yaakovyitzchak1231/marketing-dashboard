@@ -12,6 +12,7 @@
  */
 import type { Db } from '@/lib/db/types'
 import { OpsError } from '@/lib/ops/core'
+import { isOwnerActor } from '@/lib/ops/actor-role'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -20,11 +21,14 @@ export const INSTANTLY_RECONCILE_OPS: Record<string, Op> = {
   instantly_reconcile_run: {
     args: "{since_days?}  -- the runner (actor 'system') or the owner only; pulls per-lead Instantly activity and inserts any lp.lead_events the webhook missed",
     run: async (db, actor, a) => {
-      if (actor !== 'system' && actor !== 'owner') throw new OpsError('only the runner or the owner can run the Instantly reconcile', 403)
+      if (actor !== 'system' && !(await isOwnerActor(db, actor))) throw new OpsError('only the runner or an owner can run the Instantly reconcile', 403)
       const [{ clientFromConfig }, { reconcileInstantly }] = await Promise.all([import('@/lib/instantly/client'), import('@/lib/instantly/reconcile')])
       const client = await clientFromConfig()
       if (!client) throw new OpsError('no Instantly API key is configured (Settings → Integrations)', 409)
       const sinceDays = a.since_days == null ? undefined : Number(a.since_days)
+      if (sinceDays !== undefined && (!Number.isInteger(sinceDays) || sinceDays < 1 || sinceDays > 365)) {
+        throw new OpsError('since_days must be a whole number of days from 1 to 365')
+      }
       return reconcileInstantly(db, client, { sinceDays })
     },
   },
