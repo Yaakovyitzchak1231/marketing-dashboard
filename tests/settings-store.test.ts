@@ -148,7 +148,7 @@ describe('settings store (real Postgres via PGlite)', () => {
 
   it('dynamic integrations.*.api_key / api_url keys are accepted and never leak values', async () => {
     await db.query(
-      `insert into lp.integrations (id, name, kind, settings_prefix) values ('listmonk', 'Listmonk', 'listmonk', 'integrations.listmonk')`,
+      `insert into lp.integrations (id, name, kind, settings_prefix) values ('listmonk', 'Listmonk', 'listmonk', 'integrations.listmonk') on conflict (id) do nothing`,
     )
     await putSetting(db, 'owner', 'integrations.listmonk.api_url', 'http://100.104.103.48:18510')
     await putSecret(db, 'owner', 'integrations.listmonk.api_key', 'lm-secret-key-42')
