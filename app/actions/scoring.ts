@@ -23,6 +23,15 @@ const s = (f: FormData, k: string) => {
 }
 const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof ScoringError ? e.message : e instanceof SyntaxError ? 'rules must be valid JSON' : null)
 
+/** A JSON textarea, with an error that names the box that is wrong (not always "rules"). */
+function parseJsonField(text: string, label: string): unknown {
+  try {
+    return JSON.parse(text || '[]')
+  } catch {
+    throw new ScoringError(`${label} must be valid JSON.`)
+  }
+}
+
 function back(q: Record<string, string>): never {
   const u = new URLSearchParams(q)
   redirect(`/settings/scoring?${u.toString()}`)
@@ -40,9 +49,10 @@ export async function saveScoreModelRulesAction(f: FormData) {
       entity: s(f, 'entity') as 'company' | 'contact',
       kind: s(f, 'kind') as 'engagement' | 'fit',
       campaign_id: s(f, 'campaign_id') ? Number(s(f, 'campaign_id')) : null,
-      rules: JSON.parse(rulesText || '[]'),
-      thresholds: JSON.parse(thresholdsText || '[]'),
-      max_points: s(f, 'max_points') ? Number(s(f, 'max_points')) : null,
+      rules: parseJsonField(rulesText, 'Rules'),
+      thresholds: parseJsonField(thresholdsText, 'Thresholds'),
+      // No max_points field on the form = keep the stored cap; an empty field clears it.
+      max_points: f.has('max_points') ? (s(f, 'max_points') ? Number(s(f, 'max_points')) : null) : undefined,
     })
   } catch (e) {
     const m = msg(e)
