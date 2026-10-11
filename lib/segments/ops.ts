@@ -12,6 +12,10 @@ import { readback } from './readback.ts'
 import { archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment } from './store.ts'
 import { emitLeadEvents } from '../events/emit.ts'
 import { allFields } from './fields.ts'
+// lib/segments/ai.ts imports 'server-only' (it calls an external AI provider); load it on first use so
+// this table (reached by dispatch.ts, which many test files import) stays importable anywhere, the
+// same way lib/campaign-profiles/ops.ts lazy-loads suggest.ts for the same reason.
+const aiModule = () => import('./ai.ts')
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -23,6 +27,7 @@ function wrap(run: Op['run']): Op['run'] {
     } catch (e) {
       if (e instanceof SegmentError) throw new OpsError(e.message, e.status)
       if (e instanceof DefinitionError) throw new OpsError(e.message, 400)
+      if (e instanceof Error && e.name === 'SegmentAiError') throw new OpsError(e.message, 400)
       throw e
     }
   }
@@ -211,6 +216,18 @@ export const SEGMENT_OPS: Record<string, Op> = {
       }
       void actor
       return { segments: segs.length, results }
+    }),
+  },
+  /** "Describe it" (2.11): text -> a validated definition + readback, for agents and
+   *  the builder's AI box alike. Never auto-saved -- the caller reviews/edits, then
+   *  create_segment / update_segment saves it like any other definition. */
+  segment_from_text: {
+    args: '{text, campaign_id?}',
+    run: wrap(async (_db, _actor, a) => {
+      const text = String(a.text ?? '')
+      void a.campaign_id // reserved: not yet used to bias the prompt
+      const { segmentFromText } = await aiModule()
+      return segmentFromText(text)
     }),
   },
 }
