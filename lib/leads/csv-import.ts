@@ -185,76 +185,91 @@ async function processRows(
       }
     }
 
-    // Find or create the contact (and its company) for real -- processRows always writes;
-    // the caller rolls this transaction back for a dry run.
-    const existing = email
-      ? await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where email_norm = $1 limit 1', [email])
-      : await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where phone_e164 = $1 and email is null limit 1', [phone])
-    const willUpdate = Boolean(existing.rows[0])
-
-    const companyName = mapped.company.company_name?.trim() || null
-    const domain = normalizeDomain(mapped.company.website)
-    const companyPhone = mapped.company.company_phone ? normalizePhone(mapped.company.company_phone) : null
-    const nameAddr = companyName ? nameAddressKey(companyName, null, mapped.company.city, mapped.company.state) : null
-
+    // Each row's writes run under a savepoint (review fix, #76): a row that still collides
+    // with an existing lead on a unique key is rolled back alone and reported in the
+    // summary as invalid, instead of failing the whole import.
+    await db.query('savepoint csv_row')
     let companyId: number
-    if (willUpdate) {
-      companyId = existing.rows[0].company_id
-    } else {
-      const found = companyName || domain ? await findCompany(db, domain, companyPhone, nameAddr) : null
-      if (found) {
-        companyId = found
-      } else {
-        const { rows: cRows } = await db.query<{ id: number }>(
-          `insert into lp.companies (name, website, website_domain, phone, phone_e164, city, state, name_addr_key, segment, created_by)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, 'other'), $10) returning id`,
-          [companyName ?? '(unknown)', mapped.company.website || null, domain, mapped.company.company_phone || null, companyPhone, mapped.company.city || null, mapped.company.state || null, nameAddr, pool, opts.actor],
-        )
-        companyId = cRows[0].id
-      }
-    }
-    if (Object.keys(mapped.companyCustom).length) {
-      await db.query(`update lp.companies set custom = custom || $2::jsonb where id = $1`, [companyId, JSON.stringify(mapped.companyCustom)])
-    }
-
     let contactId: number
-    if (willUpdate) {
-      contactId = existing.rows[0].id
-      const sets: string[] = []
-      const params: unknown[] = []
-      for (const [col, val] of Object.entries({ first_name: mapped.contact.first_name, last_name: mapped.contact.last_name, title: mapped.contact.title })) {
-        if (val) {
-          params.push(val)
-          sets.push(`${col} = $${params.length}`)
+    let willUpdate: boolean
+    try {
+      // Find or create the contact (and its company) for real -- processRows always writes;
+      // the caller rolls this transaction back for a dry run.
+      const existing = email
+        ? await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where email_norm = $1 limit 1', [email])
+        : await db.query<{ id: number; company_id: number }>('select id, company_id from lp.contacts where phone_e164 = $1 and email is null limit 1', [phone])
+      willUpdate = Boolean(existing.rows[0])
+
+      const companyName = mapped.company.company_name?.trim() || null
+      const domain = normalizeDomain(mapped.company.website)
+      const companyPhone = mapped.company.company_phone ? normalizePhone(mapped.company.company_phone) : null
+      const nameAddr = companyName ? nameAddressKey(companyName, null, mapped.company.city, mapped.company.state) : null
+
+      if (willUpdate) {
+        companyId = existing.rows[0].company_id
+      } else {
+        // Look up by phone too (review fix, #76): a company-phone-only row used to skip the
+        // lookup and insert a duplicate phone, which aborted the whole import on companies_phone_uq.
+        const found = companyName || domain || companyPhone ? await findCompany(db, domain, companyPhone, nameAddr) : null
+        if (found) {
+          companyId = found
+        } else {
+          const { rows: cRows } = await db.query<{ id: number }>(
+            `insert into lp.companies (name, website, website_domain, phone, phone_e164, city, state, name_addr_key, segment, created_by)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9, 'other'), $10) returning id`,
+            [companyName ?? '(unknown)', mapped.company.website || null, domain, mapped.company.company_phone || null, companyPhone, mapped.company.city || null, mapped.company.state || null, nameAddr, pool, opts.actor],
+          )
+          companyId = cRows[0].id
         }
       }
-      if (phone && !email) {
-        params.push(phone)
-        sets.push(`phone_e164 = $${params.length}`)
-        params.push(phoneRaw)
-        sets.push(`phone = $${params.length}`)
+      if (Object.keys(mapped.companyCustom).length) {
+        await db.query(`update lp.companies set custom = custom || $2::jsonb where id = $1`, [companyId, JSON.stringify(mapped.companyCustom)])
       }
-      if (sets.length) {
-        params.push(contactId)
-        await db.query(`update lp.contacts set ${sets.join(', ')} where id = $${params.length}`, params)
-      }
-    } else {
-      const { rows: ctRows } = await db.query<{ id: number }>(
-        `insert into lp.contacts (company_id, email, email_norm, first_name, last_name, title, phone, phone_e164, email_source, name_source, status)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, 'import', 'import', 'new') returning id`,
-        [companyId, email, email, mapped.contact.first_name || null, mapped.contact.last_name || null, mapped.contact.title || null, phoneRaw, phone],
-      )
-      contactId = ctRows[0].id
-    }
-    if (Object.keys(mapped.contactCustom).length) {
-      await db.query(`update lp.contacts set custom = custom || $2::jsonb where id = $1`, [contactId, JSON.stringify(mapped.contactCustom)])
-    }
 
-    if (campaignId) {
-      await db.query(
-        `insert into lp.campaign_leads (campaign_id, company_id, added_via, added_by) values ($1, $2, 'api', $3) on conflict (campaign_id, company_id) do nothing`,
-        [campaignId, companyId, opts.actor],
-      )
+      if (willUpdate) {
+        contactId = existing.rows[0].id
+        const sets: string[] = []
+        const params: unknown[] = []
+        for (const [col, val] of Object.entries({ first_name: mapped.contact.first_name, last_name: mapped.contact.last_name, title: mapped.contact.title })) {
+          if (val) {
+            params.push(val)
+            sets.push(`${col} = $${params.length}`)
+          }
+        }
+        if (phone && !email) {
+          params.push(phone)
+          sets.push(`phone_e164 = $${params.length}`)
+          params.push(phoneRaw)
+          sets.push(`phone = $${params.length}`)
+        }
+        if (sets.length) {
+          params.push(contactId)
+          await db.query(`update lp.contacts set ${sets.join(', ')} where id = $${params.length}`, params)
+        }
+      } else {
+        const { rows: ctRows } = await db.query<{ id: number }>(
+          `insert into lp.contacts (company_id, email, email_norm, first_name, last_name, title, phone, phone_e164, email_source, name_source, status)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, 'import', 'import', 'new') returning id`,
+          [companyId, email, email, mapped.contact.first_name || null, mapped.contact.last_name || null, mapped.contact.title || null, phoneRaw, phone],
+        )
+        contactId = ctRows[0].id
+      }
+      if (Object.keys(mapped.contactCustom).length) {
+        await db.query(`update lp.contacts set custom = custom || $2::jsonb where id = $1`, [contactId, JSON.stringify(mapped.contactCustom)])
+      }
+
+      if (campaignId) {
+        await db.query(
+          `insert into lp.campaign_leads (campaign_id, company_id, added_via, added_by) values ($1, $2, 'api', $3) on conflict (campaign_id, company_id) do nothing`,
+          [campaignId, companyId, opts.actor],
+        )
+      }
+      await db.query('release savepoint csv_row')
+    } catch (e) {
+      if ((e as { code?: string })?.code !== '23505') throw e
+      await db.query('rollback to savepoint csv_row')
+      push('invalid', 'Conflicts with a lead already saved (same company phone, website or email). Row skipped.')
+      continue
     }
 
     push(willUpdate ? 'would_update' : 'would_create', undefined, { contact_id: contactId, company_id: companyId })

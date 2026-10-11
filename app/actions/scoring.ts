@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { ScoringError, recomputeScores, upsertScoreModel } from '@/lib/scoring/engine'
+import { getJob, runNow } from '@/lib/jobs/store'
 
 const ME = 'owner'
 
@@ -52,13 +53,24 @@ export async function saveScoreModelRulesAction(f: FormData) {
 }
 
 export async function recomputeAllScoresAction() {
+  // Review fix (#74): never recompute every lead inside this page request (it timed out
+  // around 50k leads and rolled everything back). Queue the background 'score_refresh'
+  // job instead; the runner picks it up on its next poll. Only when that job isn't
+  // registered on this database does it fall back to running here, in committed batches.
+  let queued = false
   try {
-    await recomputeScores(db(), ME, {})
+    const d = db()
+    if (await getJob(d, 'score_refresh')) {
+      await runNow(d, ME, 'score_refresh')
+      queued = true
+    } else {
+      await recomputeScores(d, ME, {})
+    }
   } catch (e) {
     const m = msg(e)
     if (!m) throw e
     back({ error: m })
   }
   revalidatePath('/settings/scoring')
-  back({ saved: 'Recomputed.' })
+  back({ saved: queued ? 'Queued. The background runner recomputes every lead within a few minutes (see Jobs).' : 'Recomputed.' })
 }

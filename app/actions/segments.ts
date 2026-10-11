@@ -15,7 +15,7 @@ import {
   archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment, type Segment,
 } from '@/lib/segments/store'
 import { getSegmentAiConfig, isSegmentAiConfigured, segmentFromText, SegmentAiError, type SegmentFromTextOutcome } from '@/lib/segments/ai'
-import { listPresets, getPreset, type SegmentPreset } from '@/lib/segments/presets'
+import { listPresets, getPreset, presetSegmentInput, type SegmentPreset } from '@/lib/segments/presets'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { emitLeadEvents } from '@/lib/events/emit'
 
@@ -137,24 +137,7 @@ export async function createFromPresetAction(presetKey: string, campaignId: numb
     const preset = getPreset(presetKey)
     if (!preset) return { ok: false, error: `No starter template "${presetKey}".` }
     const d = db()
-    const data = await d.tx(
-      (q) =>
-        createSegment(
-          q,
-          ME,
-          {
-            name: preset.label,
-            description: preset.description,
-            entity: preset.definition.entity,
-            definition: preset.definition,
-            campaign_id: campaignId,
-            is_preset: true,
-            preset_key: preset.key,
-          },
-          'ui',
-        ),
-      ME,
-    )
+    const data = await d.tx((q) => createSegment(q, ME, presetSegmentInput(preset, campaignId), 'ui'), ME)
     touch()
     return { ok: true, data }
   } catch (e) {

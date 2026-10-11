@@ -171,45 +171,35 @@ export async function fitModelForCampaign(db: Db, actor: string, campaignId: num
   })
 }
 
-interface LeadKey {
-  company_id: number | null
-  contact_id: number | null
+/** How many leads one transaction recomputes. Each batch commits on its own, so a
+ *  50k-lead recompute is ~200 short transactions of a handful of set-based queries
+ *  each, never one giant transaction that a request timeout rolls back (review fix, #74). */
+export const SCORE_BATCH_SIZE = 250
+
+function colFor(model: ScoreModelRow): 'company_id' | 'contact_id' {
+  return model.entity === 'company' ? 'company_id' : 'contact_id'
 }
 
-/** Distinct leads (company or contact ids) with at least one event the model's rules could match, scoped to the model's campaign if it has one. */
-async function leadsToScore(q: Queryable, model: ScoreModelRow): Promise<LeadKey[]> {
+/** Ids of every lead the model must (re)score: leads with an event its current rules
+ *  could match, PLUS leads that already have a score under it -- so a lead whose only
+ *  points came from a rule that was since removed is recomputed (and drops) too. */
+async function leadIdsToScore(q: Queryable, model: ScoreModelRow): Promise<number[]> {
+  const col = colFor(model)
   const eventTypes = [...new Set(model.rules.map((r) => r.event_type))]
-  if (!eventTypes.length) return []
-  const col = model.entity === 'company' ? 'company_id' : 'contact_id'
-  const params: unknown[] = [eventTypes]
+  const params: unknown[] = [model.id, eventTypes]
   let campaignClause = ''
   if (model.campaign_id != null) {
     params.push(model.campaign_id)
     campaignClause = ` and campaign_id = $${params.length}`
   }
   const { rows } = await q.query<{ id: number }>(
-    `select distinct ${col} as id from lp.lead_events where type = any($1::text[]) and ${col} is not null${campaignClause}`,
+    `select ${col} as id from lp.lead_events where type = any($2::text[]) and ${col} is not null${campaignClause}
+     union
+     select ${col} as id from lp.scores where model_id = $1 and ${col} is not null
+     order by 1`,
     params,
   )
-  return rows.map((r) => (model.entity === 'company' ? { company_id: r.id, contact_id: null } : { company_id: null, contact_id: r.id }))
-}
-
-async function eventsForLead(q: Queryable, model: ScoreModelRow, lead: LeadKey): Promise<ScorableEvent[]> {
-  const eventTypes = [...new Set(model.rules.map((r) => r.event_type))]
-  if (!eventTypes.length) return []
-  const col = model.entity === 'company' ? 'company_id' : 'contact_id'
-  const id = model.entity === 'company' ? lead.company_id : lead.contact_id
-  const params: unknown[] = [eventTypes, id]
-  let campaignClause = ''
-  if (model.campaign_id != null) {
-    params.push(model.campaign_id)
-    campaignClause = ` and campaign_id = $${params.length}`
-  }
-  const { rows } = await q.query<{ id: number; type: string; occurred_at: string; props: Record<string, unknown> }>(
-    `select id, type, occurred_at, props from lp.lead_events where type = any($1::text[]) and ${col} = $2${campaignClause} order by occurred_at`,
-    params,
-  )
-  return rows
+  return rows.map((r) => Number(r.id))
 }
 
 export interface RecomputeOneResult {
@@ -222,59 +212,127 @@ export interface RecomputeOneResult {
   threshold_crossed: boolean
 }
 
-/** Recompute one lead's score under one model: award new points, sum live points, snapshot history, emit a threshold event on a new crossing. */
-async function recomputeLead(q: Queryable, model: ScoreModelRow, lead: LeadKey, actor: string, now: Date): Promise<RecomputeOneResult> {
-  const events = await eventsForLead(q, model, lead)
-  const awards = evaluateEvents(model.rules, events)
-  for (const a of awards) {
+/**
+ * Recompute a batch of leads under one model, set-based (a fixed handful of queries
+ * per batch, not per lead): rebuild the event-sourced points from the model's CURRENT
+ * rules (so an edited or removed rule stops counting -- review fix, #74), sum live
+ * points, upsert scores, snapshot history, emit a threshold event on a new crossing.
+ * Manual points (no source event) are kept as they are.
+ */
+async function recomputeBatch(q: Queryable, model: ScoreModelRow, ids: number[], actor: string, now: Date): Promise<RecomputeOneResult[]> {
+  if (!ids.length) return []
+  const col = colFor(model)
+  const keyOf = (id: number) => (model.entity === 'company' ? { company_id: id, contact_id: null } : { company_id: null, contact_id: id })
+
+  // 1. Events for the whole batch in one read.
+  const eventTypes = [...new Set(model.rules.map((r) => r.event_type))]
+  const byLead = new Map<number, ScorableEvent[]>()
+  if (eventTypes.length) {
+    const params: unknown[] = [eventTypes, ids]
+    let campaignClause = ''
+    if (model.campaign_id != null) {
+      params.push(model.campaign_id)
+      campaignClause = ` and campaign_id = $${params.length}`
+    }
+    const { rows } = await q.query<{ lead_id: number; id: number; type: string; occurred_at: string; props: Record<string, unknown> }>(
+      `select ${col} as lead_id, id, type, occurred_at, props from lp.lead_events
+        where type = any($1::text[]) and ${col} = any($2::bigint[])${campaignClause} order by occurred_at`,
+      params,
+    )
+    for (const r of rows) {
+      const k = Number(r.lead_id)
+      if (!byLead.has(k)) byLead.set(k, [])
+      byLead.get(k)!.push(r)
+    }
+  }
+
+  // 2. Rebuild event-sourced points from the current rules.
+  await q.query(`delete from lp.score_points where model_id = $1 and ${col} = any($2::bigint[]) and source_event_id is not null`, [model.id, ids])
+  const ins = { company: [] as (number | null)[], contact: [] as (number | null)[], rule: [] as string[], pts: [] as number[], ev: [] as number[], at: [] as string[], exp: [] as (string | null)[] }
+  for (const id of ids) {
+    for (const a of evaluateEvents(model.rules, byLead.get(id) ?? [])) {
+      const k = keyOf(id)
+      ins.company.push(k.company_id)
+      ins.contact.push(k.contact_id)
+      ins.rule.push(a.rule_key)
+      ins.pts.push(a.points)
+      ins.ev.push(Number(a.source_event_id))
+      ins.at.push(new Date(a.awarded_at).toISOString())
+      ins.exp.push(a.expires_at ? new Date(a.expires_at).toISOString() : null)
+    }
+  }
+  if (ins.rule.length) {
     await q.query(
       `insert into lp.score_points (model_id, company_id, contact_id, rule_key, points, source_event_id, awarded_at, expires_at)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
+       select $1, u.co, u.ct, u.rk, u.pt, u.ev, u.at, u.ex
+         from unnest($2::bigint[], $3::bigint[], $4::text[], $5::int[], $6::bigint[], $7::timestamptz[], $8::timestamptz[]) as u(co, ct, rk, pt, ev, at, ex)
        on conflict (model_id, rule_key, source_event_id) where source_event_id is not null do nothing`,
-      [model.id, lead.company_id, lead.contact_id, a.rule_key, a.points, a.source_event_id, a.awarded_at, a.expires_at],
+      [model.id, ins.company, ins.contact, ins.rule, ins.pts, ins.ev, ins.at, ins.exp],
     )
   }
 
-  const col = model.entity === 'company' ? 'company_id' : 'contact_id'
-  const id = model.entity === 'company' ? lead.company_id : lead.contact_id
-  const { rows: pointRows } = await q.query<{ points: number; expires_at: string | null }>(
-    `select points, expires_at from lp.score_points where model_id = $1 and ${col} = $2`,
-    [model.id, id],
+  // 3. Live points and previous scores, one read each.
+  const { rows: pointRows } = await q.query<{ lead_id: number; points: number; expires_at: string | null }>(
+    `select ${col} as lead_id, points, expires_at from lp.score_points where model_id = $1 and ${col} = any($2::bigint[])`,
+    [model.id, ids],
   )
-  const score = sumScore(pointRows, model.max_points, now)
+  const pointsBy = new Map<number, { points: number; expires_at: string | null }[]>()
+  for (const p of pointRows) {
+    const k = Number(p.lead_id)
+    if (!pointsBy.has(k)) pointsBy.set(k, [])
+    pointsBy.get(k)!.push({ points: Number(p.points), expires_at: p.expires_at })
+  }
+  const { rows: prevRows } = await q.query<{ lead_id: number; score: number }>(
+    `select ${col} as lead_id, score from lp.scores where model_id = $1 and ${col} = any($2::bigint[])`,
+    [model.id, ids],
+  )
+  const prevBy = new Map(prevRows.map((r) => [Number(r.lead_id), Number(r.score)]))
 
-  const { rows: prevRows } = await q.query<{ score: number }>(`select score from lp.scores where model_id = $1 and ${col} = $2`, [model.id, id])
-  const previousScore = prevRows[0]?.score ?? 0
-
+  // 4. Upsert every score and snapshot the changed ones, one statement each.
+  const scores = ids.map((id) => sumScore(pointsBy.get(id) ?? [], model.max_points, now))
   const conflictTarget = model.entity === 'company' ? '(model_id, company_id) where company_id is not null and contact_id is null' : '(model_id, contact_id) where contact_id is not null'
+  const otherCol = model.entity === 'company' ? 'contact_id' : 'company_id'
   await q.query(
-    `insert into lp.scores (model_id, company_id, contact_id, score, updated_at) values ($1,$2,$3,$4,$5)
+    `insert into lp.scores (model_id, ${col}, ${otherCol}, score, updated_at)
+     select $1, u.id, null, u.score, $4 from unnest($2::bigint[], $3::int[]) as u(id, score)
      on conflict ${conflictTarget} do update set score = excluded.score, updated_at = excluded.updated_at`,
-    [model.id, lead.company_id, lead.contact_id, score, now],
+    [model.id, ids, scores, now],
   )
-
-  if (score !== previousScore) {
-    await q.query(`insert into lp.score_history (model_id, company_id, contact_id, score, recorded_at) values ($1,$2,$3,$4,$5)`, [model.id, lead.company_id, lead.contact_id, score, now])
+  const changed = ids.map((id, i) => ({ id, score: scores[i] })).filter((x) => x.score !== (prevBy.get(x.id) ?? 0))
+  if (changed.length) {
+    await q.query(
+      `insert into lp.score_history (model_id, ${col}, ${otherCol}, score, recorded_at)
+       select $1, u.id, null, u.score, $4 from unnest($2::bigint[], $3::int[]) as u(id, score)`,
+      [model.id, changed.map((c) => c.id), changed.map((c) => c.score), now],
+    )
   }
 
-  const newThreshold = thresholdFor(score, model.thresholds)
-  const prevThreshold = thresholdFor(previousScore, model.thresholds)
-  let crossed = false
-  if (newThreshold && (!prevThreshold || newThreshold.min > prevThreshold.min)) {
-    crossed = true
-    await emitLeadEvent(q, {
-      type: 'score_threshold_crossed',
-      company_id: lead.company_id,
-      contact_id: lead.contact_id,
-      source: 'runner',
-      actor,
-      props: { model_id: model.id, model_kind: model.kind, score, threshold: newThreshold.key, label: newThreshold.label },
-      occurred_at: now,
-      dedupe_key: `score_threshold:${model.id}:${model.entity === 'company' ? 'c' + lead.company_id : 'k' + lead.contact_id}:${newThreshold.key}`,
-    })
+  // 5. Threshold crossings (rare) one by one, deduped.
+  const out: RecomputeOneResult[] = []
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]
+    const score = scores[i]
+    const previousScore = prevBy.get(id) ?? 0
+    const k = keyOf(id)
+    const newThreshold = thresholdFor(score, model.thresholds)
+    const prevThreshold = thresholdFor(previousScore, model.thresholds)
+    let crossed = false
+    if (newThreshold && (!prevThreshold || newThreshold.min > prevThreshold.min)) {
+      crossed = true
+      await emitLeadEvent(q, {
+        type: 'score_threshold_crossed',
+        company_id: k.company_id,
+        contact_id: k.contact_id,
+        source: 'runner',
+        actor,
+        props: { model_id: model.id, model_kind: model.kind, score, threshold: newThreshold.key, label: newThreshold.label },
+        occurred_at: now,
+        dedupe_key: `score_threshold:${model.id}:${model.entity === 'company' ? 'c' : 'k'}${id}:${newThreshold.key}`,
+      })
+    }
+    out.push({ model_id: model.id, ...k, score, previous_score: previousScore, threshold: newThreshold?.key ?? null, threshold_crossed: crossed })
   }
-
-  return { model_id: model.id, company_id: lead.company_id, contact_id: lead.contact_id, score, previous_score: previousScore, threshold: newThreshold?.key ?? null, threshold_crossed: crossed }
+  return out
 }
 
 export interface RecomputeScoresInput {
@@ -283,35 +341,50 @@ export interface RecomputeScoresInput {
   contact_id?: number | null
   /** Override "now" for deterministic expiry testing; defaults to the real clock. */
   now?: Date
+  /** Leads per committed transaction for a full recompute (default SCORE_BATCH_SIZE). */
+  batch_size?: number
 }
 
-/** Recompute one model for one lead, one model for every lead it covers, or every active model for every lead. */
+/** Recompute one model for one lead, one model for every lead it covers, or every active model for every lead.
+ *  One lead: a single transaction. Every lead: committed in batches of `batch_size`. */
 export async function recomputeScores(db: Db, actor: string, input: RecomputeScoresInput = {}): Promise<RecomputeOneResult[]> {
   const now = input.now ?? new Date()
   const models = input.model_id ? [await getScoreModel(db, input.model_id)].filter((m): m is ScoreModelRow => m != null) : await listScoreModels(db, { active_only: true })
   if (input.model_id && !models.length) throw new ScoringError(`No score model ${input.model_id}.`, 404)
 
-  return db.tx(async (q) => {
-    const out: RecomputeOneResult[] = []
-    for (const model of models) {
-      const leads: LeadKey[] =
-        input.company_id != null || input.contact_id != null
-          ? [{ company_id: input.company_id ?? null, contact_id: input.contact_id ?? null }]
-          : await leadsToScore(q, model)
-      for (const lead of leads) {
-        out.push(await recomputeLead(q, model, lead, actor, now))
+  if (input.company_id != null || input.contact_id != null) {
+    return db.tx(async (q) => {
+      const out: RecomputeOneResult[] = []
+      for (const model of models) {
+        // Skip a model whose entity id this lead doesn't carry (review fix, #74: a
+        // contact_id against a company model used to write a junk row, then 23505).
+        const id = model.entity === 'company' ? input.company_id : input.contact_id
+        if (id == null) continue
+        out.push(...(await recomputeBatch(q, model, [Number(id)], actor, now)))
       }
+      return out
+    }, actor)
+  }
+
+  const size = Math.max(1, Math.floor(input.batch_size ?? SCORE_BATCH_SIZE))
+  const out: RecomputeOneResult[] = []
+  for (const model of models) {
+    const ids = await leadIdsToScore(db, model)
+    for (let i = 0; i < ids.length; i += size) {
+      const chunk = ids.slice(i, i + size)
+      out.push(...(await db.tx((q) => recomputeBatch(q, model, chunk, actor, now), actor)))
     }
-    return out
-  }, actor)
+  }
+  return out
 }
 
 /** Every model's current score for one lead (company), with its live points. For the lead page header / table column. */
 const MODEL_COLS_PREFIXED = 'm.id, m.name, m.entity, m.kind, m.campaign_id, m.rules, m.thresholds, m.max_points, m.active, m.created_at, m.updated_at'
 
-export async function leadScores(q: Queryable, companyId: number): Promise<{ model: ScoreModelRow; score: number; threshold: string | null }[]> {
-  const { rows } = await q.query<ScoreModelRawRow & { score: number }>(
-    `select ${MODEL_COLS_PREFIXED}, coalesce(s.score, 0) as score
+export async function leadScores(q: Queryable, companyId: number): Promise<{ model: ScoreModelRow; score: number | null; threshold: string | null }[]> {
+  // score is NULL ("Not scored"), never a made-up 0, for a lead this model has never scored (review fix, #74).
+  const { rows } = await q.query<ScoreModelRawRow & { score: number | null }>(
+    `select ${MODEL_COLS_PREFIXED}, s.score as score
      from lp.score_models m
      left join lp.scores s on s.model_id = m.id and s.company_id = $1
      where m.entity = 'company' and m.active
@@ -320,7 +393,8 @@ export async function leadScores(q: Queryable, companyId: number): Promise<{ mod
   )
   return rows.map((r) => {
     const model = hydrate(r)
-    return { model, score: r.score, threshold: thresholdFor(r.score, model.thresholds)?.key ?? null }
+    const score = r.score == null ? null : Number(r.score)
+    return { model, score, threshold: score == null ? null : (thresholdFor(score, model.thresholds)?.key ?? null) }
   })
 }
 

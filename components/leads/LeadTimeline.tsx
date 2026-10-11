@@ -55,6 +55,8 @@ export function filterEvents(events: LeadEventRow[], opts: { category?: string |
 export function TimelineFilters({ category, q }: { category: string | null; q: string | null }) {
   return (
     <form method="get" className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
+      {/* Keep the Timeline tab open on submit (review fix, #79: it used to jump back to Overview). */}
+      <input type="hidden" name="tab" value="timeline" />
       <select
         name="tl_cat"
         defaultValue={category ?? ''}
@@ -78,7 +80,7 @@ export function TimelineFilters({ category, q }: { category: string | null; q: s
         Filter
       </button>
       {category || q ? (
-        <a href="?" className="text-ink-faint underline-offset-2 hover:underline">
+        <a href="?tab=timeline" className="text-ink-faint underline-offset-2 hover:underline">
           Clear
         </a>
       ) : null}

@@ -144,7 +144,9 @@ export default async function LeadPage({
           {score != null ? `Score ${score}` : 'Not scored yet'}
         </Pill>
         <Pill tone="neutral">{c.owner_name ? `Owner: ${c.owner_name}` : 'No owner on file'}</Pill>
-        {profile.suppression.checked ? (
+        {profile.suppression.checked && profile.suppression.no_email ? (
+          <Pill tone="neutral">No email on file</Pill>
+        ) : profile.suppression.checked ? (
           <Pill tone={profile.suppression.suppressed ? 'bad' : 'good'} title={profile.suppression.reason ?? undefined}>
             {profile.suppression.suppressed ? 'Suppressed' : 'Sendable'}
           </Pill>
@@ -212,7 +214,7 @@ export default async function LeadPage({
 
       {tab === 'timeline' ? (
         <div className="flex flex-col gap-6">
-          <Section title="Lead timeline" meta={`${filteredEvents.length} of ${d.events.length}`}>
+          <Section title="Lead timeline" meta={`${filteredEvents.length} of ${d.events.length}${d.events.length >= 200 ? ' (latest 200)' : ''}`}>
             <div className="px-4 pt-3">
               <TimelineFilters category={tlCategory} q={tlQuery} />
             </div>

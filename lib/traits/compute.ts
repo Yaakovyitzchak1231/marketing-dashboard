@@ -21,6 +21,21 @@ function idCol(entity: 'company' | 'contact'): 'company_id' | 'contact_id' {
   return entity === 'company' ? 'company_id' : 'contact_id'
 }
 
+/** A prop read as a number, or NULL when the stored value isn't numeric ("demo", "") --
+ *  a bare ::numeric cast would throw and abort the whole recompute (review fix, #82). */
+function num(prop: string | null): string {
+  const v = `(e.props ->> '${prop}')`
+  return `(case when ${v} ~ '^\\s*-?[0-9]+(\\.[0-9]+)?\\s*$' then ${v}::numeric end)`
+}
+
+/** True when a trait's value changes with the clock alone (a rolling window, or "days
+ *  since"): such a trait must be recomputed for EVERY entity on every run, because an
+ *  entity with no new event still ages (review fix, #82: replies_30d never fell back to
+ *  0 and days_since_last_touch froze at the last event). */
+export function isTimeRelative(def: Pick<TraitDefinition, 'window_days' | 'aggregation'>): boolean {
+  return def.window_days != null || def.aggregation === 'days_since'
+}
+
 function aggExpr(agg: TraitAggregation, prop: string | null): string {
   // `prop` is validated upstream (definition.ts: PROP_PATH_RE, a lowercase slug) before it
   // ever reaches here -- the same trust boundary as lib/segments/fields.ts's field.sql:
@@ -29,13 +44,13 @@ function aggExpr(agg: TraitAggregation, prop: string | null): string {
     case 'count':
       return 'count(e.id)::numeric'
     case 'sum':
-      return `sum((e.props ->> '${prop}')::numeric)`
+      return `sum(${num(prop)})`
     case 'min':
-      return `min((e.props ->> '${prop}')::numeric)`
+      return `min(${num(prop)})`
     case 'max':
-      return `max((e.props ->> '${prop}')::numeric)`
+      return `max(${num(prop)})`
     case 'last':
-      return `(array_agg(e.props ->> '${prop}' order by e.occurred_at desc) filter (where e.id is not null))[1]::numeric`
+      return `(array_agg(${num(prop)} order by e.occurred_at desc) filter (where e.id is not null))[1]`
     case 'days_since':
       return 'extract(epoch from (now() - max(e.occurred_at))) / 86400.0'
   }
@@ -138,13 +153,17 @@ export interface RecomputeResult {
  *  trait's last_computed_at is advanced to the moment this run started (not finished --
  *  an event recorded mid-run is safely picked up by the NEXT run, never lost). */
 export async function recomputeOneTrait(q: Queryable, trait: Trait, opts: { full?: boolean } = {}): Promise<RecomputeResult> {
-  const startedAt = new Date().toISOString()
-  const ids = opts.full || trait.last_computed_at == null ? await dirtyIds(q, trait.entity, null) : await dirtyIds(q, trait.entity, trait.last_computed_at)
+  // Watermark from the DB clock (the same clock as lead_events.recorded_at), not the app
+  // server's, so clock skew can't skip events (review fix, #82).
+  const { rows: clock } = await q.query<{ t: string | Date }>(`select now() as t`)
+  const startedAt = new Date(clock[0].t).toISOString()
+  const full = Boolean(opts.full) || isTimeRelative(trait.definition)
+  const ids = full || trait.last_computed_at == null ? await dirtyIds(q, trait.entity, null) : await dirtyIds(q, trait.entity, trait.last_computed_at)
   let touched = 0
   if (ids.length > 0) {
     const values = await computeTraitValues(q, trait, ids)
     touched = await writeTraitValues(q, trait.key, trait.entity, values)
   }
   await q.query(`update lp.traits set last_computed_at = $2 where key = $1`, [trait.key, startedAt])
-  return { trait_key: trait.key, entities_touched: touched, mode: opts.full ? 'full' : 'incremental' }
+  return { trait_key: trait.key, entities_touched: touched, mode: full ? 'full' : 'incremental' }
 }
