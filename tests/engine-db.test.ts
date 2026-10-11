@@ -135,7 +135,10 @@ describe('runFindLeads', () => {
     expect(out.status).toBe('done')
     const c = out.counters
     expect(c.kept).toBe(2) // Gem Co + Ring Studio
-    expect(c.dropped).toMatchObject({ chain_or_nonjeweler_name: 1, no_website: 1, already_in_leads: 1 })
+    // Kay Jewelers now also matches the pool's built-in negative-keyword list
+    // ('kay jewelers'), checked before the jeweler-specific chain-name regex,
+    // so it is dropped as excluded_by_negative_keyword instead of chain_or_nonjeweler_name.
+    expect(c.dropped).toMatchObject({ excluded_by_negative_keyword: 1, no_website: 1, already_in_leads: 1 })
     expect(c.built).toBe(2)
     expect(c.companies_new).toBe(2)
     expect(c.sites_ok).toBe(1) // Ring Studio answered 429
@@ -201,7 +204,9 @@ describe('runFindLeads', () => {
       const task = await createTask(db3, 'owner', { kind: 'find_leads', title: 'file', assigned_to: 'tab', payload: {} })
       const out = await runFindLeads(db3, task.id, normalizeFindParams({ source: 'file', file_path: file, max_businesses: 10 }), deps({ fetch: fakeNet(calls) }))
       expect(out.status).toBe('done')
-      expect(out.counters).toMatchObject({ kept: 1, built: 1, dropped: { chain_or_nonjeweler_name: 1 } })
+      // Zales also matches the pool's built-in negative-keyword list ('zales'), checked
+      // before the jeweler-specific chain-name regex, so it is dropped as excluded_by_negative_keyword.
+      expect(out.counters).toMatchObject({ kept: 1, built: 1, dropped: { excluded_by_negative_keyword: 1 } })
       expect(calls.some((u) => u.includes('google.com'))).toBe(false)
     } finally {
       await db3.close()

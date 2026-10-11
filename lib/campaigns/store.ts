@@ -19,6 +19,7 @@ import {
   type CampaignSummary,
 } from './types.ts'
 import { ruleSetFor, ruleSetScope, rulesWriter } from './evaluator.ts'
+import { poolLabelGuess } from '../pools/store.ts'
 
 type Tx = { tx<T>(fn: (q: Queryable) => Promise<T>, actor?: string): Promise<T> }
 
@@ -88,6 +89,10 @@ async function requireHumanFor(q: Queryable, actor: string, fields: CampaignFiel
 }
 
 async function checkRefs(q: Queryable, p: CampaignPatch, campaignId: number | null = null, currentRuleSet: number | null = null): Promise<void> {
+  if (p.pool !== undefined) {
+    const { rows } = await q.query('select 1 from lp.pools where id = $1', [p.pool])
+    if (!rows.length) throw new CampaignError(`Unknown pool "${p.pool}". Create it first (Pools), or pick an existing one.`)
+  }
   if (p.status !== undefined) {
     const { rows } = await q.query<{ active: boolean }>('select active from lp.campaign_statuses where id = $1', [p.status])
     if (!rows[0]) {
@@ -115,7 +120,7 @@ async function checkRefs(q: Queryable, p: CampaignPatch, campaignId: number | nu
 
 function show(field: CampaignField, v: unknown): string | null {
   if (v === null || v === undefined) return null
-  if (field === 'pool') return POOL_LABELS[v as keyof typeof POOL_LABELS] ?? String(v)
+  if (field === 'pool') return POOL_LABELS[String(v)] ?? poolLabelGuess(String(v))
   if (field === 'is_template') return v ? 'yes' : 'no'
   return String(v)
 }
@@ -140,7 +145,7 @@ export async function createCampaign(
     await logEvent(q, {
       actor,
       kind: 'campaign.created',
-      summary: `${actor} created the campaign "${c.name}" (${POOL_LABELS[c.pool]}, ${c.status})`,
+      summary: `${actor} created the campaign "${c.name}" (${POOL_LABELS[c.pool] ?? poolLabelGuess(c.pool)}, ${c.status})`,
       entity_type: 'campaign',
       entity_id: c.id,
       data: { campaign: c, via: opts.via ?? null },

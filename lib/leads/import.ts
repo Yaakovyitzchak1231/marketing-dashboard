@@ -86,7 +86,8 @@ function clean(v: string | undefined): string | null {
   return s ? s : null
 }
 
-function segmentFor(vertical: string | null): 'jeweler' | 'ai_agency' | 'ai_builder' | 'other' {
+/** A heuristic for this sheet's own historical vertical text; not a list of valid pools (any lp.pools slug is). */
+function segmentFor(vertical: string | null): string {
   const v = (vertical ?? '').toLowerCase()
   if (/builder/.test(v)) return 'ai_builder'
   if (/\bai\b|agency|automation/.test(v)) return 'ai_agency'

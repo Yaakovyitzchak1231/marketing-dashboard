@@ -3,7 +3,8 @@ import { getDb } from '@/lib/db'
 import { listProposals, listRuleSets } from '@/lib/rules/store'
 import { recomputeStatus, tierCounts } from '@/lib/rules/recompute'
 import { STANDING_RULES } from '@/lib/rules/standing'
-import { SEGMENTS } from '@/lib/rules/schema'
+import { listPools } from '@/lib/pools/store'
+import { SEGMENT_LABEL as SEGMENT_WORDS } from '@/lib/reports/meta'
 import { kickRecompute } from '@/lib/rules/kick'
 import { createRulesAction } from '@/app/actions/rules'
 import { DbNotConnected, PageFrame, btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
@@ -13,7 +14,6 @@ import { TD, TDN, TH } from '@/components/reports/bits'
 
 export const dynamic = 'force-dynamic'
 
-const SEGMENT_WORDS: Record<string, string> = { jeweler: 'Jewelers', ai_agency: 'AI agencies', ai_builder: 'AI builders', other: 'Other' }
 const n = (v: number | undefined) => (v === undefined ? '—' : v.toLocaleString('en-US'))
 
 export default async function RulesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -26,7 +26,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
       </PageFrame>
     )
   }
-  const [sets, counts, jobs, proposals] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db), listProposals(db)])
+  const [sets, counts, jobs, proposals, pools] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db), listProposals(db), listPools(db)])
   if ([...jobs.values()].some((j) => j.status === 'queued' || j.status === 'running')) kickRecompute(db)
   const sources = sets
   return (
@@ -122,9 +122,9 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
               Pool (which leads it scores)
               <select name="segment" className={inputCls} defaultValue="">
                 <option value="">as set on the campaign</option>
-                {SEGMENTS.map((s) => (
-                  <option key={s} value={s}>
-                    {SEGMENT_WORDS[s]}
+                {pools.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
                   </option>
                 ))}
               </select>

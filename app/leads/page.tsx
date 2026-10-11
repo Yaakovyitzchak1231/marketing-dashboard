@@ -3,6 +3,7 @@ import { PageShell, DbNotConnected } from '@/components/app/PageShell'
 import { Card, EmptyNote } from '@/components/dashboard/primitives'
 import { parseLeadQuery, leadsHref, defaultDir, SORT_KEYS, VIEW_LABELS, NONE, activeFilterCount } from '@/lib/leads/filters'
 import { listLeads, kanbanLeads, campaignGroups, regionGroups, leadFacets } from '@/lib/leads/queries'
+import { listPools } from '@/lib/pools/store'
 import { LeadsTable, type SortLink } from '@/components/leads/LeadsTable'
 import { ViewTabs, FilterBar, Pagination, KanbanBoard, CampaignGroups, RegionGroups } from '@/components/leads/LeadViews'
 import { shortDate } from '@/components/leads/pills'
@@ -29,7 +30,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       </PageShell>
     )
   }
-  const facets = await leadFacets(db)
+  const [facets, pools] = await Promise.all([leadFacets(db), listPools(db)])
   const filtered = activeFilterCount(q.filters) > 0
   const note = VIEW_NOTES[q.view]
 
@@ -76,7 +77,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   return (
     <PageShell title="Leads" meta={filtered || q.view !== 'table' ? `${meta} · ${facets.total.toLocaleString('en-US')} in the database` : meta}>
       <ViewTabs q={q} />
-      <FilterBar q={q} states={facets.states} campaigns={facets.campaigns} />
+      <FilterBar q={q} states={facets.states} campaigns={facets.campaigns} segments={pools} />
       {note ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[12px] text-ink-faint">

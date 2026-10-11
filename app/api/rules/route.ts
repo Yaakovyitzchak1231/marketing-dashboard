@@ -17,9 +17,9 @@
  */
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
-import { createRuleSet, listProposals, listRuleSets } from '@/lib/rules/store'
+import { createRuleSet, listProposals, listRuleSets, resolveFieldCatalog } from '@/lib/rules/store'
 import { recomputeStatus, tierCounts } from '@/lib/rules/recompute'
-import { FIELD_CATALOG, OPS } from '@/lib/rules/schema'
+import { OPS } from '@/lib/rules/schema'
 import { STANDING_RULES } from '@/lib/rules/standing'
 import { kickRecompute } from '@/lib/rules/kick'
 import { NO_DB, rulesFail } from '@/lib/rules/http'
@@ -29,11 +29,11 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const db = getDb()
   if (!db) return NextResponse.json({ error: NO_DB }, { status: 503 })
-  const [sets, counts, jobs, proposals] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db), listProposals(db)])
+  const [sets, counts, jobs, proposals, fields] = await Promise.all([listRuleSets(db), tierCounts(db), recomputeStatus(db), listProposals(db), resolveFieldCatalog(db)])
   return NextResponse.json({
     rule_sets: sets.map((s) => ({ ...s, counts: counts.get(s.id) ?? null, rescore: jobs.get(s.id) ?? null })),
     standing_rules: STANDING_RULES,
-    fields: FIELD_CATALOG,
+    fields,
     conditions: OPS,
     proposals,
   })
