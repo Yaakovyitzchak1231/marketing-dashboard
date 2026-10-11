@@ -43,6 +43,7 @@ const lookups = () => import('../instantly/lookup.ts')
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
+import { SETTINGS_OPS } from '../settings/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -454,6 +455,7 @@ export const OPS: Record<string, Op> = {
   },
   // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
   ...CAMPAIGN_OPS,
+  ...SETTINGS_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
