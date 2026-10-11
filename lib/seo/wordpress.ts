@@ -80,6 +80,8 @@ export interface WpPage {
   slug: string
   status: string
   title: string
+  /** raw content as WordPress stores it (context=edit); '' when the API did not return it */
+  content: string
   meta: Record<string, unknown> | null
 }
 
@@ -101,6 +103,7 @@ interface RawPost {
   slug: string
   status: string
   title?: { raw?: string; rendered?: string }
+  content?: { raw?: string; rendered?: string }
   meta?: Record<string, unknown> | unknown[]
 }
 
@@ -148,6 +151,7 @@ export class WpClient {
       slug: p.slug,
       status: p.status,
       title: p.title?.raw ?? p.title?.rendered ?? '',
+      content: p.content?.raw ?? p.content?.rendered ?? '',
       meta,
     }
   }
@@ -175,10 +179,16 @@ export class WpClient {
         } catch {
           return false
         }
-      }) ?? (list.length === 1 ? list[0] : undefined)
+      })
       if (hit) return this.toPage({ ...hit, type: type === 'pages' ? 'page' : 'post' })
     }
     return null
+  }
+
+  /** Creation must not silently get WordPress's auto-suffixed duplicate slug. */
+  async hasSlug(slug: string): Promise<boolean> {
+    const list = await this.call<RawPost[]>('GET', `/wp/v2/pages?slug=${encodeURIComponent(slug)}&context=edit&status=publish,draft,private,pending,trash`)
+    return list.some((p) => p.slug === slug)
   }
 
   async getPage(id: number, type: 'page' | 'post' = 'page'): Promise<WpPage> {

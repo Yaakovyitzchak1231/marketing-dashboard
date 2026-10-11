@@ -12,7 +12,8 @@
  * Retries with backoff; after MAX_ATTEMPTS a row is "failed" with the reason, and the UI
  * shows it on the task. People's pushes wait out Shabbos ("held") when they asked for it.
  * dispatchDue() is called right after every write (lib/notify/kick.ts, Next's after()),
- * on every feed read and in the open stream loop, so retries need no cron.
+ * after feed reads and in open stream loops. For unattended retries, configure
+ * a scheduler to call /api/ops/deliveries/dispatch; traffic alone is not reliable.
  */
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Db, Queryable } from '../db/types.ts'
@@ -25,6 +26,11 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number]
 const PUSH_KINDS: ChannelKind[] = ['webhook', 'email', 'ntfy', 'relay']
 const FETCH_KINDS: ChannelKind[] = ['ntfy', 'stream', 'pull', 'mcp']
 export const MAX_ATTEMPTS = 8
+// Two waves of five, with at most 12 seconds of network work per delivery.
+// This leaves headroom under a 60-second route and the 90-second claim lease.
+export const MAX_DISPATCH_BATCH = 10
+const DISPATCH_CONCURRENCY = 5
+const DELIVERY_TIMEOUT_MS = 12_000
 const BACKOFF_S = [10, 30, 120, 600, 1800, 3600, 7200, 14400]
 const REPING_S = 300
 /** How often an email held for missing mail settings is looked at again (no attempt spent). */
@@ -56,6 +62,9 @@ export interface DeliveryEvent {
   body: string | null
   task: { id: number; title: string; kind: string; status: string; url: string } | null
   comment_id: number | null
+  page_comment_id: number | null
+  /** Informational result: recipients must not start another automatic reply. */
+  auto_reply: boolean
   created_at: string
   /** Set when another agent carries this to a person (e.g. a WhatsApp to Yaakov). */
   relay: { target: string; to: string | null; text: string } | null
@@ -78,6 +87,8 @@ interface DeliveryJoin {
   body: string | null
   task_id: number | null
   comment_id: number | null
+  page_comment_id: number | null
+  auto_reply: boolean
   created_by: string | null
   n_created_at: Date
   recipient_name: string
@@ -93,7 +104,7 @@ interface DeliveryJoin {
 const JOIN = `
   select d.id, d.notification_id, d.channel_id, d.recipient, d.via, d.status, d.attempts,
          c.kind, c.config, c.secret,
-         n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.created_by, n.created_at as n_created_at,
+         n.kind as n_kind, n.summary, n.body, n.task_id, n.comment_id, n.page_comment_id, n.auto_reply, n.created_by, n.created_at as n_created_at,
          r.display_name as recipient_name, r.kind as recipient_kind, r.quiet_shabbos,
          f.display_name as from_name, f.kind as from_kind,
          t.title as task_title, t.kind as task_kind, t.status as task_status
@@ -129,6 +140,8 @@ export function toEvent(r: DeliveryJoin, base = dashboardUrl()): DeliveryEvent {
       ? { id: r.task_id, title: r.task_title ?? '', kind: r.task_kind ?? '', status: r.task_status ?? '', url: `${base}/team/${r.task_id}` }
       : null,
     comment_id: r.comment_id,
+    page_comment_id: r.page_comment_id ?? null,
+    auto_reply: r.auto_reply === true,
     created_at: new Date(r.n_created_at).toISOString(),
     relay,
     ack: { method: 'POST', url: `${base}/api/ops/feed/ack`, body: { ids: [r.id] } },
@@ -159,18 +172,19 @@ async function settle(
     await q.query(
       `update lp.deliveries set status = $2, sent_at = coalesce(sent_at, now()),
               delivered_at = case when $2 = 'delivered' then now() else delivered_at end,
-              next_attempt_at = $3, last_error = null, updated_at = now() where id = $1`,
+              next_attempt_at = $3, last_error = null, updated_at = now() where id = $1 and delivered_at is null`,
       [id, outcome.status, outcome.nextAt ?? now],
     )
     await q.query('update lp.delivery_channels set last_ok_at = now() where id = $1', [channelId])
     return
   }
   const final = !outcome.retry || outcome.attempts >= MAX_ATTEMPTS
-  await q.query(
+  const settled = await q.query(
     `update lp.deliveries set status = $2, last_error = $3, failed_at = case when $2 = 'failed' then now() else failed_at end,
-            next_attempt_at = $4::timestamptz + ($5 || ' seconds')::interval, updated_at = now() where id = $1`,
+            next_attempt_at = $4::timestamptz + ($5 || ' seconds')::interval, updated_at = now() where id = $1 and delivered_at is null returning id`,
     [id, final ? 'failed' : 'pending', outcome.error.slice(0, 500), now, String(backoffSeconds(outcome.attempts))],
   )
+  if (!settled.rows.length) return // the recipient may have acknowledged while the push was in flight
   await q.query('update lp.delivery_channels set last_error = $2, last_error_at = now() where id = $1', [channelId, outcome.error.slice(0, 500)])
   if (final) {
     const w = await q.query<{ name: string; kind: string; task_id: number | null }>(
@@ -186,13 +200,13 @@ async function settle(
   }
 }
 
-async function ntfyPing(fetchImpl: FetchLike, config: Record<string, unknown>, deliveryId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+async function ntfyPing(fetchImpl: FetchLike, config: Record<string, unknown>, deliveryId: number, signal: AbortSignal): Promise<{ ok: true } | { ok: false; error: string }> {
   const server = String(config.server || 'https://ntfy.sh').replace(/\/+$/, '')
   const topic = String(config.topic || '')
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(topic)) return { ok: false, error: 'ntfy topic missing or too guessable' }
   try {
     // The ping carries only an id; the event itself is read from the dashboard with the agent's key.
-    const res = await fetchImpl(`${server}/${topic}`, { method: 'POST', body: JSON.stringify({ d: deliveryId }), signal: AbortSignal.timeout(8_000) })
+    const res = await fetchImpl(`${server}/${topic}`, { method: 'POST', body: JSON.stringify({ d: deliveryId }), signal: AbortSignal.any([signal, AbortSignal.timeout(8_000)]), redirect: 'manual' })
     return res.ok ? { ok: true } : { ok: false, error: `ntfy answered ${res.status}` }
   } catch (e) {
     return { ok: false, error: `ntfy unreachable: ${(e as Error).message}` }
@@ -216,13 +230,14 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
   const fetchImpl = opts.fetchImpl ?? fetch
   const now = opts.now ?? new Date()
   const out: DispatchResult = { picked: 0, sent: 0, delivered: 0, held: 0, retrying: 0, failed: 0 }
+  const limit = Number.isFinite(opts.limit) ? Math.min(MAX_DISPATCH_BATCH, Math.max(1, Math.trunc(opts.limit!))) : MAX_DISPATCH_BATCH
   const claimed = await db.tx(async (q) => {
     const { rows } = await q.query<{ id: number }>(
       `select d.id from lp.deliveries d join lp.delivery_channels c on c.id = d.channel_id
-        where c.kind = any($1) and d.next_attempt_at <= $2
+        where c.enabled and c.kind = any($1) and d.next_attempt_at <= $2
           and (d.status in ('pending', 'held') or (d.status = 'sent' and c.kind in ('ntfy', 'relay') and d.delivered_at is null))
         order by d.id limit $3 for update of d skip locked`,
-      [PUSH_KINDS, now, opts.limit ?? 25],
+      [PUSH_KINDS, now, limit],
     )
     if (!rows.length) return []
     const ids = rows.map((r) => r.id)
@@ -232,14 +247,20 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
   })
   out.picked = claimed.length
   const base = dashboardUrl(opts.env)
-  for (const r of claimed) {
+  async function deliver(r: DeliveryJoin) {
+    const deadline = AbortSignal.timeout(DELIVERY_TIMEOUT_MS)
+    // Recheck just before sending: a channel may have been disabled after claim.
+    const channel = await db.query<{ enabled: boolean }>(
+      'select c.enabled from lp.delivery_channels c join lp.deliveries d on d.channel_id = c.id where d.id = $1 and d.delivered_at is null', [r.id],
+    )
+    if (!channel.rows[0]?.enabled) return
     // People who keep Shabbos: hold pushes to their phone until nightfall.
     if (r.recipient_kind === 'human' && r.quiet_shabbos) {
       const end = shabbosEndsAt(now)
       if (end) {
-        await db.query(`update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), next_attempt_at = $2, updated_at = now() where id = $1`, [r.id, end])
+        await db.query(`update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), next_attempt_at = $2, updated_at = now() where id = $1 and delivered_at is null`, [r.id, end])
         out.held++
-        continue
+        return
       }
     }
     const ev = toEvent(r, base)
@@ -248,7 +269,7 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       if (!/^https:\/\//.test(url)) {
         await settle(db, r.id, r.channel_id, { error: 'webhook URL must start with https://', retry: false, attempts: r.attempts }, now)
         out.failed++
-        continue
+        return
       }
       const body = JSON.stringify(ev)
       const ts = String(Math.floor(now.getTime() / 1000))
@@ -277,18 +298,18 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
         if (!retry || attempts >= MAX_ATTEMPTS) out.failed++
         else out.retrying++
       }
-      continue
+      return
     }
     if (r.kind === 'email') {
       if (!mailConfigured(opts.env)) {
         // Not a failure: hold it without spending an attempt; it goes out once MAIL_* exist.
         await db.query(
           `update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), last_error = $3,
-                  next_attempt_at = $2::timestamptz + ($4 || ' seconds')::interval, updated_at = now() where id = $1`,
+                  next_attempt_at = $2::timestamptz + ($4 || ' seconds')::interval, updated_at = now() where id = $1 and delivered_at is null`,
           [r.id, now, MAIL_NOT_CONFIGURED, String(MAIL_HOLD_RECHECK_S)],
         )
         out.held++
-        continue
+        return
       }
       const to = String(r.config.to ?? '')
       const m = await sendMail({ to, subject: `[Dashboard] ${ev.summary}`, text: mailText(ev) }, fetchImpl, opts.env)
@@ -301,14 +322,14 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
         if (!m.retry || attempts >= MAX_ATTEMPTS) out.failed++
         else out.retrying++
       }
-      continue
+      return
     }
     // ntfy (own channel) or relay (ping the carrying agent's ntfy channels).
     const attempts = r.attempts
     if (r.status === 'sent' && attempts > MAX_ATTEMPTS) {
       await settle(db, r.id, r.channel_id, { error: `${r.via ?? r.recipient} never picked it up`, retry: false, attempts }, now)
       out.failed++
-      continue
+      return
     }
     let targets: Record<string, unknown>[] = []
     if (r.kind === 'ntfy') targets = [r.config]
@@ -319,12 +340,16 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
     if (r.kind === 'relay' && !r.via) {
       await settle(db, r.id, r.channel_id, { error: 'relay channel has no carrying agent (config.via)', retry: false, attempts }, now)
       out.failed++
-      continue
+      return
     }
     let okAny = targets.length === 0 // a relay agent without ntfy still finds it in its feed
     let lastErr = ''
     for (const t of targets) {
-      const p = await ntfyPing(fetchImpl, t, r.id)
+      if (deadline.aborted) {
+        lastErr = 'relay wake-up deadline exceeded'
+        break
+      }
+      const p = await ntfyPing(fetchImpl, t, r.id, deadline)
       if (p.ok) okAny = true
       else lastErr = p.error
     }
@@ -337,6 +362,11 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       else out.retrying++
     }
   }
+  let next = 0
+  const workers = await Promise.allSettled(Array.from({ length: Math.min(DISPATCH_CONCURRENCY, claimed.length) }, async () => {
+    while (next < claimed.length) await deliver(claimed[next++])
+  }))
+  if (workers.some((r) => r.status === 'rejected')) throw new Error('A delivery worker failed; unsettled rows remain queued for retry.')
   return out
 }
 
@@ -366,9 +396,11 @@ export async function feed(db: Db, actor: string, opts: { after_id?: number | nu
   const now = opts.now ?? new Date()
   const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), 200)
   const rows = await db.tx(async (q) => {
+    // Serialize feeds for this actor, including sibling channels of one notification.
+    await q.query('select id from lp.actors where id = $1 for update', [actor])
     const { rows } = await q.query<DeliveryJoin>(
       `${JOIN}
-        where ((d.recipient = $1 and c.kind = any($2) and d.status in ('pending', 'sent'))
+        where c.enabled and ((d.recipient = $1 and c.kind = any($2) and d.status in ('pending', 'sent'))
             or (d.via = $1 and c.kind = 'relay' and d.status = 'sent'))
           and d.delivered_at is null
           and (d.fetched_at is null or d.fetched_at < $3::timestamptz - interval '2 minutes')
@@ -387,8 +419,11 @@ export async function feed(db: Db, actor: string, opts: { after_id?: number | nu
     if (pick.length) {
       await q.query(
         `update lp.deliveries set fetched_at = $2, status = case when status = 'pending' then 'sent' else status end,
-                sent_at = coalesce(sent_at, $2), updated_at = now() where id = any($1)`,
-        [pick.map((r) => r.id), now],
+                sent_at = coalesce(sent_at, $2), updated_at = now()
+          where delivered_at is null and status in ('pending', 'sent')
+            and (id = any($1) or (recipient = $3 and notification_id = any($4)
+              and channel_id in (select id from lp.delivery_channels where enabled and kind = any($5))))`,
+        [pick.map((r) => r.id), now, actor, pick.filter((r) => r.recipient === actor).map((r) => r.notification_id), FETCH_KINDS],
       )
     }
     return pick

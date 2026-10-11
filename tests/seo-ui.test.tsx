@@ -5,6 +5,7 @@ import React from 'react'
 import { SeoNav, SEO_TABS } from '@/components/seo/SeoNav'
 import { CheckPill, Diff, Flash, Steps } from '@/components/seo/bits'
 import { NAV_ITEMS } from '@/components/nav/AppNav'
+import { ChangeNotice } from '@/components/seo/ChangeNotice'
 
 const { pathname } = vi.hoisted(() => ({ pathname: { value: '/seo' } }))
 vi.mock('next/navigation', () => ({
@@ -14,6 +15,15 @@ vi.mock('next/navigation', () => ({
 }))
 
 describe('SEO section UI', () => {
+  it('uncertain WordPress writes are not presented as success or retryable', () => {
+    const { rerender } = render(<ChangeNotice status="unknown" />)
+    expect(screen.getByRole('status')).toHaveTextContent('Outcome needs verification on WordPress')
+    expect(screen.getByRole('status')).toHaveTextContent('another write to this page is blocked')
+    rerender(<ChangeNotice status="applied" />)
+    expect(screen.queryByRole('status')).toBeNull()
+    rerender(<ChangeNotice status="undo_unknown" />)
+    expect(screen.getByRole('status')).toHaveTextContent('before/after record is retained')
+  })
   it('is its own screen in the app nav', () => {
     expect(NAV_ITEMS.some((i) => i.href === '/seo')).toBe(true)
   })

@@ -5,6 +5,7 @@ import { DbNotConnected, BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShe
 import { Card, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { inputCls } from '@/components/ops/bits'
 import { CheckPill, Diff, Env, Flash, one, SetupCard, Steps, when } from '@/components/seo/bits'
+import { ChangeNotice } from '@/components/seo/ChangeNotice'
 import { listActors, type ActorView } from '@/lib/ops/queries'
 import { getFixTask, getSite, type FixTask, type SiteRow } from '@/lib/seo/store'
 import { listChanges, previewChange, type ApplyInput, type ChangeRow } from '@/lib/seo/changes'
@@ -104,6 +105,8 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
   const [changes, actors] = await Promise.all([listChanges(db, { taskId: task.id }), listActors(db)])
   const fix = task.payload.fix
   const a: FixAction = fix.action
+  const citation = task.payload.citation_evidence
+  const evidenceUrl = citation ? `/seo/citations?site=${site.id}&run=${citation.run_id}#answer-${citation.result_id}` : null
   const back = `/seo/todos/${task.id}`
   const wpOn = wpMatchesSite(wpConfigFromEnv(), site.base_url)
   const previewing = one(sp.preview) === '1'
@@ -114,7 +117,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
     panel = (
       <div className="space-y-3">
         <Steps steps={a.steps} />
-        <Recheck site={site} back={back} />
+        {evidenceUrl ? <Link href="/seo/visibility" className={BUTTON}>Run a new visibility check</Link> : <Recheck site={site} back={back} />}
       </div>
     )
   } else if (a.type === 'copy_file') {
@@ -225,6 +228,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
 
       <Card className="px-4 py-4">
         <p className="text-[13px] leading-relaxed text-ink">{fix.detail}</p>
+        {evidenceUrl && citation ? <p className="mt-2 text-[12px] text-ink-muted"><Link className="text-accent underline" href={evidenceUrl}>View stored answer #{citation.result_id} and citations</Link> · {citation.provider} · {citation.model}. Completing this task does not verify a visibility gain.</p> : null}
         {fix.fix ? <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">What fixes it: {fix.fix}</p> : null}
       </Card>
 
@@ -271,13 +275,14 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
 
       {changes.length ? (
         <section>
-          <SectionHeader title="Changes made" />
+          <SectionHeader title="WordPress changes" />
           <Card>
             <ul className="divide-y divide-line">
               {changes.map((c: ChangeRow) => (
                 <li key={c.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-testid="seo-change">
                   <span className="text-[13px] text-ink">
-                    #{c.id} {c.kind.replace('_', ' ')} · {c.target} <span className="text-ink-faint">· {when(c.applied_at)}</span>
+                    #{c.id} {c.kind.replace('_', ' ')} · {c.target} <span className="text-ink-faint">· {c.applied_at ? when(c.applied_at) : 'Not confirmed applied'}</span>
+                    <ChangeNotice status={c.status} />
                   </span>
                   {c.status === 'applied' ? (
                     <form action={undoChangeAction}>

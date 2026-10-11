@@ -3,9 +3,10 @@ import { createTestDb } from './helpers/pglite-db'
 import { addCompany } from './helpers/lead-fixtures'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
-const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown } }))
+const { holder, kick } = vi.hoisted(() => ({ holder: { db: null as unknown }, kick: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db }))
+vi.mock('@/lib/notify/kick', () => ({ kickDelivery: kick }))
 
 import { PATCH } from '@/app/api/leads/stage/route'
 import { POST } from '@/app/api/leads/[id]/comments/route'
@@ -52,6 +53,8 @@ describe('lead routes', () => {
     expect(res.status).toBe(201)
     const { comment } = (await res.json()) as { comment: { id: number; mentions: string[] } }
     expect(comment.mentions).toEqual(['tab'])
+    expect(kick).toHaveBeenCalledTimes(1)
+    expect(kick).toHaveBeenCalledWith(db)
     const c = await db.query<{ author: string }>(`select author from lp.comments where id = $1`, [comment.id])
     expect(c.rows[0].author).toBe('owner')
   })
