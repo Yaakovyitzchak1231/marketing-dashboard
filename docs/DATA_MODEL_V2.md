@@ -47,7 +47,7 @@ as a first-class entity so SMS/voice slot in later without a rewrite.
 
 Auth rule: keys live in the box environment (or the vault synced to it).
 **Never in the repo, never in a commit, never in chat.** Follow the existing
-`scripts/git-push.sh` pattern — builders never touch raw tokens.
+the git-push pattern the builders already use (no such script is committed to this repo) — builders never touch raw tokens.
 
 ## 3. The model
 
