@@ -6,7 +6,8 @@ import { join } from 'node:path'
  * Structural guards on the render path (app/ pages + components/), replacing
  * the old literal-grep test that was tied to the deleted components.
  *  - A null metric must never be coerced to 0 (`?? 0` / `|| 0`).
- *  - Rates are formatted in components/dashboard/format.ts only; `* 100`
+ *  - Rates are formatted in components/dashboard/format.ts and
+ *    components/charts/format.ts only; `* 100`
  *    anywhere else in the render path means someone is recomputing a figure.
  */
 function walk(dir: string): string[] {
@@ -39,7 +40,9 @@ describe('render path honesty', () => {
     const lines = code(f)
       .split('\n')
       .filter((l) => /\*\s*100\b/.test(l))
+    // The two formatter modules are where rates are allowed to become percents.
     if (f.endsWith(join('components', 'dashboard', 'format.ts'))) return
+    if (f.endsWith(join('components', 'charts', 'format.ts'))) return
     // DailyChart's toPct converts a layout fraction to CSS, not a metric.
     const allowed = lines.filter((l) => !/fraction \* 100/.test(l))
     expect(allowed).toEqual([])
