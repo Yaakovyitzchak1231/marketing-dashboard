@@ -58,6 +58,15 @@ export interface LeadFilters {
   job?: number
   /** Latest campaign name, or NONE. */
   campaign?: string
+  /**
+   * Advanced filters (plan 2.5): restrict to exactly these company ids, computed
+   * by the page from a saved segment (?seg=) or an ad-hoc definition (?f=) --
+   * see decodeAdvancedFilter below. NOT part of the LeadFilters URL contract
+   * (parseLeadQuery never sets it, leadQueryToParams never serializes it): the
+   * page computes it and spreads it onto filters before calling a query
+   * function, same as any other in-memory narrowing.
+   */
+  companyIds?: number[] | null
 }
 
 export interface LeadQuery {
@@ -151,5 +160,37 @@ export function leadsHref(q: LeadQuery, patch: Partial<Omit<LeadQuery, 'filters'
 }
 
 export function activeFilterCount(f: LeadFilters): number {
-  return Object.values(f).filter((v) => v !== undefined && v !== '').length
+  return Object.entries(f).filter(([k, v]) => k !== 'companyIds' && v !== undefined && v !== '').length
+}
+
+// -----------------------------------------------------------------------
+// Advanced filters (plan 2.5): the drawer's OWN params, ?seg= and ?f=.
+// Independent of the LeadFilters contract above -- parseLeadQuery and
+// leadQueryToParams never read or write these, so round-tripping an old
+// /leads URL through them is unaffected by anything below.
+// -----------------------------------------------------------------------
+import type { SegmentDefinition } from '../segments/definition'
+import { validateDefinition } from '../segments/definition'
+
+/** A saved segment id from ?seg=, or null (absent / not a positive integer). */
+export function parseSegParam(v: string | string[] | undefined): number | null {
+  const s = one(v)
+  if (!s || !/^\d{1,15}$/.test(s)) return null
+  const n = Number(s)
+  return n > 0 ? n : null
+}
+
+/** An ad-hoc segment definition for ?f=, URL-safe JSON. Re-validated on decode (never trust the URL blindly). */
+export function encodeAdvancedFilter(def: SegmentDefinition): string {
+  return encodeURIComponent(JSON.stringify(def))
+}
+
+export function decodeAdvancedFilter(v: string | string[] | undefined): SegmentDefinition | null {
+  const raw = one(v)
+  if (!raw) return null
+  try {
+    return validateDefinition(JSON.parse(decodeURIComponent(raw)))
+  } catch {
+    return null
+  }
 }

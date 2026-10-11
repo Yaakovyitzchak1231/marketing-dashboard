@@ -57,6 +57,7 @@ import { TAG_OPS } from '../tags/ops.ts'
 import { SEGMENT_OPS } from '../segments/ops.ts'
 import { LEAD_PROFILE_OPS } from '../leads/profile-ops.ts'
 import { TRAIT_OPS } from '../traits/ops.ts'
+import { CAMPAIGN_SOURCE_OPS } from '../segments/campaign-sources.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -510,6 +511,8 @@ export const OPS: Record<string, Op> = {
   ...SEGMENT_OPS,
   ...LEAD_PROFILE_OPS,
   ...TRAIT_OPS,
+  // Segments as campaign sources/exclusions (plan 2.6): campaign_add_from_segment.
+  ...CAMPAIGN_SOURCE_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {

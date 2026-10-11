@@ -30,6 +30,7 @@ import { EngagementPanel } from '@/components/leads/EngagementPanel'
 import { CustomFieldsBlock } from '@/components/leads/CustomFieldsBlock'
 import { listFieldDefsSafe } from '@/lib/fields/registry'
 import { ForgetContactButton } from '@/components/leads/ForgetContactButton'
+import { LeadListsCard } from '@/components/leads/LeadListsCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,6 +162,7 @@ export default async function LeadPage({
           <div className="grid gap-6 lg:grid-cols-2">
             <SegmentsCard data={profile.segments} />
             <CampaignsCard data={profile.campaigns} />
+            <LeadListsCard db={db} companyId={c.id} />
             <Section title="Tasks" meta={`${d.tasks.length}`}>
               {d.tasks.length ? (
                 <ul className="divide-y divide-line-soft">
@@ -298,6 +300,7 @@ export default async function LeadPage({
                         <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
                         <CustomFieldsBlock entity="contact" id={ct.id} defs={contactFields} values={ct.custom} label="Custom fields" />
                         <div className="mt-1"><ForgetContactButton contactId={ct.id} email={ct.email} /></div>
+
                       </div>
                       <span className="flex items-center gap-1.5">
                         {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
