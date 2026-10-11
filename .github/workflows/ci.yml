@@ -34,6 +34,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Links, npm scripts, backticked paths and the architecture map must match the repo.
+      - name: Docs check
+        run: npm run docs:check
+
       - name: Test
         run: npm test
 

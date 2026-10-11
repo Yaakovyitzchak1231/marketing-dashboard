@@ -1,18 +1,24 @@
 name: Docs maintainer
 
-# After every PR merged into main: verify the docs against the code, keep
-# docs/ARCHITECTURE.md current, and flag orphaned code or inconsistencies.
-# Needs the ANTHROPIC_API_KEY repository secret.
+# Runs on every change that lands on main (a merged PR or a direct push), verifies the
+# docs against the code, refreshes docs/ARCHITECTURE.md, and reports orphans and
+# contradictions. It opens a docs PR only when it changed something, and comments on
+# the source PR when there is one.
+#
+# Needs ONE repository secret: ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.
+# The job fails with a plain message if neither is set.
+#
+# Known limit: a docs PR opened with GITHUB_TOKEN does not trigger CI on its own, so
+# its checks only run after someone pushes to it. Fix with a GitHub App or PAT if needed.
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Merged PR number to audit
-        required: true
+        description: Merged PR number to audit (leave empty to audit main's head)
+        required: false
 
 permissions:
   contents: write
@@ -25,50 +31,94 @@ concurrency:
 
 jobs:
   docs:
-    # Skip the PRs this workflow opens itself.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       !startsWith(github.event.pull_request.head.ref, 'docs/maintenance-'))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
-      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+      REPO: ${{ github.repository }}
     steps:
+      # Which commit is being audited, and which PR (if any) it came from. A docs PR the
+      # bot itself opened is skipped here so the bot never audits its own sync.
+      - name: Find the change to audit
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          skip=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$INPUT_PR" ]; then
+            state=$(gh pr view "$INPUT_PR" --json state -q .state)
+            if [ "$state" != "MERGED" ]; then
+              echo "::error::PR #$INPUT_PR is $state, not merged"
+              exit 1
+            fi
+            sha=$(gh pr view "$INPUT_PR" --json mergeCommit -q .mergeCommit.oid)
+            pr="$INPUT_PR"
+            head_ref=$(gh pr view "$INPUT_PR" --json headRefName -q .headRefName)
+          else
+            sha="${PUSH_SHA}"
+            # The PR that produced this commit, if any (empty for a direct push).
+            pair=$(gh api "repos/$REPO/commits/$sha/pulls" \
+              --jq 'if length > 0 then "\(.[0].number) \(.[0].head.ref)" else "" end' || true)
+            pr=$(echo "$pair" | cut -d' ' -f1 -s || true)
+            head_ref=$(echo "$pair" | cut -d' ' -f2- -s || true)
+          fi
+          case "${head_ref:-}" in
+            docs/maintenance-*)
+              skip=true
+              echo "This commit is the docs bot's own sync PR; nothing to audit." ;;
+          esac
+          {
+            echo "sha=$sha"
+            echo "pr=${pr:-}"
+            echo "short=${sha:0:7}"
+            echo "skip=$skip"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: steps.target.outputs.skip != 'true'
         with:
-          ref: main
+          ref: ${{ steps.target.outputs.sha }}
           fetch-depth: 0
 
-      - name: Collect merged PR context
-        id: ctx
+      - name: Check that a Claude credential is configured
+        if: steps.target.outputs.skip != 'true'
+        env:
+          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         run: |
-          gh pr view "$PR_NUMBER" --json state,mergeCommit,files > "$RUNNER_TEMP/pr.json"
-          state=$(jq -r .state "$RUNNER_TEMP/pr.json")
-          if [ "$state" != "MERGED" ]; then
-            echo "::error::PR #$PR_NUMBER is $state, not merged"
+          if [ "$HAS_API_KEY" != "true" ] && [ "$HAS_OAUTH" != "true" ]; then
+            echo "::error::Add the repository secret ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN) under Settings > Secrets and variables > Actions. The docs bot cannot run without it."
             exit 1
           fi
-          echo "merge_sha=$(jq -r .mergeCommit.oid "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+
+      - name: List changed files
+        if: steps.target.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
           mkdir -p .docs-maintainer
-          jq -r '.files[].path' "$RUNNER_TEMP/pr.json" > .docs-maintainer/changed-files.txt
+          git diff --name-only "${{ steps.target.outputs.sha }}^" "${{ steps.target.outputs.sha }}" \
+            > .docs-maintainer/changed-files.txt || git show --name-only --format= "${{ steps.target.outputs.sha }}" \
+            > .docs-maintainer/changed-files.txt
 
       - name: Audit docs with Claude
+        if: steps.target.outputs.skip != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 40
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git ls-files:*),Bash(grep:*),Bash(find:*),Bash(ls:*),Bash(test:*),Bash(wc:*)"
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git ls-files:*),Bash(grep:*),Bash(find:*),Bash(ls:*),Bash(test:*),Bash(wc:*),Bash(npm run docs:check),Bash(node scripts/check-docs.mjs)"
           prompt: |
             You are the post-merge Docs Maintainer for ${{ github.repository }}.
-            PR #${{ env.PR_NUMBER }} was just merged into main as commit
-            ${{ steps.ctx.outputs.merge_sha }}. The working tree is main at that point.
-            The files the PR changed are listed in `.docs-maintainer/changed-files.txt`;
-            `git show --stat ${{ steps.ctx.outputs.merge_sha }}` shows the diff.
+            Commit ${{ steps.target.outputs.sha }} just landed on main${{ steps.target.outputs.pr != '' && format(' (from PR #{0})', steps.target.outputs.pr) || ' (a direct push)' }}.
+            The working tree is at that commit. The files it changed are listed in
+            `.docs-maintainer/changed-files.txt`; `git show --stat ${{ steps.target.outputs.sha }}` shows the diff.
 
             `AGENTS.md` is binding. Its first rule applies to documentation too:
             never state a fact about the code that you did not verify in the code.
@@ -77,7 +127,7 @@ jobs:
             Scope: `README.md`, `docs/*.md`, `collector/README.md`, `ops/**/README.md`,
             `.env.example`.
             - For every doc that mentions a file, route, script, env var, table or
-              command touched by the PR, check the claim against the code.
+              command touched by the change, check the claim against the code.
             - Check that `package.json` scripts and file paths named in docs exist.
             - Fix only statements that are verifiably wrong or missing. Keep the
               existing tone and structure; do not rewrite prose for style.
@@ -86,31 +136,35 @@ jobs:
 
             ## Task 2 — Maintain docs/ARCHITECTURE.md
             Create it if missing, otherwise update it in place. It must be readable
-            by a new developer and by an AI agent. Sections, in this order:
+            by a new developer and by an AI agent. Keep these sections in this order:
             1. Purpose — two or three sentences.
-            2. Data flow — a short `mermaid` flowchart of the live data path, derived
-               from the code. Mark legacy paths as legacy.
+            2. Data flow — a `mermaid` flowchart of the live data path, derived from
+               the code. Mark legacy paths as legacy.
             3. Directory map — table: path | what lives there | key entry points.
-               Cover every top-level directory from `git ls-files`; go one level
-               deeper for `app/`, `lib/`, `components/`, `engine/`.
-            4. Key contracts — the central types, middleware and config files, one
-               line each.
+               Every top-level directory must appear as `` `dir/` `` in the table.
+            4. Key contracts — the central types, middleware and config files, one line each.
             5. Commands — from `package.json`.
-            6. Last verified — commit ${{ steps.ctx.outputs.merge_sha }}.
-            Derive every entry from the actual tree. Keep it under about 200 lines.
+            6. Known mismatches — numbered, each with evidence (file:line or command).
+            7. Last verified — commit ${{ steps.target.outputs.sha }}.
+            Derive every entry from the actual tree. Keep it under about 220 lines.
+            Do not invent a status: if a claim cannot be verified, flag it instead.
 
             ## Task 3 — Flag orphans and inconsistencies (report only)
-            Start with the PR's files, then do a light repo-wide pass:
+            Start with the changed files, then do a light repo-wide pass:
             - `.ts`/`.tsx` modules under `lib/`, `components/`, `engine/` that nothing
               imports (exclude Next.js route files, configs, tests, and scripts
               referenced by `package.json`). Confirm with grep before flagging.
-            - Exports added or changed by the PR that have no callers.
+            - Exports added or changed by the change that have no callers.
             - Docs or code referring to files, functions, env vars or routes that no
               longer exist.
             - Contradictions between docs, `AGENTS.md` and code.
             - Breaks of the AGENTS.md data rules visible in the diff (NULL coerced to
               0, averaged rates, invented figures).
             Do not delete, move or refactor any code. Edit documentation files only.
+
+            ## Verify before you finish
+            Run `npm run docs:check`. If it reports a problem in a doc you touched or
+            in ARCHITECTURE.md, fix the doc and run it again. Report what remains.
 
             ## Output
             Write `.docs-maintainer/report.md` (Markdown) with exactly two sections:
@@ -122,10 +176,15 @@ jobs:
               ran if there are none.
             Do not commit, push, or open PRs; the workflow does that.
 
-      - name: Open docs PR and comment on the merged PR
+      - name: Open docs PR and comment on the source PR
+        if: steps.target.outputs.skip != 'true'
         env:
-          MERGE_SHA: ${{ steps.ctx.outputs.merge_sha }}
+          SHA: ${{ steps.target.outputs.sha }}
+          PR_NUMBER: ${{ steps.target.outputs.pr }}
+          SHORT: ${{ steps.target.outputs.short }}
         run: |
+          set -euo pipefail
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           report="$RUNNER_TEMP/report.md"
           if [ -s .docs-maintainer/report.md ]; then
             cp .docs-maintainer/report.md "$report"
@@ -147,18 +206,19 @@ jobs:
             esac
           done
 
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # Keep the sync PR's branch name stable per source change so it is found again.
+          if [ -n "$PR_NUMBER" ]; then branch="docs/maintenance-pr-$PR_NUMBER"; else branch="docs/maintenance-$SHORT"; fi
+
           if git diff --cached --quiet; then
             pr_line="No documentation changes were needed."
           else
-            branch="docs/maintenance-pr-$PR_NUMBER"
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git switch -c "$branch"
-            git commit -q -m "docs: sync documentation after #$PR_NUMBER"
+            git switch -q -C "$branch"
+            git commit -q -m "docs: sync documentation after ${SHORT}"
             git push -q --force origin "$branch"
             {
-              echo "Automated documentation sync after #$PR_NUMBER (merge \`$MERGE_SHA\`)."
+              echo "Automated documentation sync after \`$SHORT\` (commit \`$SHA\`)."
               echo
               cat "$report"
               echo
@@ -167,14 +227,14 @@ jobs:
             url=$(gh pr list --head "$branch" --state open --json url -q '.[0].url')
             if [ -z "$url" ]; then
               url=$(gh pr create --base main --head "$branch" \
-                --title "docs: post-merge sync for #$PR_NUMBER" \
+                --title "docs: post-merge sync after ${SHORT}" \
                 --body-file "$RUNNER_TEMP/pr-body.md")
             fi
             pr_line="Docs PR: $url"
           fi
 
           {
-            echo "### Docs maintainer"
+            echo "### Docs maintainer ($SHORT)"
             echo
             cat "$report"
             echo
@@ -182,4 +242,7 @@ jobs:
             echo
             echo "Run: $run_url"
           } > "$RUNNER_TEMP/comment.md"
-          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/comment.md"
+          fi
