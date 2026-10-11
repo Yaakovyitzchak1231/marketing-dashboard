@@ -121,6 +121,17 @@ export function combinedTracking(flags: Array<boolean | null>): boolean | null {
   return null
 }
 
+/**
+ * Open tracking is "off" for the workspace when at least one campaign reports it
+ * and every campaign that reports it says off. Unknown flags are ignored, so an
+ * unreported campaign never flips the answer either way. Used for the
+ * "tracking off" label instead of a 0% open rate.
+ */
+export function openTrackingOff(flags: Array<boolean | null>): boolean {
+  const known = flags.filter((f) => f !== null)
+  return known.length > 0 && known.every((f) => f === false)
+}
+
 /** Maps Instantly's numeric campaign status to the contract's words. */
 export function campaignStatus(code: unknown): 'draft' | 'active' | 'paused' | 'completed' | 'error' | 'unknown' {
   switch (num(code)) {

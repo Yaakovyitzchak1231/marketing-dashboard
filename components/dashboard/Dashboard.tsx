@@ -1,4 +1,4 @@
-import type { DashboardData } from '@/lib/dashboard/types'
+import type { DashboardData, DateRange } from '@/lib/dashboard/types'
 import { AccountsTable } from './AccountsTable'
 import { CampaignTable } from './CampaignTable'
 import { DailyChart } from './DailyChart'
@@ -10,6 +10,7 @@ import { ErrorsNotice } from './Notices'
 import { RepliesList } from './RepliesList'
 import { rangeLabel } from './format'
 import { Card } from './primitives'
+import { openTrackingOff } from '@/lib/dashboard/metrics'
 
 /** The whole dashboard for one DashboardData. Pure render; page.tsx fetches. */
 export function Dashboard({ data, sample = false }: { data: DashboardData; sample?: boolean }) {
@@ -47,30 +48,35 @@ function Body({ data }: { data: DashboardData }) {
         </Card>
       ) : (
         <>
-          <Insights insights={data.insights} />
+          {/* Numbers first, then what to do about them (the same order the live page streams in). */}
           <div>
             <Kpis counts={data.totals.counts} rates={data.totals.rates} previous={data.previous} />
-            <SecondaryStats counts={data.totals.counts} rates={data.totals.rates} campaigns={data.campaigns} />
+            <SecondaryStats
+              counts={data.totals.counts}
+              rates={data.totals.rates}
+              trackingOff={openTrackingOff(data.campaigns.map((c) => c.openTracking))}
+            />
           </div>
+          <Insights insights={data.insights} />
           <DailyChart daily={data.daily} />
           <CampaignTable campaigns={data.campaigns} />
           <div className="grid gap-7 sm:gap-8 lg:grid-cols-2">
             <RepliesList leads={data.repliedLeads} />
             <AccountsTable accounts={data.accounts} />
           </div>
-          <Footnote data={data} />
+          <Footnote range={data.range} previous={data.previous} />
         </>
       )}
     </div>
   )
 }
 
-function Footnote({ data }: { data: DashboardData }) {
+export function Footnote({ range, previous }: { range: DateRange; previous: DashboardData['previous'] }) {
   return (
     <footer className="border-t border-line pt-4 text-[11px] leading-relaxed text-ink-faint">
       Reply rate = leads who replied ÷ leads contacted (auto-replies excluded). Positive rate = leads marked interested in Instantly ÷ leads contacted.
-      Bounce rate = bounced ÷ emails sent. Days are counted in {data.range.timezone}.
-      {data.previous ? ' Changes compare with the same number of days just before this range.' : ''}
+      Bounce rate = bounced ÷ emails sent. Days are counted in {range.timezone}.
+      {previous ? ' Changes compare with the same number of days just before this range.' : ''}
     </footer>
   )
 }

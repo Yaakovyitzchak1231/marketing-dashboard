@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('server-only', () => ({}))
-import { getDashboardData } from '@/lib/dashboard/load'
+import React from 'react'
+import { renderToPipeableStream } from 'react-dom/server'
+import { PassThrough } from 'node:stream'
+import type { CampaignRow, DailyPoint, RepliedLead, SenderAccount } from '@/lib/dashboard/types'
+import { PerformanceView } from '@/components/dashboard/PerformanceView'
+import {
+  getDashboardData, loadSummary, loadStages, combineStages, insightsFor,
+} from '@/lib/dashboard/load'
 import { InstantlyClient, clearInstantlyMemo } from '@/lib/instantly/client'
 import { fakeInstantly, type Override, C1, C2, C3 } from './helpers/instantly-fake'
 
@@ -156,6 +163,54 @@ describe('getDashboardData', () => {
     expect(d.repliedLeads.map((l) => l.email)).toContain('old@shop-d.example')
   })
 
+  it('loadSummary makes only the fast first round of calls; the slow sections own the rest', async () => {
+    const { client, calls } = setup()
+    const summary = await loadSummary('30d', { client, now: NOW, timeZone: TZ })
+    expect(summary.ctx).not.toBeNull()
+    // The numbers the page shows first must not wait on per-campaign or per-inbox history.
+    const paths = calls.map((c) => c.path)
+    expect(paths).not.toContain('/campaigns/analytics/steps')
+    expect(paths).not.toContain('/campaigns/analytics/daily')
+    expect(paths).not.toContain('/accounts/analytics/daily')
+    expect(paths).not.toContain('/leads/list')
+    expect(paths).toContain('/campaigns/analytics/overview')
+    expect(summary.errors).toEqual([])
+    expect(summary.totals.counts.sent).toBe(2618)
+    // Not "tracking off": one fixture campaign reports open tracking on, so a 0% open rate
+    // would be a lie. Same answer SecondaryStats gets from the campaign rows.
+    expect(summary.trackingOff).toBe(false)
+  })
+
+  it('the streamed stages add up to exactly what getDashboardData returns', async () => {
+    const a = setup()
+    const summary = await loadSummary('30d', { client: a.client, now: NOW, timeZone: TZ })
+    expect(summary.ctx).not.toBeNull()
+    const stages = loadStages(summary.ctx!)
+    const [daily, campaigns, accounts, replies] = await Promise.all([stages.daily, stages.campaigns, stages.accounts, stages.replies])
+    const combined = combineStages(summary, { daily, campaigns, accounts, replies })
+    const insights = insightsFor(combined)
+    const streamed = { ...combined, insights: insights.data, errors: [...combined.errors, ...insights.errors] }
+
+    const b = setup()
+    const whole = await getDashboardData('30d', { client: b.client, now: NOW, timeZone: TZ })
+    expect(streamed).toEqual(whole)
+  })
+
+  it('a failing stage fails alone: its own error, its own nulls, the others intact', async () => {
+    const { client } = setup((c) => (c.path === '/campaigns/analytics/daily' ? new Response('{}', { status: 500 }) : undefined))
+    const summary = await loadSummary('30d', { client, now: NOW, timeZone: TZ })
+    const stages = loadStages(summary.ctx!)
+    const [daily, campaigns, accounts, replies] = await Promise.all([stages.daily, stages.campaigns, stages.accounts, stages.replies])
+    expect(summary.errors).toEqual([]) // the failure belongs to the chart, not the totals
+    expect(daily.errors.map((e) => e.source)).toEqual(['campaigns/analytics/daily'])
+    expect(daily.data.every((p) => p.sent === null)).toBe(true) // unreported, never 0
+    expect(campaigns.errors).toEqual([])
+    expect(campaigns.data).toHaveLength(3)
+    expect(accounts.errors).toEqual([])
+    expect(accounts.data).toHaveLength(3)
+    expect(replies.errors).toEqual([])
+  })
+
   it('splits the per-inbox request when Instantly says it is too large (413)', async () => {
     const { client, calls } = setup((c) =>
       c.path === '/accounts/analytics/daily' && (c.query.get('emails') ?? '').split(',').length > 1
@@ -166,5 +221,73 @@ describe('getDashboardData', () => {
     expect(d.accounts.find((a) => a.email === 'sam@sender-one.example')?.sent).toBe(50)
     expect(calls.filter((c) => c.path === '/accounts/analytics/daily').length).toBeGreaterThan(3)
     expect(d.errors).toEqual([])
+  })
+})
+
+/**
+ * The point of the staged load: the page must not wait for the slow calls.
+ * Rendered with the Node server renderer (not jsdom), so the streamed chunks are
+ * the real thing: the shell flushes with the totals, then each section arrives
+ * as its own stage resolves.
+ */
+describe('the streamed page', () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => (resolve = r))
+    return { promise, resolve }
+  }
+  const tick = (ms = 40) => new Promise((r) => setTimeout(r, ms))
+
+  const summary = {
+    generatedAt: '2026-10-08T16:00:00Z',
+    range: { key: '30d' as const, start: '2026-09-09', end: '2026-10-08', timezone: TZ },
+    configured: true,
+    totals: {
+      counts: { sent: 2618, contacted: 705, opened: null, clicked: null, replied: 10, autoReplies: 11, bounced: 6, unsubscribed: 0, positive: 2, meetingsBooked: 1, opportunityValue: 2000 },
+      rates: { replyRate: 10 / 705, positiveRate: null, positiveShareOfReplies: null, bounceRate: 6 / 2618, openRate: null, clickRate: null, unsubscribeRate: 0 },
+    },
+    previous: null,
+    trackingOff: false,
+    errors: [],
+    ctx: null,
+  }
+  const daily: DailyPoint[] = [{ date: '2026-09-09', sent: 54, contacted: 54, replied: 1, positive: 0, bounced: null, opened: null }]
+  const campaigns: CampaignRow[] = [{
+    id: 'c1', name: 'Jewelers - Test 01', status: 'active', openTracking: false,
+    counts: { sent: 2408, contacted: 495, opened: null, clicked: null, replied: 10, autoReplies: 11, bounced: 5, unsubscribed: 0, positive: 2, meetingsBooked: 1, opportunityValue: 2000 },
+    rates: { replyRate: 10 / 495, positiveRate: null, positiveShareOfReplies: null, bounceRate: 5 / 2408, openRate: null, clickRate: null, unsubscribeRate: 0 },
+    steps: [], leadsTotal: 495, leadsRemaining: 0, lifetime: null,
+  }]
+
+  it('flushes the totals before any section, then each section as its stage resolves', async () => {
+    const d = deferred<{ data: DailyPoint[]; errors: [] }>()
+    const c = deferred<{ data: CampaignRow[]; errors: [] }>()
+    const a = deferred<{ data: SenderAccount[]; errors: [] }>()
+    const r = deferred<{ data: RepliedLead[]; errors: [] }>()
+    const chunks: string[] = []
+    const pass = new PassThrough()
+    pass.on('data', (b) => chunks.push(String(b)))
+    const stream = renderToPipeableStream(React.createElement(PerformanceView, { summary, stages: { daily: d.promise, campaigns: c.promise, accounts: a.promise, replies: r.promise } }), {
+      onShellReady() { stream.pipe(pass) },
+    })
+
+    await tick()
+    const shell = chunks.join('')
+    expect(shell).toContain('2,618') // the totals are in the first flush
+    expect(shell).not.toContain('Daily activity') // the slow sections are not
+    expect(shell).not.toContain('Jewelers - Test 01')
+
+    d.resolve({ data: daily, errors: [] })
+    await tick()
+    expect(chunks.join('')).toContain('Daily activity')
+    expect(chunks.join('')).not.toContain('Jewelers - Test 01')
+
+    c.resolve({ data: campaigns, errors: [] })
+    await tick()
+    expect(chunks.join('')).toContain('Jewelers - Test 01')
+
+    a.resolve({ data: [], errors: [] })
+    r.resolve({ data: [], errors: [] })
+    await tick(80)
   })
 })

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -9,6 +10,8 @@ import { Dashboard } from '@/components/dashboard/Dashboard'
 import { bestStep, sortCampaigns } from '@/components/dashboard/CampaignTable'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import type { LiveChange } from '@/components/ops/live'
+import { CampaignsSection, DailySection, KpiSection } from '@/components/dashboard/PerformanceView'
+import type { DashboardSummary } from '@/lib/dashboard/load'
 import { refreshCount } from './mock-navigation'
 
 const live = vi.hoisted(() => ({ listener: null as ((c: LiveChange) => void) | null, connected: true }))
@@ -44,10 +47,14 @@ function notConfigured(): DashboardData {
 }
 
 describe('Dashboard', () => {
-  it('leads with the insights, then the numbers', () => {
+  it('renders the KPI band first, then the insights (the band carries no heading)', () => {
     const { container } = render(<Dashboard data={fixture()} />)
     const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent)
     expect(headings[0]).toBe('What to do next')
+    // The band comes before that heading in the DOM: numbers first, advice second.
+    const band = container.querySelector('[aria-label="Key numbers"]')
+    const first = container.querySelector('h2')
+    expect(band && first ? band.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING : 0).toBeTruthy()
     expect(screen.getByText('3 people replied and are waiting on you')).toBeInTheDocument()
     // severity order: critical before win
     const sev = Array.from(container.querySelectorAll('[data-severity]')).map((e) => e.getAttribute('data-severity'))
@@ -132,6 +139,42 @@ describe('Dashboard', () => {
     expect(screen.queryByTestId('sample-banner')).toBeNull()
     rerender(<Dashboard data={fixture()} sample />)
     expect(screen.getByTestId('sample-banner')).toBeInTheDocument()
+  })
+})
+
+describe('streamed sections', () => {
+  function summaryFixture(trackingOff = false): DashboardSummary {
+    const d = fixture()
+    return {
+      generatedAt: d.generatedAt,
+      range: d.range,
+      configured: true,
+      totals: d.totals,
+      previous: d.previous,
+      trackingOff,
+      errors: [],
+      ctx: null,
+    }
+  }
+
+  it('the KPI band renders from the fast summary alone, before any section has loaded', () => {
+    render(<KpiSection summary={summaryFixture(true)} />)
+    expect(within(screen.getByTestId('kpi-sent')).getByText('2,618')).toBeInTheDocument()
+    expect(within(screen.getByTestId('kpi-reply')).getByText('1.4%')).toBeInTheDocument()
+    expect(screen.getByText('tracking off')).toBeInTheDocument()
+  })
+
+  it('a section shows its own error next to itself, not a page-wide notice', () => {
+    render(<CampaignsSection result={{ data: [], errors: [{ source: 'campaigns/analytics/steps', message: 'Instantly timed out' }] }} />)
+    const notice = screen.getByTestId('errors-notice')
+    expect(notice).toHaveTextContent('per-step results')
+    expect(notice).toHaveTextContent('Instantly timed out')
+  })
+
+  it('a clean section shows no error notice, and an unreported chart says so', () => {
+    render(<DailySection result={{ data: [], errors: [] }} />)
+    expect(screen.queryByTestId('errors-notice')).toBeNull()
+    expect(screen.getByText('No daily activity reported for this range.')).toBeInTheDocument()
   })
 })
 

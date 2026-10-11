@@ -1,4 +1,4 @@
-import type { CampaignRow, Counts, Rates } from '@/lib/dashboard/types'
+import type { Counts, Rates } from '@/lib/dashboard/types'
 import { countDelta, formatCount, formatPct, rateDelta, type Delta } from './format'
 import { Val } from './primitives'
 
@@ -89,14 +89,13 @@ export function Kpis({
 export function SecondaryStats({
   counts,
   rates,
-  campaigns,
+  trackingOff,
 }: {
   counts: Counts
   rates: Rates
-  campaigns: CampaignRow[]
+  /** true = open tracking is off on every campaign, so show "tracking off" instead of a 0% open rate. */
+  trackingOff: boolean
 }) {
-  const known = campaigns.filter((c) => c.openTracking !== null)
-  const trackingOff = known.length > 0 && known.every((c) => c.openTracking === false)
   const items: { label: string; node: React.ReactNode; title?: string }[] = [
     {
       label: 'Open rate',

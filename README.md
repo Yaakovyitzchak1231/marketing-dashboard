@@ -27,6 +27,13 @@ browser ──login (Supabase email + password)──▶ middleware.ts (allow-li
   campaign performance page is open it re-reads every five minutes, and a new
   reply arriving through the Instantly webhook clears the cache and refreshes
   it at once. The Overview refreshes itself whenever the lead database changes.
+- **The page streams.** Campaign performance shows the totals, the deltas and
+  the secondary line as soon as the first round of calls answers, then fills in
+  the daily chart, the campaign table, the replied leads and the sending inboxes
+  each as its own data arrives — each with its own placeholder and its own error
+  notice. A slow per-inbox or per-campaign call no longer holds up the whole
+  page. Every number is identical to `/api/dashboard`, which returns the same
+  data as one JSON body.
 - **Read-only.** The dashboard only reads from Instantly. It never creates,
   edits, pauses or sends anything.
 - **Honest numbers.** `null` means "Instantly didn't report it" and is shown as
