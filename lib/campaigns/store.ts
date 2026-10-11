@@ -113,6 +113,19 @@ async function checkRefs(q: Queryable, p: CampaignPatch, campaignId: number | nu
   }
 }
 
+/**
+ * The same checks updateCampaign runs (person-only fields, live status, known owner, usable
+ * rule set), for a writer that changes one campaign field outside updateCampaign — the
+ * universal inline edit (lib/edit/update.ts). Throws CampaignError; changes nothing.
+ */
+export async function guardCampaignEdit(q: Queryable, actor: string, campaignId: number, p: CampaignPatch): Promise<void> {
+  const cur = await q.query<{ rule_set_id: number | null }>('select rule_set_id from lp.campaigns where id = $1', [campaignId])
+  if (!cur.rows[0]) throw new CampaignError(`No campaign ${campaignId}.`, 404)
+  await requireHumanFor(q, actor, Object.keys(p) as CampaignField[])
+  const currentRuleSet = cur.rows[0].rule_set_id == null ? null : Number(cur.rows[0].rule_set_id)
+  await checkRefs(q, p, campaignId, currentRuleSet)
+}
+
 function show(field: CampaignField, v: unknown): string | null {
   if (v === null || v === undefined) return null
   if (field === 'pool') return POOL_LABELS[v as keyof typeof POOL_LABELS] ?? String(v)
