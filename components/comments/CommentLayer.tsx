@@ -123,7 +123,9 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
         // Confirmed: remember which edit the server holds. Newer edits typed meanwhile stay unsynced.
         const latest = editAt.current[clientId] ?? stamp
         const cur = pinsRef.current.find((x) => x.client_id === clientId)
-        if (cur) putLocal(storage(), pinToLocal(cur, latest, stamp))
+        // Only update a copy this device still holds: if the draft was sent or discarded while this
+        // save was in flight, its local copy is already gone and must not be written back.
+        if (cur && cur.status === 'draft' && clientId in loadLocal(storage())) putLocal(storage(), pinToLocal(cur, latest, stamp))
         setPins((all) => all.map((x) => (x.client_id === clientId ? { ...x, id: r.comment.id, unsynced: latest > stamp } : x)))
         setSaveState((s) => ({ ...s, [clientId]: latest > stamp ? 'saving' : 'saved' }))
       } else {

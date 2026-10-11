@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
 import { CommentLayer, type CommentActions } from '@/components/comments/CommentLayer'
 import { anchorFor, describe as describeEl, selectorFor, spotFor } from '@/lib/page-comments/anchor'
 import { STORE_KEY, loadLocal, merge, putLocal, type LocalDraft } from '@/lib/page-comments/drafts'
@@ -161,6 +161,44 @@ describe('the comment layer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send all 2' }))
     })
     expect(a.send).toHaveBeenCalledWith(expect.arrayContaining(['one-00000001', 'two-00000001']))
+    await waitFor(() => expect(loadLocal(localStorage)).toEqual({}))
+  })
+
+  it('a save still in flight when the drafts are sent does not bring them back on this device', async () => {
+    putLocal(localStorage, local({ client_id: 'one-00000001', page_path: '/leads', body: 'first' }))
+    putLocal(localStorage, local({ client_id: 'two-00000001', page_path: '/team', body: 'second', updated_at: 3000 }))
+    // The background saves started on load are slow; the ones Send makes answer at once.
+    const held: Array<() => void> = []
+    let calls = 0
+    let listed = 0
+    const { a } = fakeActions({
+      list: vi.fn(async () => {
+        listed += 1
+        const sent = listed > 1 ? [view({ client_id: 'one-00000001', status: 'sent' }), view({ client_id: 'two-00000001', status: 'sent', page_path: '/team' })] : []
+        return { ok: true as const, comments: sent, recipients: [{ id: 'tab', display_name: 'Tab' }] }
+      }),
+      save: vi.fn(async (d) => {
+        calls += 1
+        if (calls <= 2) await new Promise<void>((resolve) => held.push(resolve))
+        return { ok: true as const, comment: view({ client_id: d.client_id, body: d.body ?? '', page_path: d.page_path }) }
+      }),
+    })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10))
+    })
+    expect(held).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send all 2' }))
+    })
+    await waitFor(() => expect(a.send).toHaveBeenCalled())
+    await waitFor(() => expect(listed).toBe(2))
+    // Now the slow saves answer, after the drafts were sent.
+    await act(async () => {
+      for (const resolve of held) resolve()
+      await new Promise((r) => setTimeout(r, 10))
+    })
     expect(loadLocal(localStorage)).toEqual({})
   })
 
