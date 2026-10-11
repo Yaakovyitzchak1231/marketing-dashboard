@@ -212,7 +212,10 @@ export async function requestAddLeads(
     diff: [{ field: `Leads in ${name ? `“${name}”` : 'the campaign'}`, from: 'as now', to: `+${p.ready.length} (Instantly skips any already in the workspace)` }],
   }
   const what = name ? `“${name}”` : `campaign ${cid}`
-  const summary = `Add ${p.ready.length} lead${p.ready.length === 1 ? '' : 's'} to ${what} in Instantly${p.excluded.length ? ` (${p.excluded.length} left out)` : ''}`
+  const leftOut = p.excluded.length
+    ? ` (${p.excluded.length} left out${p.suppressedCount ? `: suppressed (${p.suppressedSummary})` : ''})`
+    : ''
+  const summary = `Add ${p.ready.length} lead${p.ready.length === 1 ? '' : 's'} to ${what} in Instantly${leftOut}`
   const out = await db.tx(async (q) => {
     const { rows } = await q.query<ActionRow>(
       `insert into lp.instantly_actions (kind, campaign_id, campaign_name, contact_ids, preview, status, created_by, requested_reason)

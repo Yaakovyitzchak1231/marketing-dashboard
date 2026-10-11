@@ -10,6 +10,8 @@ import { StageSelect } from '@/components/leads/StageSelect'
 import { CommentForm } from '@/components/leads/CommentForm'
 import { EditFields } from '@/components/leads/EditFields'
 import { EDITABLE_CONTACT_STATUSES, FIELD_LABELS } from '@/lib/leads/edit-fields'
+import { InlineEditCell } from '@/components/edit/InlineEditCell'
+import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
 import { SEGMENT_LABELS, STAGE_LABELS } from '@/lib/leads/filters'
 import type { Stage, VerificationStatus } from '@/lib/leads/types'
 import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
@@ -86,7 +88,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-6">
           <Card className="px-4 py-3">
-            <div className="mb-2 flex justify-end">
+            <div className="mb-2 flex items-center justify-end gap-3">
+              <HistoryDrawer type="company" id={c.id} />
               <EditFields
                 endpoint={`/api/leads/${c.id}`}
                 title="store details"
@@ -104,7 +107,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
               <Fact label="Owner">{c.owner_name}</Fact>
               <Fact label="Website">{site ? <a href={site} target="_blank" rel="noreferrer noopener" className="text-accent">{c.website_domain ?? c.website}</a> : c.website}</Fact>
-              <Fact label="Phone">{c.phone_e164 ?? c.phone}</Fact>
+              <Fact label="Phone"><InlineEditCell type="company" id={c.id} field="phone" value={c.phone} label="Phone" /></Fact>
               <Fact label="Address">{[c.address_line, place(c.city, c.state), c.postal_code].filter(Boolean).join(', ') || null}</Fact>
               {c.vertical ? <Fact label="Type">{c.vertical}</Fact> : null}
               {c.notes ? <Fact label="Notes">{c.notes}</Fact> : null}
@@ -129,14 +132,16 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                     <div className="min-w-0">
                       <div className="truncate font-medium text-ink">{ct.email ?? 'No email'}</div>
                       <div className="text-[12px] text-ink-faint">
-                        {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.title, ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
+                        {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
+                      <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
                     </div>
                     <span className="flex items-center gap-1.5">
                       {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
                       <VerificationPill status={ct.verification_status} />
+                      <HistoryDrawer type="contact" id={ct.id} label="History" />
                       <EditFields
                         endpoint={`/api/leads/${c.id}/contacts/${ct.id}`}
                         title={`contact ${ct.email ?? ct.id}`}

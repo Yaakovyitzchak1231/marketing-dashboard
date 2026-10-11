@@ -11,6 +11,7 @@
  */
 import type { Queryable } from '../db/types.ts'
 import { logEvent } from '../ops/events.ts'
+import { checkEmails, type SuppressionReason } from '../suppressions/store.ts'
 import { emitLeadEvents } from '../events/emit.ts'
 import { getCampaign } from './store.ts'
 import {
@@ -319,6 +320,22 @@ export interface CampaignLeadRow {
   added_at: Date
   contacts: { id: number; email: string | null; status: string; verification_status: string; first_name: string | null; is_role_address: boolean | null }[]
   verdict: Verdict | null
+  /** Set when any contact's email or domain is suppressed for this campaign (or globally): shows as "Parked — suppressed (reason)". */
+  suppressed: { reason: SuppressionReason } | null
+}
+
+/** One suppression check (lib/suppressions) per row's contacts, batched in ONE query for the whole page. */
+async function suppressedByCompany(q: Queryable, campaignId: number, rows: { company_id: number; contacts: { email: string | null }[] }[]): Promise<Map<number, { reason: SuppressionReason }>> {
+  const emailToCompany = new Map<string, number>()
+  for (const r of rows) for (const c of r.contacts) if (c.email) emailToCompany.set(c.email, r.company_id)
+  const out = new Map<number, { reason: SuppressionReason }>()
+  if (!emailToCompany.size) return out
+  const checks = await checkEmails(q, [...emailToCompany.keys()], campaignId)
+  for (const [email, companyId] of emailToCompany) {
+    const c = checks[email]
+    if (c?.suppressed && !out.has(companyId)) out.set(companyId, { reason: c.by!.reason })
+  }
+  return out
 }
 
 export interface LeadListFilter {
@@ -377,20 +394,21 @@ export async function listCampaignLeads(
   )
   const ids = rows.map((r) => Number(r.company_id))
   const v = await verdictsFor(q, c, ids)
+  const normalizedRows = rows.map((r) => ({ ...r, company_id: Number(r.company_id), contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })) }))
+  const suppressed = await suppressedByCompany(q, campaignId, normalizedRows)
   return {
     campaign: c,
     ruleSet: v.ruleSet ?? ruleSet,
     total,
     page: Math.min(page, pages),
     pages,
-    rows: rows.map((r) => ({
+    rows: normalizedRows.map((r) => ({
       ...r,
-      company_id: Number(r.company_id),
       contact_id: r.contact_id == null ? null : Number(r.contact_id),
       tags: r.tags ?? [],
       overrides: r.overrides ?? {},
-      contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })),
-      verdict: v.verdicts.get(Number(r.company_id)) ?? null,
+      verdict: v.verdicts.get(r.company_id) ?? null,
+      suppressed: suppressed.get(r.company_id) ?? null,
     })),
   }
 }
@@ -411,13 +429,16 @@ export async function getCampaignLead(q: Queryable, campaignId: number, companyI
   const r = rows[0]
   if (!r) return null
   const v = await verdictsFor(q, c, [companyId])
+  const contacts = (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) }))
+  const suppressed = await suppressedByCompany(q, campaignId, [{ company_id: companyId, contacts }])
   return {
     ...r,
     company_id: Number(r.company_id),
     contact_id: r.contact_id == null ? null : Number(r.contact_id),
     tags: r.tags ?? [],
     overrides: r.overrides ?? {},
-    contacts: (r.contacts ?? []).map((x) => ({ ...x, id: Number(x.id) })),
+    contacts,
     verdict: v.verdicts.get(companyId) ?? null,
+    suppressed: suppressed.get(companyId) ?? null,
   }
 }
