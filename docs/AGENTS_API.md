@@ -187,3 +187,11 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+
+## Instantly reconcile & data sources health (P2-D, plan 1.6 + 1.11)
+
+| op | args |
+|---|---|
+| `instantly_reconcile_run` | `{since_days?}` (default 14) — the runner (`system`) or the owner only. Pulls per-lead Instantly activity (`POST /leads/list` interest status, `GET /emails` latest replies) for every contact the webhook already knows about, and inserts any `lp.lead_events` the live webhook missed, idempotently (same dedupe-key story as the webhook). Returns `{contacts_checked, leads_fetched, threads_fetched, events_considered, events_inserted, events_skipped_duplicate, errors}`. Runs nightly as runner job `instantly_reconcile` (seeded by `0028_instantly_reconcile_job.sql`); see `lib/instantly/reconcile.ts`. |
+| `sources_health` | `{}` → one row per data source feeding the platform (Instantly webhook, Instantly nightly reconcile, email verifiers, the find-leads engine, imports, exports, Search Console, the background runner's own heartbeat, plus every row in `lp.integrations`): `{id, label, last_event_at, count_24h, by_type_24h, error_count_24h, last_error, last_error_at}`. Every field a stored row doesn't answer comes back `null` ("No data yet" in the UI), never a guessed number. See `lib/sources/health.ts`; shown on `/tools` under "Data sources". |

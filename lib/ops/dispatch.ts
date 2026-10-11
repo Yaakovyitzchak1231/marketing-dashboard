@@ -59,6 +59,8 @@ import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
 import { INTEGRATION_OPS } from '../integrations/ops.ts'
+import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
+import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -479,6 +481,10 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
+  // Instantly nightly reconcile (lib/instantly/ops.ts): catch-up for per-lead activity the webhook missed (1.6).
+  ...INSTANTLY_RECONCILE_OPS,
+  // Data sources & sync health (lib/sources/ops.ts): one honest row per source (1.11).
+  ...SOURCES_HEALTH_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
