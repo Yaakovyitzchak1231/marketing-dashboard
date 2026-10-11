@@ -80,6 +80,8 @@ export interface WpPage {
   slug: string
   status: string
   title: string
+  /** raw content as WordPress stores it (context=edit); '' when the API did not return it */
+  content: string
   meta: Record<string, unknown> | null
 }
 
@@ -101,6 +103,7 @@ interface RawPost {
   slug: string
   status: string
   title?: { raw?: string; rendered?: string }
+  content?: { raw?: string; rendered?: string }
   meta?: Record<string, unknown> | unknown[]
 }
 
@@ -148,6 +151,7 @@ export class WpClient {
       slug: p.slug,
       status: p.status,
       title: p.title?.raw ?? p.title?.rendered ?? '',
+      content: p.content?.raw ?? p.content?.rendered ?? '',
       meta,
     }
   }

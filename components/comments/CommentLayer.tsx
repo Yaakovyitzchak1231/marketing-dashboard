@@ -382,13 +382,24 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
 
   const discard = useCallback(
     async (clientId: string) => {
+      const before = pinsRef.current.find((p) => p.client_id === clientId)
       closedDrafts.current.add(clientId)
       clearTimeout(timers.current[clientId])
       delete timers.current[clientId]
       removeLocal(storage(), clientId)
       setPins((all) => all.filter((p) => p.client_id !== clientId))
       setOpenId((o) => (o === clientId ? null : o))
-      await actions.discard(clientId).catch(() => null)
+      const r = await actions.discard(clientId).catch(() => null)
+      if (r?.ok) return
+      // The server still holds this draft. Leaving the ID closed would hide a draft that exists,
+      // and saveNow()/send() would skip it, so it could never be saved or sent again until a
+      // remount. Reopen it, put the text back on this device, and say so.
+      closedDrafts.current.delete(clientId)
+      if (before) {
+        putLocal(storage(), pinToLocal(before, editAt.current[clientId] ?? Date.now(), before.unsynced ? null : Date.now()))
+        setPins((all) => (all.some((p) => p.client_id === clientId) ? all : [before, ...all]))
+      }
+      setNotice('Could not discard that draft. It is still here.')
     },
     [actions],
   )
