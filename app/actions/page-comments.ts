@@ -26,7 +26,8 @@ function fail(e: unknown): Fail {
 }
 
 export async function listMyCommentsAction(): Promise<{ ok: true; comments: PageCommentView[]; recipients: { id: string; display_name: string }[] } | Fail> {
-  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  // A read: any signed-in role may list their own comments (writes below stay Editor).
+  const who = await actorFor('viewer').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
   if (who instanceof Error) return { ok: false, error: who.message }
   const ME = who
   const db = getDb()

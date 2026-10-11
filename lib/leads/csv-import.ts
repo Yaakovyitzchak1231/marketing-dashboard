@@ -154,8 +154,12 @@ async function survivorCompany(q: Queryable, id: number): Promise<number> {
  *  company phone (Yaakov, Oct 11 3:43 PM): the email's domain, unless it's a free-mail provider
  *  (gmail, yahoo, outlook...), which says nothing about the company. */
 export function companyDomainFromEmail(email: string | null): string | null {
-  const d = email?.split('@')[1]?.trim().toLowerCase() ?? ''
-  if (!d || !d.includes('.') || FREE_PROVIDERS.has(d)) return null
+  const raw = email?.split('@')[1]?.trim().toLowerCase() ?? ''
+  if (!raw || FREE_PROVIDERS.has(raw)) return null
+  // Same dedupe key as a website column: drops www./trailing dots and refuses hosts that are
+  // never a store's own site (etsy.com, facebook.com, ...), so they can't become a website_domain.
+  const d = normalizeDomain(raw)
+  if (!d || FREE_PROVIDERS.has(d)) return null
   return d
 }
 

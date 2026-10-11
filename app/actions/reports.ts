@@ -77,6 +77,8 @@ export async function addCostAction(f: FormData) {
 }
 
 export async function deleteCostAction(f: FormData) {
+  // Same gate as saving a cost: Editor or Owner (viewers are also blocked by middleware).
+  await actorFor('editor')
   const id = Number(s(f, 'id'))
   if (Number.isInteger(id) && id > 0) await deleteCost(db(), id)
   revalidatePath('/reports', 'layout')
