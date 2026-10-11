@@ -43,6 +43,8 @@ const lookups = () => import('../instantly/lookup.ts')
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
+import { EDIT_OPS } from '../edit/ops.ts'
+import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
 import { SETTINGS_OPS } from '../settings/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
@@ -458,6 +460,10 @@ export const OPS: Record<string, Op> = {
   },
   // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
   ...CAMPAIGN_OPS,
+  // Universal inline-edit + audit log (lib/edit/ops.ts): update_entity, entity_history, recent_changes.
+  ...EDIT_OPS,
+  // Suppression list (lib/suppressions/ops.ts): suppress/unsuppress/is_suppressed, CSV import/export.
+  ...SUPPRESSION_OPS,
   ...SETTINGS_OPS,
 }
 
