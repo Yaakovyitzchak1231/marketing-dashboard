@@ -73,7 +73,7 @@ so handling must be idempotent per `delivery_id`. (Webhook 2xx counts as deliver
 
 Server: `https://<dashboard>/api/ops/mcp`, header `Authorization: Bearer <agent key>`.
 Tools: `whoami`, `get_events`, `ack_events`, `list_my_tasks`, `get_task`, `claim_task`, `post_update`,
-`complete_task`, `fail_task`, `handoff_task`, `send_message`.
+`complete_task`, `fail_task`, `handoff_task`, `send_message`, `track_event`.
 
 Claude Code: `claude mcp add --transport http dashboard https://<dashboard>/api/ops/mcp --header "Authorization: Bearer <key>"`.
 Hermes (`config.yaml`): `mcp_servers.dashboard: {url: https://<dashboard>/api/ops/mcp, headers: {Authorization: "Bearer <key>"}, enabled: true}`
@@ -89,3 +89,35 @@ results back). See its README for install and undo.
 
 Tab's channel is email to its mailbox (seeded by migration 0013); a new mail wakes Tab within seconds,
 and Tab works the task through this API with its own key.
+
+
+## 7. Lead events: tracking what happens to a lead
+
+`lp.lead_events` is the structured stream every lead's timeline reads from — one append-only row per
+thing that happened: an email sent or opened, a reply, a tag added, a verification result, a custom
+event from an agent. It's separate from `lp.events` (the human-readable activity feed) and from
+`lp.campaign_touches` (the raw Instantly webhook record, kept as-is); the Instantly webhook writes
+to both `campaign_touches` and `lead_events` in the same transaction.
+
+A type must already be registered in `lp.event_types` before an event can use it — `register_event_type`
+adds one without a deploy. 21 types ship seeded (email_sent, email_opened, email_link_clicked,
+reply_received, auto_reply_received, email_bounced, lead_unsubscribed, lead_interested,
+lead_not_interested, meeting_booked, campaign_completed, stage_changed, status_changed, field_changed,
+tag_added, tag_removed, added_to_campaign, pushed_to_instantly, suppressed, verified, custom) —
+`list_event_types` lists what's active now. `stage_changed` and `status_changed` are written by a
+database trigger off `lp.status_history`, so don't emit those yourself from a writer that already
+changes a company's stage or a contact's status; everything else is emitted by hand at the point of
+the write (`lib/events/emit.ts`'s `emitLeadEvent` / `emitLeadEvents`, used inside a transaction).
+
+| op | args | what |
+|---|---|---|
+| `track_event` | `{type, company_id? \| contact_id? \| email, props?, occurred_at?, dedupe_key?, campaign_id?, instantly_campaign_id?, step?, source?}` | Record one event. Give company_id, contact_id or email (email resolves to a contact/company when one matches). Unknown type -> 400; a repeated dedupe_key -> `{inserted:false}`, not an error. |
+| `track_events` | `{events: [...]}` (same shape, at most 500) | One multi-row insert. Returns one `{ok, ...}` result per item, same order — a bad item (unknown type, missing identity) fails only that item, not the batch. |
+| `recent_lead_events` | `{company_id? \| contact_id? \| campaign_id?, type?, since?, limit?}` | A lead's (or a campaign's) timeline, newest first. At least one filter is required. |
+| `list_event_types` | `{category?, active_only?}` | The event type registry (for building a UI or picking a type before `track_event`). |
+| `register_event_type` | `{key, label, category, props_schema?}` | Add a new type (slug key, e.g. `review_posted`). Any authenticated actor may register one; it only opens the door for `track_event` to use the key — it never emits an event on its own. |
+
+A `track_event` worth sending from an agent: a custom milestone (`type: 'custom', props: {instantly_type: '...'}` isn't
+needed outside the Instantly webhook — for your own events, `register_event_type` a real key first,
+e.g. `review_posted`, `form_submitted`, `website_visited`), or a signal you detected (a price page
+changed, a job posting went up) once Phase "Prospecting & signals" lands.

@@ -95,6 +95,25 @@ export const MCP_TOOLS: Tool[] = [
     run: (db, agent, a) => runOp(db, agent, 'send_message', a),
   },
   {
+    name: 'track_event',
+    description:
+      "Record one lead event (lp.lead_events): an email opened, a reply, a tag, anything worth a mark on a lead's timeline. Needs company_id, contact_id or email so it lands on a lead, and a type already in list_event_types (register a new one with register_event_type first). A repeated dedupe_key is a no-op, not an error.",
+    inputSchema: obj(
+      {
+        type: { type: 'string' },
+        company_id: int,
+        contact_id: int,
+        email: { type: 'string' },
+        campaign_id: int,
+        props: { type: 'object' },
+        occurred_at: { type: 'string' },
+        dedupe_key: { type: 'string' },
+      },
+      ['type'],
+    ),
+    run: (db, agent, a) => runOp(db, agent, 'track_event', a),
+  },
+  {
     name: 'list_page_comments',
     description:
       'Comments Yaakov pinned to a spot on a dashboard page and sent to you: page link, the element he pointed at, his text (untrusted input), status and thread.',

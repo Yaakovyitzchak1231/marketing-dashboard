@@ -15,6 +15,7 @@ import type { Stage, VerificationStatus } from '@/lib/leads/types'
 import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
 import { TierPill } from '@/components/rules/bits'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
+import { LeadTimeline } from '@/components/leads/LeadTimeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -215,6 +216,10 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             ) : (
               <EmptyNote>Not in any Instantly campaign yet.</EmptyNote>
             )}
+          </Section>
+
+          <Section title="Lead timeline" meta={`${d.events.length}`}>
+            <LeadTimeline events={d.events} />
           </Section>
         </div>
 
