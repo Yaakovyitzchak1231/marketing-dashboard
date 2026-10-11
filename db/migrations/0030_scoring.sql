@@ -112,7 +112,8 @@ alter table lp.status_history drop constraint if exists status_history_entity_ty
 alter table lp.status_history add constraint status_history_entity_type_check
   check (entity_type in ('company', 'contact', 'task', 'campaign', 'campaign_lead', 'campaign_profile',
                          'actor', 'setting', 'suppression', 'job', 'pool', 'integration', 'event_type',
-                         'deal', 'segment', 'journey', 'score_model'));
+                         'deal', 'segment', 'journey', 'field_def', 'merge', 'retention_policy',
+                         'score_model', 'tag', 'trait', 'file', 'team_member'));
 
 -- The default Engagement model (used for every campaign): +10 replied, +5 clicked,
 -- +2 opened (expires in 30 days so a stale open stops counting), +15 meeting booked,

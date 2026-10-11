@@ -30,7 +30,8 @@ alter table lp.status_history drop constraint if exists status_history_entity_ty
 alter table lp.status_history add constraint status_history_entity_type_check
   check (entity_type in ('company', 'contact', 'task', 'campaign', 'campaign_lead', 'campaign_profile',
                          'actor', 'setting', 'suppression', 'job', 'pool', 'integration', 'event_type',
-                         'deal', 'segment', 'journey', 'score_model', 'tag'));
+                         'deal', 'segment', 'journey', 'field_def', 'merge', 'retention_policy',
+                         'score_model', 'tag', 'trait', 'file', 'team_member'));
 
 -- Seed lp.tag_defs with every tag already in use (in companies.tags) that has no
 -- row yet, uncoloured, so the tag manager's count-per-tag works immediately on
