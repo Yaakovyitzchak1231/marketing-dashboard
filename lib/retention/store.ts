@@ -48,15 +48,9 @@ export interface RetentionPolicyRow {
   updated_at: string
 }
 
-/** Never throws: previews never migrate, so 0027's table can still be missing there. */
 export async function listRetentionPolicies(q: Queryable): Promise<RetentionPolicyRow[]> {
-  try {
-    const { rows } = await q.query<RetentionPolicyRow>(`select * from lp.retention_policies order by event_category`)
-    return rows
-  } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) return []
-    throw e
-  }
+  const { rows } = await q.query<RetentionPolicyRow>(`select * from lp.retention_policies order by event_category`)
+  return rows
 }
 
 export async function setRetentionPolicy(db: Db, actor: string, input: { event_category: string; keep_days: number | null }): Promise<RetentionPolicyRow> {

@@ -33,7 +33,15 @@ export default async function SettingsPage() {
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations, retentionPolicies] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db), listRetentionPolicies(db)])
+  const [settingsRows, secretRows, actors, integrations] = await Promise.all([listSettings(db), listSecretStatuses(db), listActorKinds(db), listIntegrationSettings(db)])
+  let retentionPolicies: Awaited<ReturnType<typeof listRetentionPolicies>> = []
+  let retentionNeedsMigration = false
+  try {
+    retentionPolicies = await listRetentionPolicies(db)
+  } catch (e) {
+    if (/does not exist/i.test((e as Error).message ?? '')) retentionNeedsMigration = true
+    else throw e
+  }
   const settingsByKey = new Map(settingsRows.map((s) => [s.key, s]))
   const secretsByKey = new Map(secretRows.map((s) => [s.key, s]))
   const groups = settingsByGroup()
@@ -218,13 +226,19 @@ export default async function SettingsPage() {
       <section className="mb-6">
         <SectionHeader title="Data" meta="How long raw campaign events are kept, and removing a person's data on request" />
         <Card className="p-4">
-          {retentionPolicies.map((p) => (
-            <RetentionPolicyRow key={p.event_category} category={p.event_category} keepDays={p.keep_days} description={p.description} />
-          ))}
-          <RunSweepButton />
-          <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
-            Leave a field blank to keep that kind of event forever. To remove one person&apos;s info entirely, use “Forget this person” on their lead page.
-          </p>
+          {retentionNeedsMigration ? (
+            <p className="text-[13px] text-ink-muted">Needs migration 0027 — it runs on the next production deploy.</p>
+          ) : (
+            <>
+              {retentionPolicies.map((p) => (
+                <RetentionPolicyRow key={p.event_category} category={p.event_category} keepDays={p.keep_days} description={p.description} />
+              ))}
+              <RunSweepButton />
+              <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+                Leave a field blank to keep that kind of event forever. To remove one person&apos;s info entirely, use “Forget this person” on their lead page.
+              </p>
+            </>
+          )}
         </Card>
       </section>
 
