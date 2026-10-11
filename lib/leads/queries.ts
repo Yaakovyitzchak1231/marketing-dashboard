@@ -101,6 +101,12 @@ export function buildLeadWhere(f: LeadFilters, view: LeadView, p: Params): strin
     w.push(`exists (select 1 from lp.sources js where js.company_id = c.id and js.kind = 'engine' and js.source_ref = ${p.add(`find_leads:${f.job}`)})`)
   if (f.campaign === NONE) w.push(`c.id not in (select lc.co from ${LATEST_CAMPAIGN_REL} lc)`)
   else if (f.campaign) w.push(`c.id in (select lc.co from ${LATEST_CAMPAIGN_REL} lc where lc.campaign_name = ${p.add(f.campaign)})`)
+  // Advanced filters (plan 2.5): a saved segment (?seg=) or an ad-hoc definition
+  // (?f=) computed by the page into exact company ids (lib/leads/filters.ts
+  // decodeAdvancedFilter / app/leads/page.tsx). An empty array (the segment
+  // matched nothing) must show zero rows, not "no restriction" -- hence the
+  // explicit 'false' rather than skipping the clause.
+  if (f.companyIds) w.push(f.companyIds.length ? `c.id = any(${p.add(f.companyIds)}::bigint[])` : 'false')
   const vw = VIEW_WHERE[view]
   if (vw) w.push(vw)
   return w.length ? `where ${w.join('\n  and ')}` : ''

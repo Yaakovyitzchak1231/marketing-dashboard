@@ -18,6 +18,7 @@ import { leadReadiness, type LeadReadiness } from '@/lib/rules/readiness'
 import { TierPill } from '@/components/rules/bits'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
 import { LeadTimeline } from '@/components/leads/LeadTimeline'
+import { LeadListsCard } from '@/components/leads/LeadListsCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -229,6 +230,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <aside className="flex min-w-0 flex-col gap-6">
+          <LeadListsCard db={db} companyId={c.id} />
+
           <Section title="Comments" meta={`${d.comments.length}`}>
             <div className="px-4 py-3">
               {d.comments.length ? (
