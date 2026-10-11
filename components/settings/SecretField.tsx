@@ -74,7 +74,7 @@ export function SecretField({
         )}
       </div>
       {help ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{help}</p> : null}
-      {summary?.line ? <p className="mt-1 text-[11.5px] text-ink-faint">{summary.line}</p> : null}
+      {summary?.line ? <p className="mt-1 text-[11.5px] text-ink-faint" suppressHydrationWarning>{summary.line}</p> : null}
 
       {!settingsKeyReady ? (
         <p className="mt-2 text-[12px] text-warn">Add SETTINGS_KEY in Vercel to enable saving secrets here (see the deploy note). Until then this field is read-only.</p>

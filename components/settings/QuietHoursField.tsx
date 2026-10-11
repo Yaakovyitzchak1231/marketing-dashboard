@@ -4,11 +4,10 @@ import { useActionState, useState } from 'react'
 import type { FormResult } from '@/app/actions/settings'
 import { Pill } from '@/components/dashboard/primitives'
 import { inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { QUIET_END_KEY, QUIET_START_KEY } from '@/lib/settings/quiet-hours'
 
 type SaveAction = (prev: FormResult | null, f: FormData) => Promise<FormResult>
 
-export const QUIET_START_KEY = 'workspace.quiet_hours_start'
-export const QUIET_END_KEY = 'workspace.quiet_hours_end'
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 /**
