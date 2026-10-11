@@ -6,6 +6,7 @@ import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/pri
 import { place, shortDate } from '@/components/leads/pills'
 import { INPUT, LABEL, Notice, TierPill } from '@/components/campaigns/ui'
 import { CampaignTabs } from '@/components/campaign-steps/CampaignTabs'
+import { ProfileSummaryCard } from '@/components/campaign-profiles/ProfileSummaryCard'
 import { getCampaign, listStatuses } from '@/lib/campaigns/store'
 import { getCampaignLead, listCampaignLeads, previewPick } from '@/lib/campaigns/leads'
 import { pickableRuleSets, rulesWriter, tierCountsFor, TIER_WORDS, type Tier } from '@/lib/campaigns/evaluator'
@@ -108,6 +109,9 @@ export default async function CampaignPage({ params, searchParams }: { params: P
       <CampaignTabs campaignId={id} active="leads" />
       {err ? <Notice tone="bad">{err}</Notice> : null}
       {notices.map((n) => <Notice key={n} tone="good">{n}</Notice>)}
+      <div className="mb-5">
+        <ProfileSummaryCard db={db} campaignId={id} />
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_330px]">
         <div className="min-w-0 space-y-6">

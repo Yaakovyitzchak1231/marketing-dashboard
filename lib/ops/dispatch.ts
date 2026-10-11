@@ -48,6 +48,7 @@ import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
 import { SETTINGS_OPS } from '../settings/ops.ts'
 import { JOB_OPS } from '../jobs/ops.ts'
 import { LEAD_EVENT_OPS } from '../events/ops.ts'
+import { CAMPAIGN_PROFILE_OPS } from '../campaign-profiles/ops.ts'
 import { POOL_OPS } from '../pools/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
@@ -474,6 +475,8 @@ export const OPS: Record<string, Op> = {
   ...JOB_OPS,
   // Lead event stream (lib/events/ops.ts): track_event(s), recent_lead_events, event type registry.
   ...LEAD_EVENT_OPS,
+  // Campaign profiles (lib/campaign-profiles/ops.ts): per-campaign industry/ICP/keywords/competitors/feeds/directories/signals + AI-assisted setup.
+  ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
 }

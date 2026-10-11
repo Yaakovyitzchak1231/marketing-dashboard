@@ -1,10 +1,11 @@
 import Link from 'next/link'
 
-/** The tabs of one campaign: its leads and settings (/campaigns/:id) and its email steps (/campaigns/:id/steps). */
-export function CampaignTabs({ campaignId, active }: { campaignId: number; active: 'leads' | 'steps' }) {
+/** The tabs of one campaign: its leads and settings (/campaigns/:id), its email steps (/campaigns/:id/steps), and its profile (/campaigns/:id/profile). */
+export function CampaignTabs({ campaignId, active }: { campaignId: number; active: 'leads' | 'steps' | 'profile' }) {
   const tabs = [
     { key: 'leads', label: 'Leads & settings', href: `/campaigns/${campaignId}` },
     { key: 'steps', label: 'Steps', href: `/campaigns/${campaignId}/steps` },
+    { key: 'profile', label: 'Profile', href: `/campaigns/${campaignId}/profile` },
   ] as const
   return (
     <nav aria-label="Campaign sections" className="mb-5 flex gap-1 border-b border-line">
