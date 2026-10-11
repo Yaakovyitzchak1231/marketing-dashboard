@@ -15,19 +15,41 @@ afterEach(async () => { await db.close() })
 const cfg = { siteUrl: 'https://journal.example', user: 'test', appPassword: 'not-a-real-credential' }
 const input = { kind: 'set_meta' as const, field: 'title' as const, path: '/page/', value: 'New title', expect_before: null }
 function world() {
-  const page = { id: 9, type: 'page', slug: 'page', link: 'https://journal.example/page/', status: 'publish', title: { raw: 'Page' }, meta: Object.fromEntries(SNIPPET_KEYS.map((k) => [k, ''])) }
+  const page = { id: 9, type: 'page', slug: 'page', link: 'https://journal.example/page/', status: 'publish', title: { raw: 'Page' }, content: { raw: '' }, meta: Object.fromEntries(SNIPPET_KEYS.map((k) => [k, ''])) }
+  const pages = new Map([[page.id, page]])
+  let nextId = 100
   let writes = 0
   const fetcher: WpFetch = async (url, init) => {
     const method = init?.method ?? 'GET'
-    if (method !== 'GET') {
-      writes++
-      const body = init?.body ? JSON.parse(init.body) : {}
-      if (body.meta) Object.assign(page.meta, body.meta)
-      if (body.status) page.status = body.status
-      if (method === 'DELETE') page.status = 'trash'
+    const u = new URL(url)
+    const body = init?.body ? JSON.parse(init.body) : {}
+    const pathname = u.pathname.replace(/\/wp-json/, '')
+    if (method !== 'GET') writes++
+    // Creating a draft must echo title, slug, and content. Read-back compares those fields.
+    if (method === 'POST' && /\/wp\/v2\/pages$/.test(pathname)) {
+      const id = nextId++
+      const created = {
+        id, type: 'page', slug: body.slug, link: `https://journal.example/?page_id=${id}`, status: body.status ?? 'draft',
+        title: { raw: body.title ?? '' }, content: { raw: body.content ?? '' }, meta: { ...page.meta },
+      }
+      pages.set(id, created)
+      return { status: 201, text: async () => JSON.stringify(created) }
     }
-    const list = new URL(url).searchParams.has('slug')
-    return { status: 200, text: async () => JSON.stringify(list ? (new URL(url).searchParams.get('slug') === page.slug ? [page] : []) : page) }
+    const idMatch = pathname.match(/\/wp\/v2\/(?:pages|posts)\/(\d+)/)
+    const target = (idMatch ? pages.get(Number(idMatch[1])) : null) ?? page
+    if (method !== 'GET') {
+      if (body.meta) Object.assign(target.meta, body.meta)
+      if (body.status) target.status = body.status
+      if (body.title) target.title = { raw: body.title }
+      if (body.slug) target.slug = body.slug
+      if (body.content !== undefined) target.content = { raw: body.content }
+      if (method === 'DELETE') target.status = 'trash'
+    }
+    if (u.searchParams.has('slug')) {
+      const slug = u.searchParams.get('slug')
+      return { status: 200, text: async () => JSON.stringify([...pages.values()].filter((p) => p.slug === slug)) }
+    }
+    return { status: 200, text: async () => JSON.stringify(target) }
   }
   return { page, fetcher, writes: () => writes }
 }

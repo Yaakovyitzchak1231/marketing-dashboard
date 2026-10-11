@@ -129,8 +129,12 @@ async function recordIntent(db: Db, actor: string, c: Intent): Promise<ChangeRow
   }, actor)
 }
 
-function matches(p: WpPage, fields: { status?: string; meta?: Record<string, string> }): boolean {
-  return (!fields.status || p.status === fields.status) && Object.entries(fields.meta ?? {}).every(([k, v]) => (metaStr(p, k) ?? '') === v)
+function matches(p: WpPage, fields: { status?: string; title?: string; slug?: string; content?: string; meta?: Record<string, string> }): boolean {
+  if (fields.status && p.status !== fields.status) return false
+  if (fields.title !== undefined && p.title !== fields.title) return false
+  if (fields.slug !== undefined && p.slug !== fields.slug) return false
+  if (fields.content !== undefined && p.content !== fields.content) return false
+  return Object.entries(fields.meta ?? {}).every(([k, v]) => (metaStr(p, k) ?? '') === v)
 }
 
 export async function applyChange(db: Db, actor: string, siteId: number, taskId: number | null, input: ApplyInput, env: ApplyEnv = {}): Promise<ChangeRow> {

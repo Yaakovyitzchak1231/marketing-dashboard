@@ -66,14 +66,18 @@ export function runBlocker(ev, cfg) {
  * Break @mentions so text the relay posts back can never notify (and so wake) another agent.
  * Mentions of known humans (e.g. @owner) are kept, because escalating to a person is allowed.
  * Pass the human actor ids from `list_actors`; with none, every mention is defused (conservative).
+ *
+ * The id class matches parseMentions() in lib/ops/core.ts (`[a-z0-9][a-z0-9_.-]*`). It must, or an
+ * id like `@owner.bot` would slip through here and still be parsed as the separate agent `owner.bot`
+ * on the way in — restarting the very loop this is meant to stop.
  * @param {string} text
  * @param {Set<string> | string[] | null} [humans]
  * @returns {string}
  */
 export function defuseMentions(text, humans = null) {
   const keep = humans instanceof Set ? humans : new Set(Array.isArray(humans) ? humans.map((h) => String(h).toLowerCase()) : [])
-  return String(text).replace(/(^|[^\w@.])@([a-z0-9][a-z0-9_-]*)/gi, (_m, pre, id) =>
-    keep.has(String(id).toLowerCase()) ? `${pre}@${id}` : `${pre}@\u200b${id}`,
+  return String(text).replace(/(^|[^\w@.])@([a-z0-9][a-z0-9_.-]*)/gi, (_m, pre, id) =>
+    keep.has(String(id).toLowerCase().replace(/[.]+$/, '')) ? `${pre}@${id}` : `${pre}@\u200b${id}`,
   )
 }
 

@@ -270,6 +270,9 @@ describe('Hermes relay (ops/hermes-relay)', () => {
   it('defuseMentions keeps known humans and defuses everyone else (conservative by default)', () => {
     expect(defuseMentions('cc @owner and @tab', new Set(['owner']))).toBe('cc @owner and @\u200btab')
     expect(defuseMentions('cc @owner and @tab')).toBe('cc @\u200bowner and @\u200btab')
+    // Same id class as parseMentions: @owner.bot is one agent, not the human @owner.
+    expect(defuseMentions('ping @owner.bot', new Set(['owner']))).toBe('ping @\u200bowner.bot')
+    expect(defuseMentions('ping @owner.bot', new Set(['owner.bot']))).toBe('ping @owner.bot')
   })
 
   it('one run per notification even when it arrives on two channels', async () => {

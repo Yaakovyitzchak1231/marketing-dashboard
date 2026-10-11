@@ -25,7 +25,7 @@ afterAll(async () => {
 function fakeWp(opts: { snippet: boolean }) {
   const meta = (o: Record<string, string> = {}) =>
     opts.snippet ? { _yoast_wpseo_title: '', _yoast_wpseo_metadesc: '', _yoast_wpseo_canonical: '', '_yoast_wpseo_meta-robots-noindex': '', _tapdash_jsonld: '', ...o } : {}
-  const pages = new Map<number, { id: number; slug: string; link: string; status: string; title: { raw: string }; meta: Record<string, string> }>([
+  const pages = new Map<number, { id: number; slug: string; link: string; status: string; title: { raw: string }; content?: { raw: string }; meta: Record<string, string> }>([
     [10, { id: 10, slug: 'home', link: 'https://gempay.test/', status: 'publish', title: { raw: 'Home New' }, meta: meta() }],
     [11, { id: 11, slug: 'partners', link: 'https://gempay.test/partners/', status: 'publish', title: { raw: 'Partners' }, meta: meta({ _yoast_wpseo_canonical: 'https://www.gempay.test/partners/' }) }],
     [12, { id: 12, slug: 'test-inner-page-2', link: 'https://gempay.test/test-inner-page-2/', status: 'publish', title: { raw: 'Test' }, meta: meta() }],
@@ -46,7 +46,7 @@ function fakeWp(opts: { snippet: boolean }) {
     if (p === '/wp/v2/posts' && method === 'GET') return ok([])
     if (p === '/wp/v2/pages' && method === 'POST') {
       const id = nextId++
-      const np = { id, slug: body.slug, link: `https://gempay.test/?page_id=${id}`, status: 'draft', title: { raw: body.title }, meta: meta() }
+      const np = { id, slug: body.slug, link: `https://gempay.test/?page_id=${id}`, status: 'draft', title: { raw: body.title }, content: { raw: body.content ?? '' }, meta: meta() }
       pages.set(id, np)
       return ok(np, 201)
     }

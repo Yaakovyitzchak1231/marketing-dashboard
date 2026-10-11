@@ -270,6 +270,24 @@ describe('the comment layer', () => {
     expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
   })
 
+  it('a failed discard puts the draft back instead of hiding it', async () => {
+    vi.useFakeTimers()
+    const main = page()
+    const { a } = fakeActions({ discard: vi.fn(async () => ({ ok: false as const, error: 'still there' })) })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    await act(async () => { fireEvent.click(main.querySelector('h1')!) })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment' }), { target: { value: 'keep this' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete draft' })) })
+    expect(a.discard).toHaveBeenCalled()
+    expect(Object.values(loadLocal(localStorage)).map((d) => d.body)).toEqual(['keep this'])
+    expect(screen.getByRole('button', { name: /keep this/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    expect(screen.getByText('Could not discard that draft. It is still here.')).toBeInTheDocument()
+  })
+
   it('a pin closed before anything was written is thrown away', async () => {
     const main = page()
     const { a } = fakeActions()
