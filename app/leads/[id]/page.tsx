@@ -19,7 +19,7 @@ import { TierPill } from '@/components/rules/bits'
 import { OwnerResearchToggle } from '@/components/rules/OwnerResearchToggle'
 import { LeadTimeline } from '@/components/leads/LeadTimeline'
 import { CustomFieldsBlock } from '@/components/leads/CustomFieldsBlock'
-import { listFieldDefs } from '@/lib/fields/registry'
+import { listFieldDefsSafe } from '@/lib/fields/registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,13 +70,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
     )
   }
   if (!/^\d{1,15}$/.test(id)) notFound()
-  const [d, readiness, companyFields, contactFields] = await Promise.all([
+  const [d, readiness, companyFieldsRead, contactFieldsRead] = await Promise.all([
     getLeadDetail(db, Number(id)),
     leadReadiness(db, Number(id)),
-    listFieldDefs(db, { entity: 'company' }),
-    listFieldDefs(db, { entity: 'contact' }),
+    listFieldDefsSafe(db, { entity: 'company' }),
+    listFieldDefsSafe(db, { entity: 'contact' }),
   ])
   if (!d) notFound()
+  const companyFields = companyFieldsRead.defs
+  const contactFields = contactFieldsRead.defs
   const c = d.company
   const site = safeHref(c.website)
   return (

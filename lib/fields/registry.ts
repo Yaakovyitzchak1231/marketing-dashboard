@@ -84,6 +84,40 @@ export async function listFieldDefs(
   return rows.map(rowOut)
 }
 
+/**
+ * True when a DB error is Postgres saying a relation/column is missing (the
+ * shape of every "migration 0025 hasn't run yet" failure on a preview DB,
+ * which never migrates). Never matches a different failure (a bad query, a
+ * connection drop, a constraint violation) -- those must still throw.
+ */
+export function isMissingTableError(e: unknown): boolean {
+  return /does not exist/i.test((e as { message?: string })?.message ?? '')
+}
+
+export interface FieldDefsRead {
+  defs: FieldDefRow[]
+  needsMigration: boolean
+}
+
+/**
+ * Same as listFieldDefs, but honest when migration 0025 hasn't run on this
+ * database yet (every preview DB, and prod before its next deploy): returns
+ * an empty list with needsMigration: true instead of throwing, so a page that
+ * reads it can render normally with the custom-fields section hidden or
+ * noted, rather than crashing. Any other error still throws.
+ */
+export async function listFieldDefsSafe(
+  db: Queryable,
+  opts: { entity?: FieldEntity; include_archived?: boolean; campaign_id?: number | null } = {},
+): Promise<FieldDefsRead> {
+  try {
+    return { defs: await listFieldDefs(db, opts), needsMigration: false }
+  } catch (e) {
+    if (isMissingTableError(e)) return { defs: [], needsMigration: true }
+    throw e
+  }
+}
+
 export async function fieldDefByKey(db: Queryable, entity: FieldEntity, key: string): Promise<FieldDefRow | null> {
   const { rows } = await db.query<Record<string, unknown>>(
     'select * from lp.field_defs where entity = $1 and key = $2 and archived_at is null limit 1',

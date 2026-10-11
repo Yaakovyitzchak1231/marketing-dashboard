@@ -3,7 +3,7 @@ import { DbNotConnected, PageFrame, btnCls, inputCls, primaryBtnCls } from '@/co
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import { Notice } from '@/components/rules/bits'
 import { TD, TH } from '@/components/reports/bits'
-import { listFieldDefs } from '@/lib/fields/registry'
+import { listFieldDefsSafe } from '@/lib/fields/registry'
 import { FIELD_ENTITIES, FIELD_TYPES } from '@/lib/fields/registry'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { defineFieldAction, archiveFieldAction } from '@/app/actions/fields'
@@ -24,7 +24,8 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
       </PageFrame>
     )
   }
-  const [fields, campaigns] = await Promise.all([listFieldDefs(db, { include_archived: true }), listCampaigns(db)])
+  const [fieldsRead, campaigns] = await Promise.all([listFieldDefsSafe(db, { include_archived: true }), listCampaigns(db)])
+  const { defs: fields, needsMigration } = fieldsRead
   const live = fields.filter((f) => !f.archived_at)
   const campaignName = new Map(campaigns.map((c) => [c.id, c.name]))
 
@@ -35,6 +36,12 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
     >
       <Notice error={sp.error} saved={sp.saved} />
 
+      {needsMigration ? (
+        <Card className="p-4">
+          <p className="text-[13px] text-ink-muted">Needs migration 0025 — it runs on the next production deploy.</p>
+        </Card>
+      ) : (
+        <>
       <section className="mb-6">
         <SectionHeader title="Add a field" />
         <Card className="p-4">
@@ -123,6 +130,8 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
           )}
         </Card>
       </section>
+        </>
+      )}
     </PageFrame>
   )
 }
