@@ -95,9 +95,33 @@ export interface UpsertScoreModelInput {
 }
 
 /** Create or update a score model. Validates rules/thresholds shape before writing. */
+/** Run a rules.ts parser and report a malformed value as a ScoringError (a 400 with the
+ *  parser's own message), not a plain Error that the settings form and the ops API turn
+ *  into a 500 page (review fix, #74). */
+function asScoringError<T>(parse: () => T): T {
+  try {
+    return parse()
+  } catch (e) {
+    if (e instanceof ScoringError) throw e
+    throw new ScoringError(e instanceof Error ? e.message : String(e))
+  }
+}
+
+/** max_points: undefined = not given (keep what is stored), null = no cap, else a positive whole number. */
+function parseMaxPoints(v: number | null | undefined): number | null | undefined {
+  if (v === undefined || v === null) return v
+  if (!Number.isInteger(v) || v <= 0) throw new ScoringError('max_points must be a positive whole number, or empty for no cap')
+  return v
+}
+
+/** Create or update a score model. Validates rules/thresholds shape before writing.
+ *  On update, a field that is left out (undefined) keeps its stored value: an update
+ *  that only sends rules no longer wipes thresholds or the max_points cap. */
 export async function upsertScoreModel(db: Db, actor: string, input: UpsertScoreModelInput): Promise<ScoreModelRow> {
-  const rules = parseRules(input.rules)
-  const thresholds = parseThresholds(input.thresholds ?? [])
+  const rules = asScoringError(() => parseRules(input.rules))
+  const thresholdsGiven = input.thresholds !== undefined
+  const thresholds = asScoringError(() => parseThresholds(input.thresholds ?? []))
+  const maxPoints = parseMaxPoints(input.max_points)
   if (input.entity !== 'company' && input.entity !== 'contact') throw new ScoringError('entity must be "company" or "contact"')
   if (input.kind !== 'engagement' && input.kind !== 'fit') throw new ScoringError('kind must be "engagement" or "fit"')
   const name = input.name?.trim()
@@ -110,7 +134,14 @@ export async function upsertScoreModel(db: Db, actor: string, input: UpsertScore
       const { rows } = await q.query<ScoreModelRawRow>(
         `update lp.score_models set name=$1, rules=$2::jsonb, thresholds=$3::jsonb, max_points=$4, active=$5
          where id=$6 returning ${MODEL_COLS}`,
-        [name, JSON.stringify(rules), JSON.stringify(thresholds), input.max_points ?? null, input.active ?? existing.active, input.id],
+        [
+          name,
+          JSON.stringify(rules),
+          JSON.stringify(thresholdsGiven ? thresholds : existing.thresholds),
+          maxPoints === undefined ? existing.max_points : maxPoints,
+          input.active ?? existing.active,
+          input.id,
+        ],
       )
       await q.query(
         `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by, via, note)
@@ -124,7 +155,7 @@ export async function upsertScoreModel(db: Db, actor: string, input: UpsertScore
       const { rows } = await q.query<ScoreModelRawRow>(
         `insert into lp.score_models (name, entity, kind, campaign_id, rules, thresholds, max_points, active, created_by)
          values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9) returning ${MODEL_COLS}`,
-        [name, input.entity, input.kind, campaignId, JSON.stringify(rules), JSON.stringify(thresholds), input.max_points ?? null, input.active ?? true, actor],
+        [name, input.entity, input.kind, campaignId, JSON.stringify(rules), JSON.stringify(thresholds), maxPoints ?? null, input.active ?? true, actor],
       )
       await q.query(
         `insert into lp.status_history (entity_type, entity_id, field, old_value, new_value, changed_by, via, note)

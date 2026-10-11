@@ -57,7 +57,8 @@ export const SCORING_OPS: Record<string, Op> = {
         campaign_id: a.campaign_id == null ? null : posInt(a.campaign_id, 'campaign_id'),
         rules: a.rules,
         thresholds: a.thresholds,
-        max_points: a.max_points == null ? null : Number(a.max_points),
+        // Left out = keep the stored cap (an update that only sends rules used to wipe it).
+        max_points: a.max_points === undefined ? undefined : a.max_points === null || a.max_points === '' ? null : Number(a.max_points),
         active: a.active == null ? undefined : a.active === true || a.active === 'true',
       }),
     ),

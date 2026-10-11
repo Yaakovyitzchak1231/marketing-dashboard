@@ -140,8 +140,8 @@ export default async function LeadPage({
       {/* The profile header (plan 2.10): stage, score, owner, suppression, at a glance. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StagePill stage={c.stage} />
-        <Pill tone={score != null ? 'accent' : 'neutral'} title={!profile.score.available ? (profile.score.needs_migration ?? undefined) : undefined}>
-          {score != null ? `Score ${score}` : 'Not scored yet'}
+        <Pill tone={score != null ? 'accent' : 'neutral'} title={!profile.score.available ? (profile.score.needs_migration ?? undefined) : (profile.score.model?.name ?? undefined)}>
+          {score != null ? `${profile.score.model?.kind === 'fit' ? 'Fit' : 'Engagement'} score ${score}` : 'Not scored yet'}
         </Pill>
         <Pill tone="neutral">{c.owner_name ? `Owner: ${c.owner_name}` : 'No owner on file'}</Pill>
         {profile.suppression.checked && profile.suppression.no_email ? (

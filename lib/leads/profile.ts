@@ -65,7 +65,10 @@ export interface FilesSection {
 export interface ScoreSection {
   available: boolean
   needs_migration: string | null
+  /** The company-level lp.scores row of the header's model (see loadScore), or null when not scored. */
   row: Record<string, unknown> | null
+  /** Which model `row` is from, so the header can say what the number means. */
+  model?: { id: number; name: string; kind: 'engagement' | 'fit'; campaign_id: number | null } | null
 }
 
 export interface EngagementCounts { opens: number; replies: number; steps: number }
@@ -223,11 +226,25 @@ async function loadCampaigns(q: Queryable, companyId: number): Promise<Campaigns
 
 async function loadScore(q: Queryable, companyId: number): Promise<ScoreSection> {
   try {
-    const { rows } = await q.query<Record<string, unknown>>(
-      `select * from lp.scores where company_id = $1 order by updated_at desc nulls last limit 1`,
-      [companyId],
+    // One fixed model, not "whichever lp.scores row changed last" (review fix, #79: that
+    // mixed engagement, fit and per-campaign models, and contact rows that also carry a
+    // company_id, so the header number changed meaning between visits). The header shows
+    // the workspace-default company Engagement model; only if that model is gone or
+    // inactive does it fall back, in a fixed order, to another active company model.
+    // A lead that model never scored reads "Not scored yet" (NULL), never a made-up 0.
+    const { rows: models } = await q.query<{ id: number; name: string; kind: 'engagement' | 'fit'; campaign_id: number | null }>(
+      `select id, name, kind, campaign_id from lp.score_models
+        where active and entity = 'company'
+        order by (kind = 'engagement') desc, (campaign_id is null) desc, id
+        limit 1`,
     )
-    return { available: true, needs_migration: null, row: rows[0] ?? null }
+    const model = models[0] ?? null
+    if (!model) return { available: true, needs_migration: null, row: null, model: null }
+    const { rows } = await q.query<Record<string, unknown>>(
+      `select * from lp.scores where model_id = $1 and company_id = $2 and contact_id is null limit 1`,
+      [model.id, companyId],
+    )
+    return { available: true, needs_migration: null, row: rows[0] ?? null, model: { ...model, id: Number(model.id) } }
   } catch (e) {
     if (isMissingTable(e)) return { available: false, needs_migration: 'Needs lead scoring (plan 2.8) — not merged on this deploy yet.', row: null }
     throw e
