@@ -47,6 +47,7 @@ import { EDIT_OPS } from '../edit/ops.ts'
 import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
 import { SETTINGS_OPS } from '../settings/ops.ts'
 import { JOB_OPS } from '../jobs/ops.ts'
+import { LEAD_EVENT_OPS } from '../events/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -470,6 +471,8 @@ export const OPS: Record<string, Op> = {
   // Tools hub (lib/integrations/ops.ts): the tools Yaakov runs, their health and numbers.
   ...INTEGRATION_OPS,
   ...JOB_OPS,
+  // Lead event stream (lib/events/ops.ts): track_event(s), recent_lead_events, event type registry.
+  ...LEAD_EVENT_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
