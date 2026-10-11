@@ -24,12 +24,16 @@ import { OpsError } from './core'
 
 export type OpRole = 'viewer' | 'editor' | 'owner'
 
-/** Read-only ops a Viewer's key may run. Nothing here changes data. */
+/**
+ * Ops a Viewer's key may run. Nothing here changes shared data: the only writes
+ * are feed_ack / mark_read, which mark the caller's OWN deliveries/notifications
+ * as seen (without them a Viewer's feed items come back every 2 minutes).
+ */
 export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'whoami', 'list_actors',
   'list_tasks', 'get_task', 'list_locks', 'recent_events',
   'get_approval', 'get_instantly_action',
-  'memory_get', 'memory_search', 'inbox', 'feed',
+  'memory_get', 'memory_search', 'inbox', 'feed', 'feed_ack', 'mark_read',
   'list_rule_sets', 'get_rule_set', 'lead_readiness',
   'page_comments', 'page_comment_get',
   'list_campaigns', 'get_campaign', 'list_campaign_statuses', 'list_campaign_leads', 'get_campaign_lead',
@@ -104,7 +108,7 @@ export async function checkOpRole(q: Queryable, actor: string, op: string): Prom
 /**
  * True when `actor` is an Owner: the built-in 'owner' actor, or any active human
  * whose role is 'owner' (a second human Owner). Replaces literal actor === 'owner'
- * checks in the owner-only ops (merge, forget, retention).
+ * checks in the owner-only ops (merge, forget, retention, integrations, jobs, Instantly reconcile).
  */
 export async function isOwnerActor(q: Queryable, actor: string): Promise<boolean> {
   if (actor === 'owner') return true

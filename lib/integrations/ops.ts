@@ -9,6 +9,7 @@
  */
 import type { Db } from '../db/types'
 import { OpsError } from '../ops/core'
+import { isOwnerActor } from '../ops/actor-role'
 import {
   IntegrationError,
   addSnapshots,
@@ -55,14 +56,14 @@ function numOrNull(v: unknown): number | null {
   return n
 }
 
-/** Only the owner (a person) may add or edit tool rows -- which tools exist is a human decision. */
-function requireOwner(actor: string): void {
-  if (actor !== 'owner') throw new OpsError('only the owner can add or edit tools', 403)
+/** Only an Owner (a person; any human Owner, see isOwnerActor) may add or edit tool rows -- which tools exist is a human decision. */
+async function requireOwner(db: Db, actor: string): Promise<void> {
+  if (!(await isOwnerActor(db, actor))) throw new OpsError('only an owner can add or edit tools', 403)
 }
 
-/** Health reports and snapshots come from the OVH runner's own key ('system') or the owner -- never another agent. */
-function requireRunnerOrOwner(actor: string): void {
-  if (actor !== 'system' && actor !== 'owner') throw new OpsError("only the runner ('system') or the owner can report tool health or numbers", 403)
+/** Health reports and snapshots come from the OVH runner's own key ('system') or an Owner -- never another agent. */
+async function requireRunnerOrOwner(db: Db, actor: string): Promise<void> {
+  if (actor !== 'system' && !(await isOwnerActor(db, actor))) throw new OpsError("only the runner ('system') or an owner can report tool health or numbers", 403)
 }
 
 function patchFromArgs(a: Args): IntegrationPatch {
@@ -112,21 +113,21 @@ export const INTEGRATION_OPS: Record<string, Op> = {
   put_integration: {
     args: '{id, name, kind, description?, url?, api_url?, reachable_from? (public|tailnet|localhost), settings_prefix?, visibility? (owner|team|hidden), sort?, active?}  -- owner only',
     run: wrap(async (db, actor, a) => {
-      requireOwner(actor)
+      await requireOwner(db, actor)
       return db.tx((q) => upsertIntegration(q, actor, str(a.id, 'id'), patchFromArgs(a), { via: 'ops_api' }), actor)
     }),
   },
   report_integration_health: {
     args: '{id, status (ok|degraded|down|unknown), detail?}  -- the runner (system) or owner',
     run: wrap(async (db, actor, a) => {
-      requireRunnerOrOwner(actor)
+      await requireRunnerOrOwner(db, actor)
       return reportHealth(db, str(a.id, 'id'), { status: str(a.status, 'status') as 'ok' | 'degraded' | 'down' | 'unknown', detail: strOrNull(a.detail) })
     }),
   },
   put_integration_snapshots: {
     args: '{id, snapshots: [{metric, value, dims?, data?, campaign_id?}], job_run_id?}  -- batch; the runner (system) or owner',
     run: wrap(async (db, actor, a) => {
-      requireRunnerOrOwner(actor)
+      await requireRunnerOrOwner(db, actor)
       return addSnapshots(db, str(a.id, 'id'), parseSnapshots(a.snapshots), {
         jobRunId: a.job_run_id == null ? null : Number(a.job_run_id),
         source: actor === 'system' ? 'runner' : 'owner',

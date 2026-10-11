@@ -71,7 +71,7 @@ import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
 import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
 import { MERGE_OPS } from '../merge/ops.ts'
 import { RETENTION_OPS } from '../retention/ops.ts'
-import { checkOpRole } from './actor-role.ts'
+import { checkOpRole, isOwnerActor } from './actor-role.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -357,8 +357,16 @@ export const OPS: Record<string, Op> = {
     },
   },
   memory_get: {
-    args: "{key, scope? (default: your own; 'shared' for team notes)}",
-    run: (db, actor, a) => memoryGet(db, str(a.scope) || actor, String(a.key ?? '')),
+    args: "{key, scope? (default: your own; 'shared' for team notes; another actor's scope: Owner only)}",
+    run: async (db, actor, a) => {
+      // Your own notes or 'shared' only; reading another agent's private memory needs an Owner
+      // (Viktor review of #88: any key, incl. a Viewer's, could read any scope).
+      const scope = (str(a.scope) || actor).trim()
+      if (scope !== actor && scope !== 'shared' && !(await isOwnerActor(db, actor))) {
+        throw new OpsError(`${actor} may read only its own memory or 'shared'`, 403)
+      }
+      return memoryGet(db, scope, String(a.key ?? ''))
+    },
   },
   memory_put: {
     args: "{key, notes, source?, scope? (your own id or 'shared')}",
