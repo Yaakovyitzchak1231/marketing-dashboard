@@ -252,7 +252,7 @@ describe('Ops: track_event, track_events, recent_lead_events, list_event_types, 
     const { rows: camp } = await db.query<{ id: number }>(`insert into lp.campaigns (name, pool) values ('Timeline test', 'jeweler') returning id`)
     await runOp(db, 'owner', 'track_event', { type: 'custom', company_id: co, campaign_id: camp[0].id, occurred_at: '2026-10-11T10:00:00Z' })
     await runOp(db, 'owner', 'track_event', { type: 'custom', company_id: co, campaign_id: camp[0].id, occurred_at: '2026-10-11T11:00:00Z' })
-    const rows = (await runOp(db, 'owner', 'recent_lead_events', { company_id: co, limit: 2 })) as { occurred_at: string; campaign_name: string }[]
+    const rows = (await runOp(db, 'owner', 'recent_lead_events', { company_id: co, campaign_id: camp[0].id, limit: 2 })) as { occurred_at: string; campaign_name: string }[]
     expect(rows.length).toBe(2)
     expect(new Date(rows[0].occurred_at).getTime()).toBeGreaterThanOrEqual(new Date(rows[1].occurred_at).getTime())
     expect(rows[0].campaign_name).toBe('Timeline test')
