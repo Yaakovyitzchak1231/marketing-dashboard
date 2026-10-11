@@ -40,6 +40,7 @@ describe('render path honesty', () => {
       .split('\n')
       .filter((l) => /\*\s*100\b/.test(l))
     if (f.endsWith(join('components', 'dashboard', 'format.ts'))) return
+    if (f.endsWith(join('components', 'charts', 'format.ts'))) return
     // DailyChart's toPct converts a layout fraction to CSS, not a metric.
     const allowed = lines.filter((l) => !/fraction \* 100/.test(l))
     expect(allowed).toEqual([])

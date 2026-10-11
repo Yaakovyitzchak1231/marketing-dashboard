@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { COPY } from '@/lib/copy'
-import { RANGE_LABEL, SUPPORTED_RANGE_KEYS, Range } from '@/lib/range'
+import { RANGE_LABEL, SUPPORTED_RANGE_KEYS } from '@/lib/range'
 
 /**
  * The reporting-window switcher.

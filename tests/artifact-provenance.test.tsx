@@ -44,9 +44,9 @@ function TestSuite({ ownerEmail }: { ownerEmail?: string | null }) {
 
 // The shared approvals action block is rendered by every suite; the fail-closed
 // allow-list decides whether the buttons are disabled.
+// Kept for structural parity; the JSX above is identical for the allowed and
+// denied viewer — the difference is only the email.
 function withLoad<T>(jsx: T): T {
-  // Kept as a value so the JSX above is structurally identical for the
-  // allowed and the denied viewer; the difference is only the email.
   return jsx
 }
 

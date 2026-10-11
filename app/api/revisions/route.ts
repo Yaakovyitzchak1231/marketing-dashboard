@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestClient } from '@/lib/request-client'
-import { auditStamp, changeMessageFrom, recordRevision, readRevisionNumber, sessionEmail, type ArtifactType } from '@/lib/revisions'
+import { auditStamp, recordRevision, readRevisionNumber, sessionEmail, type ArtifactType } from '@/lib/revisions'
 import { EDITABLE_ARTIFACTS } from '@/lib/revisions'
 
 const ARTIFACT_TYPES = EDITABLE_ARTIFACTS
