@@ -265,3 +265,17 @@ export function clientFromEnv(env: Record<string, string | undefined> = process.
   if (!key) return null
   return new InstantlyClient({ apiKey: key })
 }
+
+/**
+ * The settings-aware client: a key saved on /settings wins, falling back to
+ * INSTANTLY_API_KEY when nothing is saved — so an env-only deployment keeps
+ * working exactly as it does today, and saving a key on /settings takes effect
+ * immediately with no redeploy (lib/settings/store.ts's resolveConfig reaches
+ * the database itself, the same way clientFromEnv reaches process.env itself).
+ */
+export async function clientFromConfig(env: Record<string, string | undefined> = process.env): Promise<InstantlyClient | null> {
+  const { resolveConfig } = await import('../settings/store.ts')
+  const { value } = await resolveConfig('instantly.api_key', env)
+  if (value) return new InstantlyClient({ apiKey: value })
+  return null
+}

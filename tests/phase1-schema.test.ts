@@ -227,14 +227,22 @@ describe('phase 1 foundation schema', () => {
   })
 
   describe('0021 integrations (tools hub)', () => {
+    it('migration 0022 seeds the tools hub rows (owned by the tools-hub PR); Postiz was not installed', async () => {
+      const { rows } = await db.query<{ id: string; reachable_from: string }>(`select id, reachable_from from lp.integrations order by sort`)
+      expect(rows.map((r) => r.id)).toEqual(['warmbly', 'listmonk', 'miniflux', 'changedetection', 'umami', 'build_tracker', 'build_plan'])
+      expect(rows.map((r) => r.id)).not.toContain('postiz')
+    })
+
     it('stores tools as rows and snapshots with honest nulls, per campaign', async () => {
       const c = await campaign('Any campaign')
+      // A fresh id (not one of the seeded tools) keeps this test about the table's
+      // own behavior, independent of migration 0022's seed rows.
       await db.query(
-        `insert into lp.integrations (id, name, kind, url, api_url, reachable_from, settings_prefix) values ('listmonk', 'Listmonk', 'listmonk', 'http://100.64.0.1:18510', 'http://127.0.0.1:18510', 'tailnet', 'integrations.listmonk')`,
+        `insert into lp.integrations (id, name, kind, url, api_url, reachable_from, settings_prefix) values ('schema-test-tool', 'Schema test tool', 'listmonk', 'http://100.64.0.1:18510', 'http://127.0.0.1:18510', 'tailnet', 'integrations.schema_test_tool')`,
       )
-      await db.query(`insert into lp.integration_snapshots (integration_id, campaign_id, metric, value, dims) values ('listmonk', $1, 'listmonk.subscribers', 42, '{"list":"Q4"}')`, [c])
-      await db.query(`insert into lp.integration_snapshots (integration_id, metric, value) values ('listmonk', 'listmonk.bounces', null)`)
-      const { rows } = await db.query<{ metric: string; value: number | null }>(`select metric, value from lp.integration_snapshots order by id`)
+      await db.query(`insert into lp.integration_snapshots (integration_id, campaign_id, metric, value, dims) values ('schema-test-tool', $1, 'listmonk.subscribers', 42, '{"list":"Q4"}')`, [c])
+      await db.query(`insert into lp.integration_snapshots (integration_id, metric, value) values ('schema-test-tool', 'listmonk.bounces', null)`)
+      const { rows } = await db.query<{ metric: string; value: number | null }>(`select metric, value from lp.integration_snapshots where integration_id = 'schema-test-tool' order by id`)
       expect(rows).toEqual([
         { metric: 'listmonk.subscribers', value: 42 },
         { metric: 'listmonk.bounces', value: null },

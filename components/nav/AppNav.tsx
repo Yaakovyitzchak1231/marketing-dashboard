@@ -15,12 +15,16 @@ export const NAV_ITEMS = [
   { href: '/verify', label: 'Verification' },
   { href: '/campaigns', label: 'Campaigns' },
   { href: '/rules', label: 'Lead rules' },
+  { href: '/suppressions', label: 'Suppressions' },
   { href: '/replies', label: 'Replies' },
   { href: '/seo', label: 'SEO / AI' },
   { href: '/team', label: 'Team' },
   { href: '/agents', label: 'Agents' },
+  { href: '/settings', label: 'Settings' },
+  { href: '/tools', label: 'Tools' },
   { href: '/activity', label: 'Activity' },
   { href: '/reports', label: 'Reports' },
+  { href: '/jobs', label: 'Jobs' },
 ] as const
 
 export function isActive(pathname: string, href: string): boolean {

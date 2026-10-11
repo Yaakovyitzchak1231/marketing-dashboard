@@ -43,6 +43,12 @@ const lookups = () => import('../instantly/lookup.ts')
 import { applyResearchResult } from '../research/apply.ts'
 import type { ResearchResult } from '../research/types.ts'
 import { CAMPAIGN_OPS, campaignRoute } from '../campaigns/ops.ts'
+import { EDIT_OPS } from '../edit/ops.ts'
+import { SUPPRESSION_OPS } from '../suppressions/ops.ts'
+import { SETTINGS_OPS } from '../settings/ops.ts'
+import { JOB_OPS } from '../jobs/ops.ts'
+import { LEAD_EVENT_OPS } from '../events/ops.ts'
+import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, ruleSetForCampaign } from '../rules/store.ts'
 import { POOL_OPS } from '../pools/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
@@ -52,6 +58,7 @@ import { STANDING_RULES } from '../rules/standing.ts'
 import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
+import { INTEGRATION_OPS } from '../integrations/ops.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -458,6 +465,16 @@ export const OPS: Record<string, Op> = {
   },
   // Campaigns workspace (lib/campaigns/ops.ts): create/edit/duplicate/archive campaigns, build lead lists.
   ...CAMPAIGN_OPS,
+  // Universal inline-edit + audit log (lib/edit/ops.ts): update_entity, entity_history, recent_changes.
+  ...EDIT_OPS,
+  // Suppression list (lib/suppressions/ops.ts): suppress/unsuppress/is_suppressed, CSV import/export.
+  ...SUPPRESSION_OPS,
+  ...SETTINGS_OPS,
+  // Tools hub (lib/integrations/ops.ts): the tools Yaakov runs, their health and numbers.
+  ...INTEGRATION_OPS,
+  ...JOB_OPS,
+  // Lead event stream (lib/events/ops.ts): track_event(s), recent_lead_events, event type registry.
+  ...LEAD_EVENT_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
 }
