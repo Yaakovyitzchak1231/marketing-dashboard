@@ -121,19 +121,24 @@ create trigger status_history_lead_event after insert on lp.status_history
   for each row execute function lp.lead_event_from_history();
 
 -- Backfill: every stored Instantly touch becomes a lead event (dedupe on the touch
--- id, so re-running this file adds nothing). Event types Instantly sent that are
--- not in the registry are registered as 'email' events first, so nothing is lost.
-insert into lp.event_types (key, label, category, source)
-select distinct t.event_type, initcap(replace(t.event_type, '_', ' ')), 'email', 'instantly'
-  from lp.campaign_touches t
- where t.event_type ~ '^[a-z][a-z0-9_.]{0,63}$'
-on conflict (key) do nothing;
-
+-- id, so re-running this file adds nothing). Instantly's own names are mapped to the
+-- registry keys the live webhook uses (lib/webhooks/instantly.ts
+-- INSTANTLY_EVENT_TYPE_MAP); anything else lands as 'custom' with props.instantly_type,
+-- exactly like a live delivery, so backfilled and live events read the same.
 insert into lp.lead_events (occurred_at, type, company_id, contact_id, email_norm, instantly_campaign_id,
                             source, props, dedupe_key)
-select t.occurred_at, t.event_type, t.company_id, t.contact_id, lower(trim(t.email)), t.campaign_id,
-       'backfill', jsonb_build_object('touch_source', t.source, 'campaign_name', t.campaign_name),
+select t.occurred_at, m.key, t.company_id, t.contact_id, lower(trim(t.email)), t.campaign_id,
+       'backfill',
+       jsonb_build_object('touch_source', t.source, 'campaign_name', t.campaign_name)
+         || case when m.key = 'custom' then jsonb_build_object('instantly_type', t.event_type) else '{}'::jsonb end,
        'touch:' || t.id
   from lp.campaign_touches t
- where t.event_type ~ '^[a-z][a-z0-9_.]{0,63}$'
+  cross join lateral (
+    select case t.event_type
+             when 'link_clicked'           then 'email_link_clicked'
+             when 'lead_meeting_booked'    then 'meeting_booked'
+             when 'lead_meeting_completed' then 'meeting_booked'
+             else coalesce((select k.key from lp.event_types k where k.key = t.event_type and k.source = 'instantly'), 'custom')
+           end as key
+  ) m
 on conflict do nothing;

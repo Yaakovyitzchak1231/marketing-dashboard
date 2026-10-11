@@ -8,7 +8,7 @@ import { suspiciousSitemapUrls } from './parse'
  *   add_schema   add JSON-LD to a page (FAQ / Service+Offer) — preview, Apply, Undo
  *   hide_pages   noindex (Yoast) or move to draft, per URL — Apply, Undo
  *   create_draft create a WordPress DRAFT page from an outline — Apply (draft only), Undo (trash)
- *   copy_file    a file to paste somewhere we can't write (llms.txt on Lovable)
+ *   copy_file    reviewed markup for sites we cannot write to
  *   manual       steps only he can do (SiteGround, Elementor, keys) + "Done, re-check"
  */
 
@@ -54,7 +54,6 @@ const PRIORITY: Record<string, number> = {
   h1: 45,
   schema_offer: 44,
   schema_faq: 42,
-  llms_txt: 40,
   schema_org: 38,
   pagespeed: 20,
 }
@@ -137,7 +136,7 @@ export function buildFixes(site: FixSite, checks: Check[], pages: Record<string,
   const out: Fix[] = []
   const add = (f: Omit<Fix, 'priority'>) => out.push({ ...f, priority: PRIORITY[f.check_id] ?? 10 })
   for (const c of checks) {
-    if (c.status === 'pass') continue
+    if (c.status === 'pass' || c.status === 'info' || c.id === 'llms_txt' || c.id === 'crawler_policy') continue
     if (c.status === 'unknown' && c.id !== 'pagespeed' && c.id !== 'robots') continue // can't fix what we couldn't read; the bot wall fix covers it
     const page = c.page ?? null
     const base = { check_id: c.id, page, severity: c.status as Fix['severity'], detail: c.detail, fix: c.fix ?? null, key: `${c.id}:${page ?? ''}` }
@@ -146,24 +145,24 @@ export function buildFixes(site: FixSite, checks: Check[], pages: Record<string,
       case 'bot_wall':
         add({
           ...base,
-          title: 'Let AI crawlers past the bot wall',
+          title: 'Verify search-crawler access past the bot challenge',
           action: {
             type: 'manual',
             steps:
               (site.host ?? '').toLowerCase() === 'siteground'
                 ? [
                     'Log in to SiteGround > Websites > Site Tools for this site.',
-                    'Statistics > Access Log (or Traffic): search for GPTBot, ClaudeBot, PerplexityBot, OAI-SearchBot, ChatGPT-User.',
-                    'If their requests show status 202 (or nothing at all), they are being walled.',
-                    'Open a SiteGround support chat: "Please exempt verified AI crawlers (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-User, PerplexityBot) and search bots from the anti-bot captcha on this site." It is free.',
+                    'Inspect access/security logs for verified Googlebot, Bingbot, PerplexityBot and OAI-SearchBot traffic.',
+                    'Confirm actual challenge responses. Missing log entries do not prove blocking; a claimed user-agent string alone does not verify a bot.',
+                    'Ask support for narrow exceptions for verified search crawlers where needed. Preserve private paths, training opt-outs and security protections.',
                     'Come back and press "Done, re-check".',
                   ]
-                : ['Ask the host to exempt verified search and AI crawlers from the bot challenge.', 'Press "Done, re-check".'],
+                : ['Ask the host to verify search-crawler access and apply narrow exceptions only where challenges are confirmed.', 'Press "Done, re-check".'],
           },
         })
         break
       case 'robots':
-        add({ ...base, title: 'Allow AI crawlers in robots.txt', action: { type: 'manual', steps: [c.fix ?? 'Edit robots.txt to allow the blocked bots.', 'Press "Done, re-check".'] } })
+        add({ ...base, title: 'Review blocked search crawlers and paths', action: { type: 'manual', steps: [c.fix ?? 'Edit robots.txt to allow the blocked bots.', 'Press "Done, re-check".'] } })
         break
       case 'sitemap': {
         const sus = suspiciousSitemapUrls(sitemapUrls ?? [])
@@ -208,15 +207,6 @@ export function buildFixes(site: FixSite, checks: Check[], pages: Record<string,
       case 'schema_offer':
         add({ ...base, title: `Add price/offer schema to ${page}`, action: isWp(site) ? { type: 'add_schema', schema: 'offer', proposed: offerTemplate(site, p) } : { type: 'copy_file', filename: 'offer-schema.json', content: offerTemplate(site, p), where: `Add as <script type="application/ld+json"> in the <head> of ${page}` } })
         break
-      case 'llms_txt':
-        add({
-          ...base,
-          title: 'Publish an llms.txt',
-          action: isWp(site)
-            ? { type: 'manual', steps: ['WordPress > Yoast SEO > Settings > Site features > llms.txt: on.', 'Choose "manual page selection" and pick the offer, pricing, comparison and FAQ pages; give the home page a real title.', 'Save, then press "Done, re-check".'] }
-            : { type: 'copy_file', filename: 'llms.txt', content: llmsTxtTemplate(site, pages), where: (site.platform ?? '') === 'lovable' ? 'In Lovable, ask: "add this file as public/llms.txt" and publish.' : 'Upload to the site root as /llms.txt.' },
-        })
-        break
       case 'schema_org':
         add({ ...base, title: 'Add Organization schema', action: { type: 'manual', steps: [c.fix ?? '', 'Press "Done, re-check".'] } })
         break
@@ -242,7 +232,7 @@ export function buildFixes(site: FixSite, checks: Check[], pages: Record<string,
 
 /** Draft-page ideas for content gaps (comparison pages, buyer guides). */
 export function contentDrafts(site: FixSite, sitemapUrls: string[] | null, competitorsNamed: { name: string; count: number }[]): Fix[] {
-  if (!isWp(site)) return []
+  if (!isWp(site) || !sitemapUrls?.length) return []
   const have = new Set((sitemapUrls ?? []).map((u) => {
     try {
       return new URL(u).pathname.toLowerCase()
@@ -259,7 +249,7 @@ export function contentDrafts(site: FixSite, sitemapUrls: string[] | null, compe
       check_id: 'content_guide',
       page: null,
       severity: 'warn',
-      detail: 'AI answers to "best processor for jewelry stores" cite guides and comparison pages. A guide page on your own site gives them something of yours to quote.',
+      detail: 'No guide-like path was found in the sampled sitemap. This is an editorial idea, not proof a guide is missing or that it would earn citations. Check existing content before drafting.',
       fix: 'Creates a DRAFT page in WordPress with an outline to fill in. Nothing goes live until you publish it.',
       priority: 30,
       action: {
@@ -287,7 +277,7 @@ export function contentDrafts(site: FixSite, sitemapUrls: string[] | null, compe
       check_id: 'content_compare',
       page: null,
       severity: 'warn',
-      detail: `${c.name} came up in ${c.count} AI answer${c.count === 1 ? '' : 's'} and there's no comparison page for it on the site.`,
+      detail: `${c.name} was recorded in ${c.count} sampled AI answer${c.count === 1 ? '' : 's'}. No matching comparison path was found in the sampled sitemap; verify existing pages before drafting. This does not predict citations.`,
       fix: 'Creates a DRAFT comparison page in WordPress. Nothing goes live until you publish it.',
       priority: 28,
       action: {
