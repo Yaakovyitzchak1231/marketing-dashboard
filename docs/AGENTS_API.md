@@ -187,3 +187,80 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+
+## 8. Segments: the condition engine (plan 2.1)
+
+`lp.segments` (migration 0024) is one definition compiled to one parameterized SQL
+query (`lib/segments/compile.ts`) -- no segment's match is ever string-built from a
+value, only from the field registry's own identifiers (`lib/segments/fields.ts`), so
+a value with SQL-looking characters in it just becomes a literal value, never a
+clause. A segment is `dynamic` (membership = whatever the definition matches, right
+now) or `static` (a hand-picked list in `lp.segment_members`, plan 2.4's backend).
+`campaign_id` null means "all campaigns"; set, the segment is scoped to one.
+
+**Definition shape** (`lib/segments/definition.ts`, `validateDefinition` rejects
+anything else with a plain error):
+```
+{
+  "entity": "company" | "contact",
+  "include": [ { "conditions": [ <condition>, ... ] }, ... ],   // OR across groups, AND within a group
+  "exclude": [ { "conditions": [ <condition>, ... ] }, ... ]    // a record matching ANY exclude group is dropped
+}
+```
+`include: []` means "match everyone" (useful for an exclude-only segment, e.g.
+"everyone except suppressed"). A condition is one of:
+
+- `{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]}` -- a field
+  from the registry (`company.*` / `contact.*`; `list_fields` below) with an operator
+  for its type: text/array get `is, is_not, contains, not_contains, in, not_in, exists,
+  not_exists`; number adds `gt, gte, lt, lte, between`; date adds `before, after,
+  within_last_days, more_than_days_ago, between`; boolean is `is, is_not, exists,
+  not_exists`.
+- `{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}`
+  -- a count of `lp.lead_events` of one type in a window, compared with `eq/gt/gte/lt/lte`.
+  `"prop":{"path":"props.url","op":"contains","value":"/pricing"}` filters on one
+  top-level key of the event's `props` jsonb.
+- `{"kind":"relative_date","field":"contact.verified_at","op":"after","days":7,"compare_to":"company.created_at"}`
+  -- one date field vs another date field (or `"now"`, the default), offset by N days.
+- `{"kind":"in_segment","segment_id":12}` / `{"kind":"not_in_segment","segment_id":12}`
+  -- membership in another segment of the SAME entity. Nesting is checked for cycles
+  and capped at 3 levels deep.
+- `{"kind":"campaign_membership","mode":"in_campaign","campaign_id":5}` (or
+  `"any_active_campaign"` / `"never_contacted"`, no `campaign_id` needed).
+- `{"kind":"quality","op":"suppressed" | "not_suppressed" | "verified_sendable" | "not_verified_sendable"}`
+  -- "sendable" = verified email, not suppressed, not unsubscribed, not do-not-contact.
+
+Geography is `company.state` / `company.city` (plain field conditions) only --
+`lp.companies` has no lat/lng yet, so radius search is deferred until it does.
+Custom fields (1.7), scores (2.8) and computed traits (2.7) plug into the SAME
+compiler with no changes there: call `registerField` (`lib/segments/fields.ts`) with
+a `sql` expression reading the new column (e.g. `"c.custom ->> 'ring_brand'"`) and the
+key shows up in `list_fields` and works in every condition kind above.
+
+**Three examples**, with their readback (`lib/segments/readback.ts`):
+1. `{"entity":"company","include":[{"conditions":[{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]},{"kind":"quality","op":"verified_sendable"},{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}]}],"exclude":[{"conditions":[{"kind":"campaign_membership","mode":"any_active_campaign"}]}]}`
+   → "Leads where State is NY or NJ and verified email, sendable and "reply_received" exactly 0 times in the last 30 days, excluding in an active campaign."
+2. `{"entity":"contact","include":[{"conditions":[{"kind":"event","event_type":"email_opened","count_op":"gte","count":3,"within_last_days":14}]}]}`
+   → "Contacts where "email_opened" at least 3 times in the last 14 days."
+3. `{"entity":"company","include":[{"conditions":[{"kind":"in_segment","segment_id":3}]}],"exclude":[{"conditions":[{"kind":"quality","op":"suppressed"}]}]}`
+   → "Leads where in segment #3, excluding suppressed."
+
+| op | args | what |
+|---|---|---|
+| `list_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
+| `list_segments` | `{include_archived?, campaign_id?}` | every live segment (or scoped to one campaign, plus un-scoped ones) |
+| `get_segment` | `{id}` | one segment, with its readback |
+| `create_segment` | `{name, entity, definition, description?, kind? ('dynamic' default), campaign_id?}` | validates the definition before writing; `definition.entity` must match `entity` |
+| `update_segment` | `{id, name?, description?, campaign_id?, definition?}` | entity cannot change after creation |
+| `archive_segment` | `{id}` | soft delete (`archived_at`); idempotent |
+| `segment_preview` | `{definition}` or `{entity, include?, exclude?}` | compiles a definition that need not be saved yet -> `{entity, counts: {companies, contacts, verified_sendable}, sample (10 rows), readback}` |
+| `segment_members` | `{id, limit?, offset?}` | static: the stored rows; dynamic: the live compiled match |
+| `segment_add_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_joined` lead events |
+| `segment_remove_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_left` lead events |
+| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job (1.10) calls for 2.12's size-over-time |
+
+Deferred from this slice (left for the builder UI / later plan items, not started
+here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
+(2.5), using a segment as a campaign source (2.6), computed traits and scoring as
+field-registry entries (2.7/2.8 -- the registry is ready for them), the "describe a
+segment" AI box (2.11), and the analytics UI on top of `segment_snapshot` (2.12).

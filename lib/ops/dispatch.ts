@@ -50,6 +50,7 @@ import { JOB_OPS } from '../jobs/ops.ts'
 import { LEAD_EVENT_OPS } from '../events/ops.ts'
 import { CAMPAIGN_PROFILE_OPS } from '../campaign-profiles/ops.ts'
 import { POOL_OPS } from '../pools/ops.ts'
+import { SEGMENT_OPS } from '../segments/ops.ts'
 import { getRuleSet, listProposals, listRuleSets, proposeRuleChange, resolveFieldCatalog, ruleSetForCampaign } from '../rules/store.ts'
 import { leadReadiness } from '../rules/readiness.ts'
 import { recomputeStatus, runRecompute, tierCounts } from '../rules/recompute.ts'
@@ -479,6 +480,10 @@ export const OPS: Record<string, Op> = {
   ...CAMPAIGN_PROFILE_OPS,
   // Pools (lib/pools/ops.ts): the industries/audiences a campaign can target — rows in lp.pools, not a fixed list.
   ...POOL_OPS,
+  // Segments (lib/segments/ops.ts): the condition-engine DSL compiled to SQL --
+  // list/create/update/archive, segment_preview (counts + readback + samples),
+  // static-list membership, and the snapshot job for 2.12.
+  ...SEGMENT_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
