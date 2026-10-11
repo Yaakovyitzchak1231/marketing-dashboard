@@ -63,7 +63,7 @@ async function requireSegment(db: Db, segId: number) {
 }
 
 export const SEGMENT_OPS: Record<string, Op> = {
-  list_fields: {
+  segment_fields: {
     args: '{}  -- the field registry (key, label, table, type, operators); for building a picker',
     run: async (db) => {
       await ensureTraitFieldsRegistered(db)

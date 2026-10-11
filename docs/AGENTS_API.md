@@ -359,7 +359,7 @@ anything else with a plain error):
 "everyone except suppressed"). A condition is one of:
 
 - `{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]}` -- a field
-  from the registry (`company.*` / `contact.*`; `list_fields` below) with an operator
+  from the registry (`company.*` / `contact.*`; `segment_fields` below) with an operator
   for its type: text/array get `is, is_not, contains, not_contains, in, not_in, exists,
   not_exists`; number adds `gt, gte, lt, lte, between`; date adds `before, after,
   within_last_days, more_than_days_ago, between`; boolean is `is, is_not, exists,
@@ -383,7 +383,7 @@ Geography is `company.state` / `company.city` (plain field conditions) only --
 Custom fields (1.7), scores (2.8) and computed traits (2.7) plug into the SAME
 compiler with no changes there: call `registerField` (`lib/segments/fields.ts`) with
 a `sql` expression reading the new column (e.g. `"c.custom ->> 'ring_brand'"`) and the
-key shows up in `list_fields` and works in every condition kind above.
+key shows up in `segment_fields` and works in every condition kind above.
 
 **Three examples**, with their readback (`lib/segments/readback.ts`):
 1. `{"entity":"company","include":[{"conditions":[{"kind":"field","field":"company.state","op":"in","value":["NY","NJ"]},{"kind":"quality","op":"verified_sendable"},{"kind":"event","event_type":"reply_received","count_op":"eq","count":0,"within_last_days":30}]}],"exclude":[{"conditions":[{"kind":"campaign_membership","mode":"any_active_campaign"}]}]}`
@@ -395,7 +395,7 @@ key shows up in `list_fields` and works in every condition kind above.
 
 | op | args | what |
 |---|---|---|
-| `list_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
+| `segment_fields` | `{}` | every registered field (key, label, table, type, operators) -- read-only, for building a picker |
 | `list_segments` | `{include_archived?, campaign_id?}` | every live segment (or scoped to one campaign, plus un-scoped ones) |
 | `get_segment` | `{id}` | one segment, with its readback |
 | `create_segment` | `{name, entity, definition, description?, kind? ('dynamic' default), campaign_id?}` | validates the definition before writing; `definition.entity` must match `entity` |

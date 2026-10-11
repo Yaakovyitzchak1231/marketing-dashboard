@@ -7,9 +7,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { TagError, mergeTags, renameTag, setTagStyle } from '@/lib/tags/store'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -20,7 +20,7 @@ const s = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' ? v.trim() : ''
 }
-const msg = (e: unknown) => (e instanceof TagError ? e.message : null)
+const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof TagError ? e.message : null)
 
 function back(q: Record<string, string>): never {
   const u = new URLSearchParams(q)
@@ -29,6 +29,7 @@ function back(q: Record<string, string>): never {
 
 export async function renameTagAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     await renameTag(db(), ME, { from: s(f, 'from'), to: s(f, 'to') })
   } catch (e) {
     const m = msg(e)
@@ -41,6 +42,7 @@ export async function renameTagAction(f: FormData) {
 
 export async function mergeTagsAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     const tags = s(f, 'tags').split(',').map((t) => t.trim()).filter(Boolean)
     await mergeTags(db(), ME, { tags, into: s(f, 'into') })
   } catch (e) {
@@ -54,6 +56,7 @@ export async function mergeTagsAction(f: FormData) {
 
 export async function setTagStyleAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     await setTagStyle(db(), ME, { tag: s(f, 'tag'), colour: s(f, 'colour') || null, description: s(f, 'description') || null })
   } catch (e) {
     const m = msg(e)

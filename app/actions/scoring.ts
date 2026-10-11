@@ -7,9 +7,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { ScoringError, recomputeScores, upsertScoreModel } from '@/lib/scoring/engine'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -20,7 +20,7 @@ const s = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' ? v.trim() : ''
 }
-const msg = (e: unknown) => (e instanceof ScoringError ? e.message : e instanceof SyntaxError ? 'rules must be valid JSON' : null)
+const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof ScoringError ? e.message : e instanceof SyntaxError ? 'rules must be valid JSON' : null)
 
 function back(q: Record<string, string>): never {
   const u = new URLSearchParams(q)
@@ -29,6 +29,7 @@ function back(q: Record<string, string>): never {
 
 export async function saveScoreModelRulesAction(f: FormData) {
   try {
+    const ME = await actorFor('owner')
     const id = Number(s(f, 'id'))
     const rulesText = s(f, 'rules_json')
     const thresholdsText = s(f, 'thresholds_json')
@@ -53,6 +54,7 @@ export async function saveScoreModelRulesAction(f: FormData) {
 
 export async function recomputeAllScoresAction() {
   try {
+    const ME = await actorFor('owner')
     await recomputeScores(db(), ME, {})
   } catch (e) {
     const m = msg(e)

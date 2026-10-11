@@ -44,7 +44,7 @@ describe('trait ops', () => {
     const { rows } = await db.query(`select * from lp.status_history where entity_type = 'trait' and entity_key = 'my_replies'`)
     expect(rows.length).toBeGreaterThan(0)
 
-    const fields = (await runOp(db, 'tab', 'list_fields', {})) as { key: string }[]
+    const fields = (await runOp(db, 'tab', 'segment_fields', {})) as { key: string }[]
     expect(fields.map((f) => f.key)).toContain('trait.my_replies')
 
     await expect(runOp(db, 'tab', 'define_trait', { key: 'bad key', label: 'x', entity: 'company', definition: { event_types: ['x'], aggregation: 'count' } })).rejects.toThrow(OpsError)
@@ -66,10 +66,10 @@ describe('trait ops', () => {
     expect(preview.counts.companies).toBe(1) // only coA has replied
   })
 
-  it('archive_trait removes it from list_fields (soft delete, idempotent)', async () => {
+  it('archive_trait removes it from segment_fields (soft delete, idempotent)', async () => {
     await runOp(db, 'tab', 'define_trait', { key: 'to_archive', label: 'To archive', entity: 'company', definition: { event_types: ['reply_received'], aggregation: 'count' } })
     await runOp(db, 'tab', 'archive_trait', { key: 'to_archive' })
-    const fields = (await runOp(db, 'tab', 'list_fields', {})) as { key: string }[]
+    const fields = (await runOp(db, 'tab', 'segment_fields', {})) as { key: string }[]
     expect(fields.map((f) => f.key)).not.toContain('trait.to_archive')
     // idempotent
     await expect(runOp(db, 'tab', 'archive_trait', { key: 'to_archive' })).resolves.toBeTruthy()

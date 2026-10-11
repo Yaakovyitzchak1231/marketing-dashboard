@@ -5,7 +5,7 @@
  *
  * Called at the top of every segment-engine entry point that needs the
  * registry up to date (lib/segments/compile.ts's compileSegment, and
- * list_fields in lib/segments/ops.ts). Cheap: one small table, and
+ * segment_fields in lib/segments/ops.ts). Cheap: one small table, and
  * re-registering the same key is a no-op overwrite. Traits are archived
  * (lp.traits.archived_at), never hard-deleted, so there is no "a trait
  * vanished between two calls" case to reconcile here.

@@ -8,9 +8,9 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
+import { actorFor } from '@/lib/auth/act'
+import { AuthError } from '@/lib/auth/roles'
 import { FilesError, addLeadFile, removeLeadFile } from '@/lib/leads/files'
-
-const ME = 'owner'
 
 function db() {
   const d = getDb()
@@ -21,7 +21,7 @@ const s = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' ? v.trim() : ''
 }
-const msg = (e: unknown) => (e instanceof FilesError ? e.message : null)
+const msg = (e: unknown) => (e instanceof AuthError ? e.message : e instanceof FilesError ? e.message : null)
 
 function back(companyId: number, q: Record<string, string>): never {
   const u = new URLSearchParams(q)
@@ -30,6 +30,7 @@ function back(companyId: number, q: Record<string, string>): never {
 
 export async function addLeadFileAction(companyId: number, f: FormData) {
   try {
+    const ME = await actorFor('editor')
     await addLeadFile(db(), ME, {
       company_id: companyId,
       name: s(f, 'name'),
@@ -46,7 +47,14 @@ export async function addLeadFileAction(companyId: number, f: FormData) {
 }
 
 export async function removeLeadFileAction(companyId: number, fileId: number) {
-  await removeLeadFile(db(), ME, fileId)
+  try {
+    const ME = await actorFor('editor')
+    await removeLeadFile(db(), ME, fileId)
+  } catch (e) {
+    const m = msg(e)
+    if (!m) throw e
+    back(companyId, { error: m })
+  }
   revalidatePath(`/leads/${companyId}`)
   back(companyId, { saved: 'File removed.' })
 }

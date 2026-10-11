@@ -166,7 +166,7 @@ export function registerTraitField(opts: { key: string; label: string; table: Fi
   registry.set(opts.key, { key: opts.key, label: opts.label, table: opts.table, type: 'number', sql })
 }
 
-/** Drop a trait's field (archive_trait: it should stop showing up in list_fields / the
+/** Drop a trait's field (archive_trait: it should stop showing up in segment_fields / the
  *  builder, though an already-saved segment condition naming it just starts matching
  *  nothing -- the subquery still runs, lp.trait_values just has no row to find). */
 export function unregisterField(key: string): void {
