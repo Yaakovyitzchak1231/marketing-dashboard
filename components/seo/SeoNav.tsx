@@ -8,6 +8,7 @@ export const SEO_TABS = [
   { href: '/seo/sites', label: 'Sites' },
   { href: '/seo/audit', label: 'Technical audit' },
   { href: '/seo/visibility', label: 'AI visibility' },
+  { href: '/seo/citations', label: 'Citations & actions' },
   { href: '/seo/todos', label: 'Fix list' },
   { href: '/seo/search-console', label: 'Search Console' },
 ] as const

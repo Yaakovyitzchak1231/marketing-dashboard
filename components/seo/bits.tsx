@@ -3,7 +3,7 @@ import { Card, Pill } from '@/components/dashboard/primitives'
 import type { CheckStatus } from '@/lib/seo/audit'
 import { lineDiff, prettyMaybeJson } from '@/lib/seo/diff'
 
-export const CHECK_LABEL: Record<CheckStatus, string> = { pass: 'Pass', warn: 'Improve', fail: 'Fix', unknown: "Couldn't check" }
+export const CHECK_LABEL: Record<CheckStatus, string> = { pass: 'Pass', warn: 'Improve', fail: 'Fix', unknown: "Couldn't check", info: 'Info' }
 export function CheckPill({ status }: { status: CheckStatus }) {
   const tone = status === 'pass' ? 'good' : status === 'fail' ? 'bad' : status === 'warn' ? 'warn' : 'neutral'
   return <Pill tone={tone}>{CHECK_LABEL[status]}</Pill>

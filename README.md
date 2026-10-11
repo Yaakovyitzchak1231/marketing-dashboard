@@ -118,7 +118,7 @@ Copy `.env.example` to `.env.local` for local work. Never commit real values.
 
 ## Run it locally
 
-Requires Node 22+ and npm (Supabase's client needs Node 22's built-in WebSocket).
+Requires Node 22.x and npm. The major version is pinned to match CI and Vercel project settings; a lower-bound range would let Vercel select a newer, untested major.
 
 ```bash
 npm ci
@@ -143,6 +143,14 @@ login locally (development server only).
 GitHub Actions (`.github/workflows/ci.yml`) runs `npm ci`, typecheck, lint,
 tests and a production build on every pull request and on pushes to `main`.
 
+After each PR merged into `main`, `.github/workflows/docs-maintainer.yml` runs
+Claude (Haiku) to check the docs against the code, update
+`docs/ARCHITECTURE.md`, and flag orphaned code or inconsistencies. It comments
+its report on the merged PR and opens a `docs/maintenance-pr-<n>` PR when docs
+need fixing; it never edits code or pushes to `main`. It needs the
+`ANTHROPIC_API_KEY` repository secret, and can be re-run by hand from the
+Actions tab with a PR number.
+
 ## Deploy on Vercel
 
 The project is already linked to Vercel (production:
@@ -163,8 +171,14 @@ https://marketing-dashboard-xi-five.vercel.app). To ship this version:
    should change with the range and match Instantly's own Analytics page for
    the same dates.
 
-Vercel installs with npm (`package-lock.json`; there is no other lockfile) and
-builds with `next build`. No `vercel.json` is needed.
+Vercel installs with npm (`package-lock.json`; there is no other lockfile).
+`vercel.json` selects `npm run vercel-build`: production migrations followed by
+`next build`. Preview migrations are off unless explicitly enabled; preview
+runtime connections must also use an isolated database branch (skipping migrations
+does not prevent preview code from writing to a shared production database).
+
+Agent delivery readiness and mail settings are visible on `/setup`. Notification
+reliability and scheduler activation: [docs/agent-delivery.md](docs/agent-delivery.md).
 
 ## Metrics, defined
 

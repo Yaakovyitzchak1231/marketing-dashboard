@@ -5,6 +5,7 @@ import {
 } from '@/lib/page-comments/core'
 import { routeToOp, runOp } from '@/lib/ops/dispatch'
 import { MCP_TOOLS } from '@/lib/notify/mcp'
+import { feed } from '@/lib/notify/deliver'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 let db: TestDb
@@ -79,13 +80,18 @@ describe('page comments: sending', () => {
     expect(n.body).toContain('Comment: This column is wrong')
     expect(n.body.indexOf('Comment: This column is wrong')).toBeLessThan(n.body.indexOf('END UNTRUSTED TEXT'))
     expect(n.body).toContain(`POST https://dash.example/api/ops/page-comments/${c.id}/reply`)
-    // Fanned out to Tab's seeded email channel by the 0013 trigger, waiting to go.
+    // Fanned out to email and legacy pull access; no mail configuration is needed to pull.
     const { rows } = await db.query<{ status: string; kind: string }>(
       'select d.status, ch.kind from lp.deliveries d join lp.delivery_channels ch on ch.id = d.channel_id where d.notification_id = $1',
       [n.id],
     )
-    expect(rows).toEqual([{ status: 'pending', kind: 'email' }])
+    expect(rows).toEqual([{ status: 'pending', kind: 'email' }, { status: 'pending', kind: 'pull' }])
     expect(c.delivery).toBe('pending')
+    const event = (await feed(db, 'tab')).find((e) => e.notification_id === n.id)
+    expect(event?.page_comment_id).toBe(c.id)
+    expect(event?.auto_reply).toBe(false)
+    expect(event?.body).toContain(`pin=${c.id}`)
+    expect(event?.body).toContain('Comment: This column is wrong')
   })
 
   it('sending twice never sends twice, and a sent comment cannot be edited as a draft', async () => {
