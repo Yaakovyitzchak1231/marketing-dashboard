@@ -5,7 +5,7 @@
  * screens render `set: boolean` and nothing else.
  */
 
-export type SetupFeature = 'leads' | 'dashboard' | 'agents' | 'login'
+export type SetupFeature = 'leads' | 'dashboard' | 'agents' | 'notifications' | 'login'
 
 export interface EnvKeySpec {
   key: string
@@ -28,6 +28,7 @@ export const FEATURE_TITLES: Record<SetupFeature, string> = {
   leads: 'Lead database',
   dashboard: 'Instantly campaigns',
   agents: 'Agent access (ops API)',
+  notifications: 'Agent notifications',
   login: 'Login',
 }
 
@@ -57,6 +58,28 @@ export const ENV_SPECS: Record<SetupFeature, EnvKeySpec[]> = {
         'Add the key OPS_AGENT_TOKENS with the value your agent gives you (it looks like tab:… ). Tick Production, and mark it Sensitive.',
         REDEPLOY,
       ],
+    },
+  ],
+  notifications: [
+    {
+      key: 'MAIL_PROVIDER', required: false,
+      purpose: 'Required for email delivery, including Tab’s mailbox. Use resend or brevo. Without mail settings, emails stay held; feed access still works.',
+      steps: ['Choose Resend or Brevo and verify a sender there. Set MAIL_PROVIDER to resend or brevo in Vercel.', REDEPLOY],
+    },
+    {
+      key: 'MAIL_API_KEY', required: false,
+      purpose: 'Required for email delivery. The chosen mail provider’s API key, server-side only.',
+      steps: ['Add the provider key in Vercel as Sensitive. Never paste it in comments or agent messages.', REDEPLOY],
+    },
+    {
+      key: 'MAIL_FROM', required: false,
+      purpose: 'Required for email delivery. A sender address verified by the mail provider.',
+      steps: ['Set MAIL_FROM to the verified sender address in Vercel.', REDEPLOY],
+    },
+    {
+      key: 'CRON_SECRET', required: false,
+      purpose: 'Protects the delivery retry endpoint. Setting it does not create a schedule: connect a scheduler to /api/ops/deliveries/dispatch so retries continue when nobody has the app open.',
+      steps: ['Store a random secret of at least 32 characters in Vercel as Sensitive and in your scheduler’s credential store.', 'Configure the scheduler to GET /api/ops/deliveries/dispatch with bearer authentication. Never place the secret in the URL.', REDEPLOY],
     },
   ],
   dashboard: [

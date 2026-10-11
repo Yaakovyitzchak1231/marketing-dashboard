@@ -1,22 +1,15 @@
+import Link from 'next/link'
 import { getDb } from '@/lib/db'
 import { DbNotConnected, BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { inputCls } from '@/components/ops/bits'
 import { Env, Flash, when } from '@/components/seo/bits'
 import { latestRuns, listCompetitors, listPrompts, runResults, type PromptRow, type VisResult, type VisRun } from '@/lib/seo/store'
-import { PROVIDERS, providerKey, providerModel, webSearchOn } from '@/lib/seo/visibility'
+import { PROVIDERS, providerKey, providerModel, visibilitySummary, webSearchOn } from '@/lib/seo/visibility'
 import { addCompetitorAction, addPromptAction, removeCompetitorAction, runVisibilityAction, togglePromptAction } from '@/app/actions/seo'
 
 export const dynamic = 'force-dynamic'
 type SP = Record<string, string | string[] | undefined>
-
-const host = (u: string) => {
-  try {
-    return new URL(u).host.replace(/^www\./, '')
-  } catch {
-    return u
-  }
-}
 
 export default async function SeoVisibility({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams
@@ -34,12 +27,14 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
   }
   const runFor = (p: string) => runs.find((r) => r.provider === p)
   const shown = PROVIDERS.filter((p) => runFor(p.id))
+  const lastRun = (r: VisRun) => visibilitySummary(r, results.filter((x) => x.run_id === r.id))
 
   return (
     <div className="space-y-7">
       <Flash sp={sp} />
+      <p className="text-[13px] text-ink-muted">Sampled API answers, not consumer-app rankings. <Link className="text-accent underline" href="/seo/citations">Inspect exact citations and queue improvements</Link>. Older runs combine text and source matches; they are labelled as legacy signals.</p>
       <section>
-        <SectionHeader title="Models" meta={webSearchOn() ? 'live web search on (SEO_WEB_SEARCH=1)' : 'answers from model knowledge; set SEO_WEB_SEARCH=1 for live search'} />
+        <SectionHeader title="Models" meta={webSearchOn() ? 'search-enabled requests (SEO_WEB_SEARCH=1); tool use varies' : 'search off except Perplexity; SEO_WEB_SEARCH=1 enables other providers'} />
         <div className="grid gap-3 sm:grid-cols-2">
           {PROVIDERS.map((p) => {
             const on = !!providerKey(p)
@@ -51,11 +46,10 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
                     <p className="text-[13px] font-medium text-ink">
                       {p.label} {on ? <Pill tone="good">ready</Pill> : <Pill tone="neutral">key not set</Pill>}
                     </p>
-                    <p className="mt-0.5 text-[12px] text-ink-faint">{p.cost}</p>
                     {on ? (
                       <p className="mt-1 text-[12px] text-ink-muted">
                         Model {providerModel(p)}
-                        {r ? ` · last run ${when(r.finished_at ?? r.started_at)}: ${r.status === 'done' ? `named in ${r.mentioned} of ${r.prompt_count}` : r.status}` : ' · not run yet'}
+                        {r ? ` · last run ${when(r.finished_at ?? r.started_at)}: ${lastRun(r)}` : ' · not run yet'}
                       </p>
                     ) : (
                       <p className="mt-1 text-[12px] text-ink-muted">
@@ -80,7 +74,7 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
       <section>
         <SectionHeader title="Results" meta="latest run per model" />
         {shown.length === 0 ? (
-          <EmptyNote>No runs yet. Set a model key above (Gemini&rsquo;s free tier costs nothing), then press &ldquo;Run check now&rdquo;.</EmptyNote>
+          <EmptyNote>No runs yet. Set a model key above, then press &ldquo;Run check now&rdquo;.</EmptyNote>
         ) : (
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-[12px]">
@@ -100,11 +94,17 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
                       const r = results.find((x) => x.prompt === q && x.run_id === runFor(p.id)!.id)
                       if (!r) return <td key={p.id} className="px-3 py-2 text-ink-faint">not asked</td>
                       if (r.error) return <td key={p.id} className="px-3 py-2 text-bad">error: {r.error.slice(0, 80)}</td>
+                      if (r.mentioned === null)
+                        return (
+                          <td key={p.id} className="px-3 py-2" data-testid="seo-vis-cell">
+                            <Pill tone="neutral">unanswered</Pill>
+                          </td>
+                        )
                       return (
                         <td key={p.id} className="px-3 py-2" data-testid="seo-vis-cell">
-                          {r.mentioned ? <Pill tone="good">TapDash named</Pill> : <Pill tone="bad">not named</Pill>}
-                          {r.competitors.length ? <p className="mt-1 text-ink-muted">Named: {r.competitors.join(', ')}</p> : null}
-                          {r.cited_urls.length ? <p className="mt-0.5 text-ink-faint">Cited: {[...new Set(r.cited_urls.map(host))].slice(0, 4).join(', ')}</p> : null}
+                          {r.text_mentioned == null ? <Pill tone="neutral">legacy text/source signal</Pill> : r.text_mentioned ? <Pill tone="good">Tracked brand named</Pill> : <Pill tone="neutral">not named</Pill>}
+                          {r.competitors.length ? <p className="mt-1 text-ink-muted">{r.text_mentioned == null ? 'Legacy competitor matches' : 'Named'}: {r.competitors.join(', ')}</p> : null}
+                          <p className="mt-0.5 text-ink-faint">{r.citation_urls == null ? 'Citation classification unavailable for this older answer.' : `${r.citation_urls.length} citation URLs returned`}</p>
                           {r.answer ? (
                             <details className="mt-1">
                               <summary className="cursor-pointer text-accent">answer</summary>

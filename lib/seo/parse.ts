@@ -3,17 +3,19 @@
  * text and returns facts, so the audit's judgments are unit-testable.
  */
 
-/** The AI crawlers that matter for "show up in ChatGPT / Claude / Gemini / Perplexity". */
+/** Search eligibility is distinct from training consent and user-triggered fetching.
+ * Sources: developers.openai.com/api/docs/bots and Google Search's AI-features guide.
+ */
 export const AI_CRAWLERS = [
-  { ua: 'GPTBot', who: 'OpenAI (training)' },
-  { ua: 'OAI-SearchBot', who: 'ChatGPT search' },
-  { ua: 'ChatGPT-User', who: 'ChatGPT browsing for a user' },
-  { ua: 'ClaudeBot', who: 'Anthropic (Claude)' },
-  { ua: 'Claude-User', who: 'Claude browsing for a user' },
-  { ua: 'PerplexityBot', who: 'Perplexity' },
-  { ua: 'Google-Extended', who: 'Gemini (Google AI)' },
-  { ua: 'Googlebot', who: 'Google Search' },
-  { ua: 'Bingbot', who: 'Bing (feeds ChatGPT search)' },
+  { ua: 'GPTBot', who: 'OpenAI training', purpose: 'training' },
+  { ua: 'OAI-SearchBot', who: 'ChatGPT search', purpose: 'search' },
+  { ua: 'ChatGPT-User', who: 'User-triggered fetch; robots rules may not apply', purpose: 'user' },
+  { ua: 'ClaudeBot', who: 'Anthropic training', purpose: 'training' },
+  { ua: 'Claude-User', who: 'User-triggered Claude fetch', purpose: 'user' },
+  { ua: 'PerplexityBot', who: 'Perplexity search', purpose: 'search' },
+  { ua: 'Google-Extended', who: 'Other Google AI uses, not Google Search eligibility', purpose: 'other_ai' },
+  { ua: 'Googlebot', who: 'Google Search, including AI features', purpose: 'search' },
+  { ua: 'Bingbot', who: 'Bing Search', purpose: 'search' },
 ] as const
 
 export interface RobotsGroup {

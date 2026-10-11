@@ -4,13 +4,13 @@ import { DbNotConnected, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import { CheckPill, Flash, one, when } from '@/components/seo/bits'
 import { auditHistory, getAudit, listSites, type AuditRow, type SiteRow } from '@/lib/seo/store'
-import type { Check } from '@/lib/seo/audit'
+import type { Check, CheckStatus } from '@/lib/seo/audit'
 import { runAuditAction } from '@/app/actions/seo'
 
 export const dynamic = 'force-dynamic'
 type SP = Record<string, string | string[] | undefined>
 
-const ORDER: Record<string, number> = { fail: 0, warn: 1, unknown: 2, pass: 3 }
+const ORDER: Record<CheckStatus, number> = { fail: 0, warn: 1, unknown: 2, pass: 3, info: 4 }
 
 export default async function SeoAudit({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams
@@ -79,7 +79,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
                       <p className="text-[13px] font-medium text-ink">{c.label}</p>
                       <div className="text-[13px] leading-snug text-ink-muted">
                         <p className="break-words">{c.detail}</p>
-                        {c.fix && c.status !== 'pass' ? <p className="mt-1 text-[12px] text-ink">Fix: {c.fix}</p> : null}
+                        {c.fix && c.status !== 'pass' ? <p className="mt-1 text-[12px] text-ink">{c.status === 'info' ? 'Note' : 'Review'}: {c.fix}</p> : null}
                       </div>
                     </li>
                   ))}
@@ -88,7 +88,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
             </section>
           ))}
           <p className="text-[12px] text-ink-faint">
-            Every non-passing check is on the <Link href={`/seo/todos?site=${audit.site_id}`} className="text-accent underline">fix list</Link> with a button to act on it.
+            Actionable findings appear on the <Link href={`/seo/todos?site=${audit.site_id}`} className="text-accent underline">fix list</Link>. Informational checks are not required fixes and are excluded from the pass/fix counts.
           </p>
         </>
       )}
