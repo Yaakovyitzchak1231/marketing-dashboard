@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import { comment, OpsError } from '@/lib/ops/core'
+import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!exists.rows[0]) return NextResponse.json({ error: 'No lead with that id.' }, { status: 404 })
   try {
     const c = await comment(db, 'owner', { company_id: Number(id), body: json.body })
+    kickDelivery(db)
     return NextResponse.json({ comment: c }, { status: 201 })
   } catch (e) {
     if (e instanceof OpsError) return NextResponse.json({ error: e.message }, { status: e.status })

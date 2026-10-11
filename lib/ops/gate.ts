@@ -24,11 +24,12 @@ export type OpsGate =
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
-export async function opsGate(req: Request, opts: { allowCron?: boolean; unauthorizedMessage?: string } = {}): Promise<OpsGate> {
+export async function opsGate(req: Request, opts: { allowCron?: boolean; cronOnly?: boolean; unauthorizedMessage?: string } = {}): Promise<OpsGate> {
   const authorization = req.headers.get('authorization')
-  let agent = agentForToken(authorization)
+  // Scheduler-only routes must not accept agent credentials, even a token mapped to 'system'.
+  let agent = opts.cronOnly ? null : agentForToken(authorization)
   // Only keys minted on /agents (mdk_…) are looked up in the database; anything else never costs a query.
-  if (!agent && authorization && /^Bearer\s+mdk_/i.test(authorization.trim())) {
+  if (!opts.cronOnly && !agent && authorization && /^Bearer\s+mdk_/i.test(authorization.trim())) {
     const kdb = getDb()
     if (kdb) {
       try {
@@ -38,7 +39,7 @@ export async function opsGate(req: Request, opts: { allowCron?: boolean; unautho
       }
     }
   }
-  if (!agent && opts.allowCron) {
+  if (!agent && (opts.allowCron || opts.cronOnly)) {
     const m = /^Bearer\s+(.+)$/i.exec(authorization ?? '')
     if (m && secretMatches(m[1].trim(), process.env.CRON_SECRET)) agent = 'system'
   }

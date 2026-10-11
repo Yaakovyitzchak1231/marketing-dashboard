@@ -5,6 +5,7 @@ import { ParamsError } from '@/engine/params'
 import { loadCities } from '@/engine/data'
 import { STATE_ABBR } from '@/engine/parse/domains'
 import { OpsError } from '@/lib/ops/core'
+import { kickDelivery } from '@/lib/notify/kick'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
   }
   try {
     const job = await createFindJob(db, 'owner', body)
+    kickDelivery(db)
     return NextResponse.json({ job }, { status: 201 })
   } catch (e) {
     if (e instanceof ParamsError) return NextResponse.json({ error: e.message }, { status: 400 })

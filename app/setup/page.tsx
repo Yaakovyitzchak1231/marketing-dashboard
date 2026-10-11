@@ -6,10 +6,11 @@ import { Card, Pill } from '@/components/dashboard/primitives'
 import { getDb } from '@/lib/db'
 import { envStatus, FEATURE_TITLES, type SetupFeature } from '@/lib/setup/env'
 import { readDbStatus } from '@/lib/setup/db-status'
+import { readDeliveryHealth } from '@/lib/notify/health'
 
 export const dynamic = 'force-dynamic'
 
-const FEATURES: SetupFeature[] = ['leads', 'dashboard', 'agents', 'login']
+const FEATURES: SetupFeature[] = ['leads', 'dashboard', 'agents', 'notifications', 'login']
 const CODE = 'rounded bg-canvas px-1 font-numeric text-[12px] text-ink'
 
 function migrationCount(): number | null {
@@ -22,7 +23,8 @@ function migrationCount(): number | null {
 
 /** Settings: every key the app reads, whether it is set (never its value), and how to set it. */
 export default async function SetupPage() {
-  const db = await readDbStatus(getDb())
+  const connection = getDb()
+  const [db, delivery] = await Promise.all([readDbStatus(connection), readDeliveryHealth(connection)])
   const total = migrationCount()
   return (
     <PageShell title="Settings" meta="Keys live in Vercel. This page shows whether each one is set, never its value.">
@@ -42,6 +44,27 @@ export default async function SetupPage() {
                     }`}
             </p>
           </div>
+        </Card>
+        <Card className="px-5 py-5">
+          <section data-testid="setup-delivery">
+            <h2 className="text-[15px] font-semibold text-ink">Can the agents hear you?</h2>
+            <p className="mt-1 text-[13px] text-ink-muted">
+              A task saved is not a task received. Email and webhooks need working destinations; pull, stream and MCP need a connected listener. Use the exact agent ID when assigning or mentioning someone (Tab is @tab).
+            </p>
+            {!delivery.available ? <p className="mt-3 text-[13px] text-ink-muted">{delivery.error}</p> : (
+              <ul className="mt-3 space-y-3">
+                {delivery.agents.map((a) => (
+                  <li key={a.id} className="border-t border-line pt-3 text-[13px]">
+                    <p className="font-medium text-ink">{a.display_name} <span className="font-normal text-ink-muted">@{a.id}</span></p>
+                    <p className="text-ink-muted">Enabled channels: {a.channels.length ? a.channels.join(', ') : 'none — add a channel on the agent’s page'}.</p>
+                    <p className="text-ink-muted">Unread: {a.unread}. Held: {a.held}. Failed: {a.failed}. Without a channel: {a.no_channel}.</p>
+                    <p className="text-ink-muted">Last check-in: {a.last_seen_at ? new Date(a.last_seen_at).toISOString() : 'not recorded'}.</p>
+                  </li>
+                ))}
+                {!delivery.agents.length && <li className="text-[13px] text-ink-muted">No active agents are registered.</li>}
+              </ul>
+            )}
+          </section>
         </Card>
         {FEATURES.map((f) => {
           const keys = envStatus(f)

@@ -34,7 +34,7 @@ import {
   updateTask,
 } from './core.ts'
 import { logEvent } from './events.ts'
-import { ackDeliveries, dispatchDue, feed } from '../notify/deliver.ts'
+import { ackDeliveries, feed } from '../notify/deliver.ts'
 
 // The Instantly gate and its read-only lookups are server-only modules; they
 // load on first use so this table stays importable anywhere.
@@ -94,6 +94,13 @@ export const OPS: Record<string, Op> = {
       return rows[0] ?? null
     },
   },
+  list_actors: {
+    args: '{}  -- active actor IDs, display names and kinds; use kind=human to identify escalation recipients',
+    run: async (db) => {
+      const { rows } = await db.query('select id, kind, display_name from lp.actors where active order by id')
+      return rows
+    },
+  },
   presence: {
     args: '{status_note?: string}  -- "what I am doing now", shown on the Agents screen',
     run: async (db, actor, a) => {
@@ -148,56 +155,53 @@ export const OPS: Record<string, Op> = {
       }),
   },
   heartbeat: {
-    args: '{task_id, lease_seconds?, progress?: object, status_note?}  -- call at least every lease_seconds/2',
+    args: '{task_id, claim_attempt?: attempts from claim_task (required after first claim), lease_seconds?, progress?: object, status_note?}  -- call at least every lease_seconds/2',
     run: (db, actor, a) =>
       heartbeatTask(db, actor, id(a.task_id), {
         lease_seconds: a.lease_seconds == null ? undefined : Number(a.lease_seconds),
+        claim_attempt: a.claim_attempt == null ? undefined : Number(a.claim_attempt),
         progress: a.progress,
         status_note: str(a.status_note),
       }),
   },
   complete_task: {
-    args: '{task_id, result?: object, report?: string}  -- for research_company, put a ResearchResult at result.research and it is written to the lead (evidence required)',
+    args: '{task_id, claim_attempt?: attempts from claim_task (required after first claim), result?: object, report?: string}  -- for research_company, put a ResearchResult at result.research and it is written to the lead (evidence required)',
     run: async (db, actor, a) => {
       const tid = id(a.task_id)
       const result = a.result as Record<string, unknown> | undefined
       const research = result && typeof result === 'object' ? (result.research as ResearchResult | undefined) : undefined
       let applied: unknown = undefined
-      if (research && typeof research === 'object') {
-        const t = await db.query<{ kind: string; company_id: number | null; claimed_by: string | null; status: string }>(
-          'select kind, company_id, claimed_by, status from lp.tasks where id = $1',
-          [tid],
-        )
-        const task = t.rows[0]
-        if (!task) throw new OpsError(`task ${tid} not found`, 404)
-        if (task.claimed_by !== actor || !['claimed', 'running', 'blocked'].includes(task.status)) {
-          throw new OpsError(`task ${tid} is not claimed by ${actor}`, 409)
-        }
-        if (task.kind !== 'research_company' || !task.company_id) throw new OpsError('result.research is only accepted on a research_company task')
-        if (Number(research.company_id) !== task.company_id) throw new OpsError(`result.research.company_id must be ${task.company_id}`)
-        const clean: ResearchResult = {
-          company_id: task.company_id,
-          runner: typeof research.runner === 'string' && research.runner ? research.runner.slice(0, 40) : actor,
-          pages_fetched: Array.isArray(research.pages_fetched) ? research.pages_fetched : [],
-          emails: Array.isArray(research.emails) ? research.emails : [],
-          people: Array.isArray(research.people) ? research.people : [],
-          phones: Array.isArray(research.phones) ? research.phones : [],
-          facts: Array.isArray(research.facts) ? research.facts : [],
-          summary: typeof research.summary === 'string' ? research.summary : `${actor} researched the company`,
-        }
-        applied = await applyResearchResult(db, clean, actor, { task_id: tid })
-      }
-      const done = await completeTask(db, actor, tid, { result: applied === undefined ? a.result : { ...result, applied }, report: str(a.report) })
+      const claimAttempt = a.claim_attempt == null ? undefined : Number(a.claim_attempt)
+      const done = await completeTask(db, actor, tid, {
+        result: a.result, report: str(a.report), claim_attempt: claimAttempt,
+        prepareResult: research && typeof research === 'object' ? async (q, task) => {
+          if (task.kind !== 'research_company' || !task.company_id) throw new OpsError('result.research is only accepted on a research_company task')
+          if (Number(research.company_id) !== task.company_id) throw new OpsError(`result.research.company_id must be ${task.company_id}`)
+          const clean: ResearchResult = {
+            company_id: task.company_id,
+            runner: typeof research.runner === 'string' && research.runner ? research.runner.slice(0, 40) : actor,
+            pages_fetched: Array.isArray(research.pages_fetched) ? research.pages_fetched : [],
+            emails: Array.isArray(research.emails) ? research.emails : [],
+            people: Array.isArray(research.people) ? research.people : [],
+            phones: Array.isArray(research.phones) ? research.phones : [],
+            facts: Array.isArray(research.facts) ? research.facts : [],
+            summary: typeof research.summary === 'string' ? research.summary : `${actor} researched the company`,
+          }
+          // Reuse the completion transaction; no research writes survive a failed completion.
+          applied = await applyResearchResult({ query: q.query.bind(q), tx: (fn) => fn(q) }, clean, actor, { task_id: tid, claim_attempt: claimAttempt })
+          return { ...result, applied }
+        } : undefined,
+      })
       return applied === undefined ? done : { ...done, applied }
     },
   },
   fail_task: {
-    args: '{task_id, error, retry? (default true while attempts remain)}',
-    run: (db, actor, a) => failTask(db, actor, id(a.task_id), { error: String(a.error ?? ''), retry: a.retry === undefined ? undefined : Boolean(a.retry) }),
+    args: '{task_id, claim_attempt?: attempts from claim_task (required after first claim), error, retry? (default true while attempts remain)}',
+    run: (db, actor, a) => failTask(db, actor, id(a.task_id), { error: String(a.error ?? ''), retry: a.retry === undefined ? undefined : Boolean(a.retry), claim_attempt: a.claim_attempt == null ? undefined : Number(a.claim_attempt) }),
   },
   handoff_task: {
-    args: '{task_id, to: actor id, note}',
-    run: (db, actor, a) => handoffTask(db, actor, id(a.task_id), { to: String(a.to ?? ''), note: String(a.note ?? '') }),
+    args: '{task_id, claim_attempt?: attempts from claim_task (required after first claim), to: actor id, note}',
+    run: (db, actor, a) => handoffTask(db, actor, id(a.task_id), { to: String(a.to ?? ''), note: String(a.note ?? ''), claim_attempt: a.claim_attempt == null ? undefined : Number(a.claim_attempt) }),
   },
   update_task: {
     args: '{task_id, status?: queued|blocked|cancelled|done, assigned_to?, priority?, title?}',
@@ -355,17 +359,16 @@ export const OPS: Record<string, Op> = {
     },
   },
   send_message: {
-    args: '{to: actor id, body, task_id?}  -- a direct message to a person or agent; it goes out on their channels at once',
-    run: (db, actor, a) => sendMessage(db, actor, { to: String(a.to ?? ''), body: String(a.body ?? ''), task_id: a.task_id == null ? null : id(a.task_id) }),
+    args: '{to: actor id, body, task_id?, no_reply?: boolean (informational reply; do not start another automatic run)}  -- a direct message to a person or agent; it goes out on their channels at once',
+    run: (db, actor, a) => sendMessage(db, actor, { to: String(a.to ?? ''), body: String(a.body ?? ''), task_id: a.task_id == null ? null : id(a.task_id), no_reply: a.no_reply === true }),
   },
   feed: {
     args: '{after_id?, limit?}  -- your new events (assignments, handoffs, mentions, messages, relay jobs). Ack each with feed_ack; unacked ones come back after 2 min',
     run: async (db, actor, a) => {
       await touchActor(db, actor)
-      const items = await feed(db, actor, { after_id: a.after_id == null ? null : Number(a.after_id), limit: a.limit == null ? undefined : Number(a.limit) })
-      // Reading the feed also pushes anything due (retries need no cron).
-      await dispatchDue(db).catch(() => undefined)
-      return items
+      // HTTP/MCP callers schedule push work after the response. A slow mail provider
+      // must not block an agent from receiving the events already stored for it.
+      return feed(db, actor, { after_id: a.after_id == null ? null : Number(a.after_id), limit: a.limit == null ? undefined : Number(a.limit) })
     },
   },
   feed_ack: {
