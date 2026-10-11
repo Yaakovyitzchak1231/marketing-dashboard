@@ -17,8 +17,8 @@ export type EntityType = 'company' | 'contact' | 'campaign' | 'campaign_lead' | 
 export const ENTITY_TYPES: readonly EntityType[] = ['company', 'contact', 'campaign', 'campaign_lead', 'task']
 
 export class RegistryError extends Error {
-  status: 400 | 404
-  constructor(message: string, status: 400 | 404 = 400) {
+  status: 400 | 403 | 404 | 409
+  constructor(message: string, status: 400 | 403 | 404 | 409 = 400) {
     super(message)
     this.status = status
   }
@@ -94,6 +94,27 @@ function jsonObjectField(label: string) {
   }
 }
 
+/** Optional positive integer id (campaign.rule_set_id); '' / null clears it. Stored as its decimal text. */
+function optionalIdField(label: string) {
+  return (raw: unknown): string | null => {
+    if (raw === null || raw === undefined || raw === '') return null
+    const s = typeof raw === 'number' ? String(raw) : typeof raw === 'string' ? raw.trim() : ''
+    if (!/^\d{1,15}$/.test(s) || Number(s) <= 0) throw new RegistryError(`${label} must be an id number, or empty for none.`)
+    return String(Number(s))
+  }
+}
+
+/** Yes/no (campaign.is_template), stored and compared as 'true' / 'false' (how Postgres booleans read back). */
+function booleanField(label: string) {
+  return (raw: unknown): string => {
+    if (raw === true || raw === false) return String(raw)
+    const s = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+    if (['true', 'yes', '1', 'on'].includes(s)) return 'true'
+    if (['false', 'no', '0', 'off'].includes(s)) return 'false'
+    throw new RegistryError(`${label} must be yes or no.`)
+  }
+}
+
 // ---------------------------------------------------------------- the registry
 
 /** Reused by lib/leads/edit-fields.ts (don't duplicate; the #45 definitions live here now). */
@@ -111,7 +132,7 @@ export const FIELD_LABELS: Record<string, string> = {
   first_name: 'First name', last_name: 'Last name', email: 'Email', title: 'Title', phone: 'Phone',
   status: 'Status', name: 'Name', website: 'Website', city: 'City', state: 'State',
   verification_status: 'Email status', stage: 'Stage',
-  goal: 'Goal', notes: 'Notes', owner: 'Owner', pool: 'Pool',
+  goal: 'Goal', notes: 'Notes', owner: 'Owner', pool: 'Pool', rule_set_id: 'Rules', is_template: 'Template',
   note: 'Note', overrides: 'Overrides',
   priority: 'Priority', title_task: 'Title',
 }
@@ -156,6 +177,11 @@ export const REGISTRY: Registry = {
     // lib/campaigns/types.ts's POOLS constant (the old fixed list, used elsewhere, is being retired) —
     // and let the DB's FK refuse an unknown pool; update.ts maps that (code 23503) to "Unknown pool".
     pool: { label: 'Pool', writer: { kind: 'direct', table: 'lp.campaigns' }, validate: slugField('Pool') },
+    // Pool and rules are person-only, owner must be a teammate, status must be live, and a rule set
+    // must be usable: update.ts runs lib/campaigns/store.ts's guardCampaignEdit (the same checks the
+    // old Settings form's updateCampaign ran) before writing any campaign field.
+    rule_set_id: { label: 'Rules', writer: { kind: 'direct', table: 'lp.campaigns' }, validate: optionalIdField('Rules') },
+    is_template: { label: 'Template', writer: { kind: 'direct', table: 'lp.campaigns' }, validate: booleanField('Template') },
   },
   campaign_lead: {
     note: { label: 'Note', writer: { kind: 'direct', table: 'lp.campaign_leads' }, validate: textField('Note', { max: 2000, collapse: false }) },

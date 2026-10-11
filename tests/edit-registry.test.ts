@@ -172,6 +172,55 @@ describe('lib/edit/update — campaign (direct writer)', () => {
   })
 })
 
+describe('lib/edit/update — campaign fields the old Settings form edited (owner, rules, template)', () => {
+  let db: TestDb
+  let campaignId: number
+  beforeAll(async () => {
+    db = await createTestDb()
+    campaignId = await addCampaign(db, 'Fall push')
+  })
+  afterAll(async () => db.close())
+
+  it('owner: a teammate is accepted and logged; an unknown one is refused; empty clears it', async () => {
+    const r = await updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'owner', value: 'tab', via: 'ui' })
+    expect(r).toMatchObject({ changed: true, from: null, to: 'tab' })
+    await expect(updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'owner', value: 'nobody_here' })).rejects.toThrow(/No teammate/)
+    const cleared = await updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'owner', value: '' })
+    expect(cleared).toMatchObject({ changed: true, from: 'tab', to: null })
+  })
+
+  it('is_template: yes/no toggles, one history row per real change, unchanged writes nothing', async () => {
+    const on = await updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'is_template', value: 'true', via: 'ui' })
+    expect(on).toMatchObject({ changed: true, from: 'false', to: 'true' })
+    const again = await updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'is_template', value: 'yes' })
+    expect(again.changed).toBe(false)
+    await expect(updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'is_template', value: 'maybe' })).rejects.toThrow(RegistryError)
+    const rows = (await historyRows(db, 'campaign', campaignId)).filter((x) => x.field === 'is_template')
+    expect(rows).toEqual([{ field: 'is_template', old_value: 'false', new_value: 'true', changed_by: 'owner', via: 'ui', note: null }])
+  })
+
+  it('rule_set_id: must be an id; a rule set that does not exist is refused; empty means the pool rules', async () => {
+    await expect(updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'rule_set_id', value: 'abc' })).rejects.toThrow(/id number/)
+    await expect(updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'rule_set_id', value: '987654' })).rejects.toThrow(RegistryError)
+    const none = await updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'rule_set_id', value: '' })
+    expect(none.changed).toBe(false)
+  })
+
+  it('pool and rules stay person-only: an agent writing through update_entity is refused (403) and nothing changes', async () => {
+    await expect(updateEntity(db, 'tab', { type: 'campaign', id: campaignId, field: 'pool', value: 'ai_agency' })).rejects.toMatchObject({ status: 403 })
+    await expect(updateEntity(db, 'tab', { type: 'campaign', id: campaignId, field: 'rule_set_id', value: '' })).rejects.toMatchObject({ status: 403 })
+    const { rows } = await db.query<{ pool: string }>('select pool from lp.campaigns where id = $1', [campaignId])
+    expect(rows[0].pool).toBe('jeweler')
+    // an agent can still change the fields it always could
+    const g = await updateEntity(db, 'tab', { type: 'campaign', id: campaignId, field: 'goal', value: 'Book 5 demos' })
+    expect(g.changed).toBe(true)
+  })
+
+  it('status must be a live campaign status', async () => {
+    await expect(updateEntity(db, 'owner', { type: 'campaign', id: campaignId, field: 'status', value: 'not_a_status' })).rejects.toThrow(/not a campaign status/)
+  })
+})
+
 describe('lib/edit/update — campaign_lead (composite id, per-campaign note context)', () => {
   let db: TestDb
   let campaignId: number

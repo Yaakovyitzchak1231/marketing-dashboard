@@ -10,10 +10,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import {
-  addStatus, archiveCampaign, createCampaign, duplicateCampaign, makeOwnRules, setStatusActive, updateCampaign,
+  addStatus, archiveCampaign, createCampaign, duplicateCampaign, makeOwnRules, setStatusActive,
 } from '@/lib/campaigns/store'
 import { addLeadsByFilter, addLeadsByIds, parseLeadPatch, removeLeads, updateCampaignLead } from '@/lib/campaigns/leads'
-import { CampaignError, CAMPAIGN_FIELDS, parseCampaignPatch, parseIds, parsePick } from '@/lib/campaigns/types'
+import { CampaignError, parseCampaignPatch, parseIds, parsePick } from '@/lib/campaigns/types'
 
 const ME = 'owner'
 
@@ -64,26 +64,6 @@ export async function createCampaignAction(f: FormData) {
     )
     const c = await createCampaign(db(), ME, p as { name: string }, { via: 'dashboard' })
     return `/campaigns/${c.id}`
-  })
-}
-
-export async function updateCampaignAction(f: FormData) {
-  const id = idOf(f)
-  await guarded(`/campaigns/${id}`, async () => {
-    const body: Record<string, unknown> = {}
-    for (const k of CAMPAIGN_FIELDS) {
-      if (k === 'is_template') {
-        if (f.has('is_template_present')) body.is_template = f.get('is_template') === 'on'
-        continue
-      }
-      if (f.has(k)) body[k] = s(f, k) || null
-    }
-    if (body.name === null) body.name = ''
-    if (body.pool === null) delete body.pool
-    if (body.status === null) delete body.status
-    const r = await updateCampaign(db(), ME, id, parseCampaignPatch(body))
-    revalidatePath(`/campaigns/${id}`)
-    return `/campaigns/${id}?saved=${r.changes.length}`
   })
 }
 

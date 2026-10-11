@@ -13,7 +13,7 @@ import { POOLS, POOL_LABELS, overridesToLines, parsePick, type LeadPick } from '
 import { CONTACT_STATUSES, STAGES, VERIFICATION_STATUSES } from '@/lib/leads/types'
 import {
   addLeadsByFilterAction, addLeadsByIdsAction, archiveCampaignAction, duplicateCampaignAction, makeOwnRulesAction, removeLeadsAction,
-  updateCampaignAction, updateCampaignLeadAction,
+  updateCampaignLeadAction,
 } from '@/app/actions/campaigns'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
@@ -316,7 +316,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
           </section>
 
           <section aria-labelledby="quick-h">
-            <SectionHeader id="quick-h" title="Quick edit" meta={<HistoryDrawer type="campaign" id={id} />} />
+            <SectionHeader id="quick-h" title="Settings" meta={<HistoryDrawer type="campaign" id={id} />} />
             <Card className="space-y-2 p-3">
               <label className={LABEL}>Name<InlineEditCell type="campaign" id={id} field="name" value={campaign.name} label="Campaign name" className="w-full" /></label>
               <label className={LABEL}>Goal<InlineEditCell type="campaign" id={id} field="goal" value={campaign.goal} label="Goal" placeholder="No goal set" className="w-full" /></label>
@@ -332,48 +332,60 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                   options={statuses.map((s) => ({ value: s.id, label: s.label })).concat(statusKnown ? [] : [{ value: campaign.status, label: campaign.status }])}
                 />
               </label>
-              <p className="text-[11px] text-ink-faint">Saves instantly, one field at a time — logged in History above. For pool, owner, rules or template, use Settings below.</p>
+              <label className={LABEL}>
+                Pool
+                <InlineEditCell
+                  type="campaign"
+                  id={id}
+                  field="pool"
+                  value={campaign.pool}
+                  label="Pool"
+                  options={POOLS.map((p) => ({ value: p as string, label: POOL_LABELS[p] })).concat((POOLS as readonly string[]).includes(campaign.pool) ? [] : [{ value: campaign.pool, label: campaign.pool }])}
+                />
+              </label>
+              <label className={LABEL}>
+                Owner
+                <InlineEditCell
+                  type="campaign"
+                  id={id}
+                  field="owner"
+                  value={campaign.owner ?? ''}
+                  label="Owner"
+                  options={[{ value: '', label: 'Nobody' }, ...actors.map((a) => ({ value: a.id, label: a.display_name }))]}
+                />
+              </label>
+              <label className={LABEL}>
+                Rules
+                {ruleSets.length ? (
+                  <InlineEditCell
+                    type="campaign"
+                    id={id}
+                    field="rule_set_id"
+                    value={campaign.rule_set_id == null ? '' : String(campaign.rule_set_id)}
+                    label="Rules"
+                    options={[{ value: '', label: 'The pool’s rules' }, ...ruleSets.map((r) => ({ value: String(r.id), label: `${r.name} (${r.scope})` }))]}
+                  />
+                ) : (
+                  <span className="block text-[12px] text-ink-muted">The pool’s rules (rules update not merged yet)</span>
+                )}
+              </label>
+              <label className={LABEL}>
+                Template (shown under Templates; new campaigns can start from it)
+                <InlineEditCell
+                  type="campaign"
+                  id={id}
+                  field="is_template"
+                  value={campaign.is_template ? 'true' : 'false'}
+                  label="Template"
+                  options={[{ value: 'false', label: 'No' }, { value: 'true', label: 'Yes' }]}
+                />
+              </label>
+              <p className="text-[11px] text-ink-faint">Click a value to change it; it saves on its own, one field at a time, and each change is in History above. Pool and rules can only be changed by a person.</p>
             </Card>
           </section>
 
-          <section aria-labelledby="set-h">
-            <SectionHeader id="set-h" title="Settings" />
-            <Card className="p-3">
-              <form action={updateCampaignAction} className="space-y-3">
-                <input type="hidden" name="campaign_id" value={id} />
-                <label className={LABEL}>Name<input name="name" required maxLength={120} defaultValue={campaign.name} className={INPUT} /></label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className={LABEL}>Pool
-                    <select name="pool" defaultValue={campaign.pool} className={INPUT}>
-                      {POOLS.map((p) => <option key={p} value={p}>{POOL_LABELS[p]}</option>)}
-                    </select>
-                  </label>
-                  <label className={LABEL}>Status
-                    <select name="status" defaultValue={campaign.status} className={INPUT}>
-                      {statusKnown ? null : <option value={campaign.status}>{campaign.status}</option>}
-                      {statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-                <label className={LABEL}>Owner
-                  <select name="owner" defaultValue={campaign.owner ?? ''} className={INPUT}>
-                    <option value="">Nobody</option>
-                    {actors.map((a) => <option key={a.id} value={a.id}>{a.display_name}</option>)}
-                  </select>
-                </label>
-                <label className={LABEL}>Rules
-                  <select name="rule_set_id" defaultValue={campaign.rule_set_id ?? ''} className={INPUT} disabled={!ruleSets.length}>
-                    <option value="">{ruleSets.length ? 'The pool’s rules' : 'The pool’s rules (rules update not merged yet)'}</option>
-                    {ruleSets.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.scope})</option>)}
-                  </select>
-                </label>
-                <label className={LABEL}>Goal<input name="goal" maxLength={500} defaultValue={campaign.goal ?? ''} className={INPUT} /></label>
-                <label className={LABEL}>Notes<textarea name="notes" rows={4} maxLength={5000} defaultValue={campaign.notes ?? ''} className={INPUT} /></label>
-                <input type="hidden" name="is_template_present" value="1" />
-                <label className="flex items-center gap-2 text-[12px] text-ink-muted"><input type="checkbox" name="is_template" defaultChecked={campaign.is_template} /> Template (shown under Templates; new campaigns can start from it)</label>
-                <button className={BUTTON_PRIMARY}>Save settings</button>
-              </form>
-            </Card>
+          <section aria-labelledby="archive-h">
+            <SectionHeader id="archive-h" title="Archive" />
             <form action={archiveCampaignAction} className="mt-3 flex items-center gap-2">
               <input type="hidden" name="campaign_id" value={id} />
               <label className="flex items-center gap-1 text-[12px] text-ink-muted"><input type="checkbox" name="confirm" value="yes" required /> sure</label>

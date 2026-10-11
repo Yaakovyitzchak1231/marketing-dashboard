@@ -14,6 +14,15 @@
 import type { Db, Queryable } from '../db/types'
 import { fieldDef, RegistryError, type CompanyPatch, type ContactPatch, type EntityType } from './registry'
 import { editCompany, editContact, LeadEditError } from '../leads/edit'
+import { guardCampaignEdit } from '../campaigns/store'
+import { CampaignError, type CampaignPatch } from '../campaigns/types'
+
+/** The registry's normalized text value -> the typed value updateCampaign's own checks expect. */
+function campaignPatchFor(field: string, next: string | null): CampaignPatch {
+  if (field === 'rule_set_id') return { rule_set_id: next == null ? null : Number(next) }
+  if (field === 'is_template') return { is_template: next === 'true' }
+  return { [field]: next } as CampaignPatch
+}
 
 export type Via = 'ui' | 'ops_api'
 
@@ -140,6 +149,12 @@ export async function updateEntity(db: Db, actor: string, input: UpdateEntityInp
   return db.tx(async (q) => {
     if (type === 'campaign') {
       const id = positiveInt(input.id, 'campaign id')
+      try {
+        await guardCampaignEdit(q, actor, id, campaignPatchFor(input.field, next))
+      } catch (e) {
+        if (e instanceof CampaignError) throw new RegistryError(e.message, e.status)
+        throw e
+      }
       return directUpdate(q, 'campaign', w.table, [{ col: 'id', val: id }], input.field, next, id, actor, via, note, w.trigger === true)
     }
     if (type === 'campaign_lead') {
