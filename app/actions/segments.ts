@@ -76,6 +76,8 @@ export async function aiConfiguredAction(): Promise<{ ok: true; configured: bool
 
 export async function segmentFromTextAction(text: string): Promise<{ ok: true; result: SegmentFromTextOutcome } | Fail> {
   try {
+    // Spends AI credits, so it is a write for role purposes even though it saves nothing.
+    await actorFor('editor')
     const cfg = await getSegmentAiConfig()
     const result = await segmentFromText(text, { config: cfg })
     return { ok: true, result }

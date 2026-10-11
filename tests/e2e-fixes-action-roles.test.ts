@@ -17,7 +17,7 @@ vi.mock('@/lib/auth/session', () => ({
 
 import { mergeAction } from '@/app/actions/merge'
 import { forgetContactAction, setRetentionPolicyAction } from '@/app/actions/retention'
-import { createSegmentAction } from '@/app/actions/segments'
+import { createSegmentAction, segmentFromTextAction } from '@/app/actions/segments'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 let db: TestDb
@@ -59,6 +59,11 @@ describe('Phase 2 server actions check the role and record the real actor', () =
     expect(still[0].merged_into).toBeNull()
     const { rows: c } = await db.query<{ email: string | null }>('select email from lp.contacts where id = $1', [ct[0].id])
     expect(c[0].email).toBe('x@gema.example')
+  })
+
+  it('a viewer cannot spend AI credits on segment-from-text', async () => {
+    as('viewer', 'viewer-1')
+    expect(await segmentFromTextAction('jewelers in NY')).toEqual({ ok: false, error: 'This needs editor access; you have viewer access.' })
   })
 
   it('signed out is refused too', async () => {
