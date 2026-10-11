@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db'
 import { DbNotConnected, BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { CheckPill, Flash, when } from '@/components/seo/bits'
-import { latestAudits, latestRuns, listFixTasks, listSites, type AuditRow, type FixTask, type SiteRow, type VisRun } from '@/lib/seo/store'
-import { PROVIDERS, providerKey } from '@/lib/seo/visibility'
+import { latestAudits, latestRuns, listFixTasks, listSites, runResults, type VisResult, type AuditRow, type FixTask, type SiteRow, type VisRun } from '@/lib/seo/store'
+import { PROVIDERS, providerKey, visibilitySummary } from '@/lib/seo/visibility'
 import { runAuditAction } from '@/app/actions/seo'
 
 export const dynamic = 'force-dynamic'
@@ -17,10 +17,12 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
   let sites: SiteRow[] = []
   let audits = new Map<number, AuditRow>()
   let runs: VisRun[] = []
+  let results: VisResult[] = []
   let fixes: FixTask[] = []
   let failed = false
   try {
     ;[sites, audits, runs, fixes] = await Promise.all([listSites(db, { activeOnly: true }), latestAudits(db), latestRuns(db), listFixTasks(db, { open: true })])
+    results = await runResults(db, runs.filter((r) => r.answered == null).map((r) => r.id))
   } catch {
     failed = true
   }
@@ -120,17 +122,11 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
           {PROVIDERS.map((p) => {
             const r = runs.find((x) => x.provider === p.id)
             const on = !!providerKey(p)
-            const answered = r && r.status === 'done' ? r.prompt_count : null
             return (
               <Card key={p.id} className="px-4 py-3">
                 <p className="text-[12px] font-medium text-ink">{p.label}</p>
-                {r && r.status === 'done' && r.mentioned != null ? (
-                  <p className="mt-1 text-[13px] text-ink">
-                    <span className="font-numeric text-[18px] font-semibold">{r.mentioned}</span>
-                    <span className="text-ink-faint"> of {answered} answers name TapDash</span>
-                  </p>
-                ) : r && r.status === 'failed' ? (
-                  <p className="mt-1 text-[12px] text-bad">Last run failed</p>
+                {r ? (
+                  <p className="mt-1 text-[13px] text-ink">TapDash: {visibilitySummary(r, results.filter((x) => x.run_id === r.id))}</p>
                 ) : (
                   <p className="mt-1 text-[12px] text-ink-faint">{on ? 'Ready, not run yet' : 'Key not set'}</p>
                 )}

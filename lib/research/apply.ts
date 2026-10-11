@@ -17,6 +17,7 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { isRoleAddress, normalizeDomain, normalizeEmail, normalizePhone } from '../leads/normalize.ts'
 import { logEvent } from '../ops/events.ts'
+import { assertTaskClaim, requireRunnableActor } from '../ops/core.ts'
 import type { ResearchResult } from './types.ts'
 
 export interface ApplySummary {
@@ -33,6 +34,7 @@ export interface ApplySummary {
 
 export interface ApplyOpts {
   task_id?: number | null
+  claim_attempt?: number
   /** sources.kind for the rows this writes; default 'research'. */
   source_kind?: string
   /** sources.source_ref; default '<runner>:<task_id or date>'. */
@@ -73,6 +75,10 @@ async function addSource(q: Queryable, company_id: number, contact_id: number | 
 
 export async function applyResearchResult(db: Db, result: ResearchResult, actor: string, opts: ApplyOpts = {}): Promise<ApplySummary> {
   return db.tx(async (q) => {
+    await requireRunnableActor(q, actor)
+    // Task-driven callers pass a fenced Db / completion transaction. Standalone
+    // imports have no claim; an explicitly supplied attempt is checked here too.
+    if (opts.task_id && opts.claim_attempt !== undefined) await assertTaskClaim(q, actor, opts.task_id, opts.claim_attempt)
     const co = await q.query<{ id: number; name: string; website_domain: string | null; owner_name: string | null; phone_e164: string | null; stage: string }>(
       'select id, name, website_domain, owner_name, phone_e164, stage from lp.companies where id = $1 for update',
       [result.company_id],

@@ -98,6 +98,9 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
   pinsRef.current = pins
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const editAt = useRef<Record<string, number>>({})
+  // Sending/discarding is final for a draft ID, even before React renders the
+  // new state or while a recovery timer / older network save is still pending.
+  const closedDrafts = useRef(new Set<string>())
   const nameOf = useCallback((id: string) => recipients.find((r) => r.id === id)?.display_name ?? id, [recipients])
   const nameRef = useRef(nameOf)
   nameRef.current = nameOf
@@ -108,12 +111,14 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
     async (clientId: string) => {
       clearTimeout(timers.current[clientId])
       delete timers.current[clientId]
+      if (closedDrafts.current.has(clientId)) return
       const local = loadLocal(storage())[clientId]
       const p = pinsRef.current.find((x) => x.client_id === clientId) ?? (local ? localToPin(local, nameRef.current) : undefined)
       if (!p || p.status !== 'draft') return
       const stamp = editAt.current[clientId] ?? Date.now()
       setSaveState((s) => ({ ...s, [clientId]: 'saving' }))
       const r = await actions.save(pinToLocal(p, stamp, null)).catch(() => ({ ok: false, error: 'offline' }) as Fail)
+      if (closedDrafts.current.has(clientId)) return
       if (r.ok) {
         // Confirmed: remember which edit the server holds. Newer edits typed meanwhile stay unsynced.
         const latest = editAt.current[clientId] ?? stamp
@@ -347,7 +352,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
 
   const send = useCallback(
     async (ids: string[]) => {
-      const ready = ids.filter((id) => pinsRef.current.find((p) => p.client_id === id)?.body.trim())
+      const ready = ids.filter((id) => !closedDrafts.current.has(id) && pinsRef.current.find((p) => p.client_id === id && p.status === 'draft')?.body.trim())
       if (!ready.length) return setNotice('Write something first.')
       setBusy(true)
       setNotice(null)
@@ -356,7 +361,18 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
       setBusy(false)
       if (!r.ok) return setNotice(r.error)
       const ok = r.results.filter((x) => x.ok)
-      for (const x of ok) removeLocal(storage(), x.client_id)
+      for (const x of ok) {
+        closedDrafts.current.add(x.client_id)
+        clearTimeout(timers.current[x.client_id])
+        delete timers.current[x.client_id]
+        removeLocal(storage(), x.client_id)
+      }
+      // The send receipt is evidence of success even if the following list
+      // request fails. Do not leave a successfully sent comment editable.
+      setPins((all) => all.map((p) => {
+        const receipt = ok.find((x) => x.client_id === p.client_id)
+        return receipt && p.status === 'draft' ? { ...p, id: receipt.id ?? p.id, status: 'sent', unsynced: false } : p
+      }))
       const bad = r.results.filter((x) => !x.ok)
       setNotice(bad.length ? `${ok.length} sent. ${bad.length} not sent: ${bad[0].error}` : ok.length === 1 ? 'Sent.' : `${ok.length} comments sent.`)
       await refresh()
@@ -366,12 +382,24 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
 
   const discard = useCallback(
     async (clientId: string) => {
+      const before = pinsRef.current.find((p) => p.client_id === clientId)
+      closedDrafts.current.add(clientId)
       clearTimeout(timers.current[clientId])
       delete timers.current[clientId]
       removeLocal(storage(), clientId)
       setPins((all) => all.filter((p) => p.client_id !== clientId))
       setOpenId((o) => (o === clientId ? null : o))
-      await actions.discard(clientId).catch(() => null)
+      const r = await actions.discard(clientId).catch(() => null)
+      if (r?.ok) return
+      // The server still holds this draft. Leaving the ID closed would hide a draft that exists,
+      // and saveNow()/send() would skip it, so it could never be saved or sent again until a
+      // remount. Reopen it, put the text back on this device, and say so.
+      closedDrafts.current.delete(clientId)
+      if (before) {
+        putLocal(storage(), pinToLocal(before, editAt.current[clientId] ?? Date.now(), before.unsynced ? null : Date.now()))
+        setPins((all) => (all.some((p) => p.client_id === clientId) ? all : [before, ...all]))
+      }
+      setNotice('Could not discard that draft. It is still here.')
     },
     [actions],
   )

@@ -10,7 +10,9 @@ import { getDb } from '@/lib/db'
 import { OpsError, updateTask } from '@/lib/ops/core'
 import { addCompetitor, addPrompt, addSite, getFixTask, listSites, parsePaths, removeCompetitor, runSiteAudit, runVisibility, setPromptActive, setSiteActive } from '@/lib/seo/store'
 import { applyChange, undoChange, type ApplyInput } from '@/lib/seo/changes'
-import type { ProviderId } from '@/lib/seo/visibility'
+import { visibilitySummary, type ProviderId } from '@/lib/seo/visibility'
+import { kickDelivery } from '@/lib/notify/kick'
+import { createCitationTask } from '@/lib/seo/citations'
 
 const ME = 'owner'
 
@@ -48,6 +50,7 @@ async function attempt(f: FormData, fallback: string, fn: () => Promise<string>)
     if (e && typeof e === 'object' && 'digest' in e) throw e // a redirect from inside fn
     backTo(f, fallback, { err: (e as Error).message.slice(0, 300) })
   }
+  kickDelivery(getDb())
   backTo(f, fallback, { ok: msg })
 }
 
@@ -93,7 +96,19 @@ export async function runAuditAction(f: FormData) {
 export async function runVisibilityAction(f: FormData) {
   await attempt(f, '/seo/visibility', async () => {
     const run = await runVisibility(db(), ME, s(f, 'provider') as ProviderId)
-    return run.status === 'done' ? `Asked ${run.prompt_count} questions: TapDash named in ${run.mentioned}.` : `Run failed: ${run.error ?? 'no answers'}`
+    return `AI answer check: TapDash ${visibilitySummary(run)}.`
+  })
+}
+
+export async function queueCitationAction(f: FormData) {
+  await attempt(f, '/seo/citations', async () => {
+    const siteId = n(f, 'site_id'), resultId = n(f, 'result_id')
+    const mode = s(f, 'mode')
+    if (!siteId || !resultId || (mode !== 'review' && mode !== 'draft')) throw new OpsError('Choose a site, stored answer and review action')
+    const task = await createCitationTask(db(), ME, { site_id: siteId, result_id: resultId, mode })
+    // Internal fixed target, not a caller-supplied redirect URL.
+    f.set('return_to', `/seo/todos/${task.id}`)
+    return task.created ? 'Evidence-backed task created. No website changes or external requests were made.' : 'That question already has an open task. Its original evidence was preserved.'
   })
 }
 
@@ -139,7 +154,7 @@ export async function updateFixAction(f: FormData) {
     }
     if (op === 'done') {
       await updateTask(db(), ME, id, { status: 'done' })
-      return 'Marked done. The next audit confirms it.'
+      return t.payload.citation_evidence ? 'Marked done. Run a new visibility check to measure mentions and citations; task completion does not prove improvement.' : 'Marked done. The next audit confirms it.'
     }
     if (op === 'reopen') {
       await updateTask(db(), ME, id, { status: 'queued' })

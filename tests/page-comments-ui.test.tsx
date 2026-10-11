@@ -164,6 +164,86 @@ describe('the comment layer', () => {
     expect(loadLocal(localStorage)).toEqual({})
   })
 
+  it('a queued recovery save cannot restore a sent draft when the next refresh is offline', async () => {
+    vi.useFakeTimers()
+    const draft = local({ client_id: 'queued-00001', body: 'send this' })
+    putLocal(localStorage, draft)
+    const { a } = fakeActions()
+    vi.mocked(a.list).mockResolvedValueOnce({ ok: true, comments: [], recipients: [] }).mockResolvedValue({ ok: false, error: 'offline' })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {}) // refresh schedules a recovery save for this local draft
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })) })
+    expect(screen.getByRole('heading', { name: 'Drafts (0)' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Sent (1)' })).toBeInTheDocument()
+    expect(loadLocal(localStorage)).toEqual({})
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    expect(a.save).toHaveBeenCalledTimes(1)
+    expect(loadLocal(localStorage)).toEqual({})
+  })
+
+  it('an in-flight autosave cannot restore a draft after sending succeeds', async () => {
+    vi.useFakeTimers()
+    const draft = local({ client_id: 'saving-00001', body: 'send this' })
+    putLocal(localStorage, draft)
+    const { a } = fakeActions()
+    vi.mocked(a.list).mockResolvedValueOnce({ ok: true, comments: [], recipients: [] }).mockResolvedValue({ ok: false, error: 'offline' })
+    let finish!: (r: Awaited<ReturnType<CommentActions['save']>>) => void
+    vi.mocked(a.save).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    render(<CommentLayer actions={a} />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    expect(a.save).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })) })
+    expect(a.send).toHaveBeenCalledTimes(1)
+    expect(loadLocal(localStorage)).toEqual({})
+    await act(async () => { finish({ ok: true, comment: view({ client_id: draft.client_id, body: 'send this' }) }) })
+    expect(loadLocal(localStorage)).toEqual({})
+  })
+
+  it('a partial send keeps the failed draft editable and permits a later retry', async () => {
+    vi.useFakeTimers()
+    putLocal(localStorage, local({ client_id: 'sent-0000001', body: 'first' }))
+    putLocal(localStorage, local({ client_id: 'retry-000001', body: 'second' }))
+    const { a } = fakeActions()
+    vi.mocked(a.list).mockResolvedValueOnce({ ok: true, comments: [], recipients: [] }).mockResolvedValue({ ok: false, error: 'offline' })
+    vi.mocked(a.send).mockResolvedValueOnce({ ok: true, results: [
+      { client_id: 'sent-0000001', ok: true, id: 1 },
+      { client_id: 'retry-000001', ok: false, error: 'unavailable' },
+    ] })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send all 2' })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    expect(Object.keys(loadLocal(localStorage))).toEqual(['retry-000001'])
+    expect(screen.getByRole('heading', { name: 'Drafts (1)' })).toBeInTheDocument()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })) })
+    expect(a.send).toHaveBeenLastCalledWith(['retry-000001'])
+    expect(loadLocal(localStorage)).toEqual({})
+    expect(screen.getByRole('heading', { name: 'Sent (2)' })).toBeInTheDocument()
+  })
+
+  it('an in-flight autosave cannot restore a discarded draft before the next render', async () => {
+    vi.useFakeTimers()
+    const main = page()
+    let finish!: (r: Awaited<ReturnType<CommentActions['save']>>) => void
+    const { a } = fakeActions({ save: vi.fn<CommentActions['save']>(() => new Promise((resolve) => { finish = resolve })) })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    fireEvent.click(main.querySelector('h1')!)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    const [draft] = Object.values(loadLocal(localStorage))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      finish({ ok: true, comment: view({ client_id: draft.client_id }) })
+    })
+    expect(a.discard).toHaveBeenCalledWith(draft.client_id)
+    expect(loadLocal(localStorage)).toEqual({})
+    expect(screen.queryByRole('dialog', { name: 'New comment' })).toBeNull()
+  })
+
   it('a sent comment shows its thread, status and a reply box', async () => {
     // The test router sits on '/', so the comment lives there; ?pin=5 opens it.
     window.history.replaceState(null, '', '/?pin=5')
@@ -188,6 +268,24 @@ describe('the comment layer', () => {
       window.dispatchEvent(new Event('focus'))
     })
     expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
+  })
+
+  it('a failed discard puts the draft back instead of hiding it', async () => {
+    vi.useFakeTimers()
+    const main = page()
+    const { a } = fakeActions({ discard: vi.fn(async () => ({ ok: false as const, error: 'still there' })) })
+    render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    await act(async () => { fireEvent.click(main.querySelector('h1')!) })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment' }), { target: { value: 'keep this' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete draft' })) })
+    expect(a.discard).toHaveBeenCalled()
+    expect(Object.values(loadLocal(localStorage)).map((d) => d.body)).toEqual(['keep this'])
+    expect(screen.getByRole('button', { name: /keep this/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /My comments/ }))
+    expect(screen.getByText('Could not discard that draft. It is still here.')).toBeInTheDocument()
   })
 
   it('a pin closed before anything was written is thrown away', async () => {
