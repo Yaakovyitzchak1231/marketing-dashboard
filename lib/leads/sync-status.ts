@@ -16,6 +16,7 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { normalizeEmail } from './normalize.ts'
 import { sheetStatus } from './import.ts'
+import { addSuppressionIn } from '../suppressions/store.ts'
 
 export interface StatusSyncStats {
   rows: number
@@ -105,6 +106,18 @@ export async function syncContactStatuses(
         where c.id = v.id`,
       [changes.map((c) => c.contact_id), changes.map((c) => c.to)],
     )
+    // Item 1.8: a Sheet-driven move to do-not-contact (or bounced) is also a global
+    // suppression, so it is excluded from every campaign's push, not just this one's.
+    for (const c of changes) {
+      if (c.to === 'do-not-contact' || c.to === 'bounced') {
+        await addSuppressionIn(q, opts.actor, {
+          email: c.email,
+          reason: c.to === 'bounced' ? 'bounced' : 'do_not_contact',
+          source: 'import',
+          note: `From the Lead Master status sync (${c.from} -> ${c.to})`,
+        })
+      }
+    }
     const summary = Object.entries(stats.transitions).map(([k, n]) => `${n.toLocaleString('en-US')} ${k}`).join(', ')
     await q.query('insert into lp.events (actor, kind, summary, data) values ($1, $2, $3, $4)', [
       opts.actor,

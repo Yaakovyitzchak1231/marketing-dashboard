@@ -10,6 +10,9 @@ import { parseLeadQuery } from '@/lib/leads/filters'
 import type { LeadListRow, KanbanColumn, LeadGroup } from '@/lib/leads/queries'
 import { STAGES } from '@/lib/leads/types'
 
+vi.mock('server-only', () => ({}))
+vi.mock('@/app/actions/edit', () => ({ updateEntityAction: vi.fn(), entityHistoryAction: vi.fn() }))
+
 const { pathname } = vi.hoisted(() => ({ pathname: { value: '/' } }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),

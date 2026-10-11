@@ -91,6 +91,28 @@ Tab's channel is email to its mailbox (seeded by migration 0013); a new mail wak
 and Tab works the task through this API with its own key.
 
 
+## 7. Tools hub (lib/integrations/ops.ts)
+
+The tools Yaakov runs next to the dashboard (Warmbly, Listmonk, Miniflux,
+changedetection.io, Umami on his OVH server; the build tracker sheet and the
+plan doc) are rows in `lp.integrations`, never hard-coded links. The OVH
+background runner (`docs/RUNNER-integrations.md`) polls each tool's own API
+and writes health + numbers here; the dashboard never calls a tool directly.
+
+| op | args | notes |
+|---|---|---|
+| `list_integrations` | `{active_only?}` | every tool/link row, sorted |
+| `get_integration` | `{id}` | one row |
+| `put_integration` | `{id, name, kind, description?, url?, api_url?, reachable_from?, settings_prefix?, visibility?, sort?, active?}` | owner only |
+| `report_integration_health` | `{id, status (ok\|degraded\|down\|unknown), detail?}` | the runner (`system`) or owner |
+| `put_integration_snapshots` | `{id, snapshots: [{metric, value, dims?, data?, campaign_id?}], job_run_id?}` | batch; the runner (`system`) or owner; `value: null` means the tool didn't say |
+| `latest_integration_metrics` | `{id?, campaign_id?}` | the latest snapshot per (integration, metric, campaign) |
+| `campaign_for_newsletter_list` | `{list}` | `{campaign_id}` via `lp.campaign_profiles.newsletter_list`, or `{campaign_id: null}` |
+| `campaign_for_utm_campaign` | `{utm_campaign}` | `{campaign_id}` via `lp.campaign_profiles.utm.campaign`, or `{campaign_id: null}` |
+
+The dashboard shows this at `/tools`: a card per active tool (link, health,
+latest numbers, optionally filtered to one campaign), docs/sheets as plain
+link cards.
 ## 7. Background jobs (the runner on Yaakov's OVH server)
 
 `lp.jobs` is the schedule; `lp.job_runs` is the log. A small runner service (not deployed yet — see
