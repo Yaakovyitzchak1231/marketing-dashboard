@@ -120,3 +120,14 @@ export async function isOwnerActor(q: Queryable, actor: string): Promise<boolean
 export async function requireOwnerActor(q: Queryable, actor: string, message: string): Promise<void> {
   if (!(await isOwnerActor(q, actor))) throw new OpsError(message, 403)
 }
+
+/**
+ * Throws OpsError 403 unless `actor` is an Owner or the runner's own 'system'
+ * actor. For ops that change how every lead is judged or run (job definitions,
+ * score models, recomputing scores), where the nightly runner must keep working
+ * but an agent key or an Editor must not.
+ */
+export async function requireOwnerOrSystem(q: Queryable, actor: string, message: string): Promise<void> {
+  if (actor === 'system') return
+  await requireOwnerActor(q, actor, message)
+}

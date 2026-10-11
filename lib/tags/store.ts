@@ -65,7 +65,7 @@ async function writeTagHistory(q: Queryable, tag: string, field: string, from: s
 }
 
 async function companiesWithTag(q: Queryable, tag: string): Promise<{ id: number; tags: string[] }[]> {
-  const { rows } = await q.query<{ id: number; tags: string[] }>(`select id, tags from lp.companies where $1 = any(tags)`, [tag])
+  const { rows } = await q.query<{ id: number; tags: string[] }>(`select id, tags from lp.companies where $1 = any(tags) and merged_into is null`, [tag])
   return rows
 }
 
@@ -126,12 +126,27 @@ async function replaceOn(q: Queryable, ids: number[], from: string, to: string):
   await q.query(
     `update lp.companies
         set tags = case when $2 = any(tags) then array_remove(tags, $1) else array_replace(tags, $1, $2) end
-      where id = any($3::bigint[]) and $1 = any(tags)`,
+      where id = any($3::bigint[]) and $1 = any(tags) and merged_into is null`,
     [from, to, ids],
   )
 }
 
 /** Which leads a tag change should touch. One lead, the leads the user selected, or a segment (static list = its members; dynamic = its rules). */
+/** Most leads an Editor (or an agent key) may retag in one change. Owners are not limited (Phase 2 review, #87 finding 6). */
+export const EDITOR_TAG_CHANGE_CAP = 500
+
+/** A dynamic segment matching more than this is refused for a tag change, so the confirm count is never a truncated set. */
+export const MAX_SEGMENT_TAG_SCOPE = 30_000
+
+/** Who is making a tag change. Default is the safe one: not an owner, so capped. */
+export interface TagChangeActor {
+  isOwner: boolean
+}
+
+export function editorCapMessage(n: number): string {
+  return `This changes ${plural(n)}. Changes over ${EDITOR_TAG_CHANGE_CAP} leads need an owner.`
+}
+
 export interface TagScope {
   company_id?: number | null
   company_ids?: number[] | null
@@ -169,14 +184,15 @@ async function scopeCompanyIds(q: Queryable, scope: TagScope): Promise<{ ids: nu
     )
     ids = m.rows.map((r) => Number(r.id))
   } else {
-    ids = await companyIdsForDefinition(q, seg.definition)
+    ids = await companyIdsForDefinition(q, seg.definition, MAX_SEGMENT_TAG_SCOPE + 1)
+    if (ids.length > MAX_SEGMENT_TAG_SCOPE) throw new TagError(`That segment matches more than ${MAX_SEGMENT_TAG_SCOPE} leads. Use a narrower segment.`)
   }
   return { ids, label: `segment "${seg.name}"`, single: false }
 }
 
 async function targetsCarrying(q: Queryable, ids: number[], tag: string): Promise<number[]> {
   if (!ids.length) return []
-  const { rows } = await q.query<{ id: number }>(`select id from lp.companies where id = any($1::bigint[]) and $2 = any(tags) order by id`, [ids, tag])
+  const { rows } = await q.query<{ id: number }>(`select id from lp.companies where id = any($1::bigint[]) and $2 = any(tags) and merged_into is null order by id`, [ids, tag])
   return rows.map((r) => Number(r.id))
 }
 
@@ -190,12 +206,14 @@ export async function previewTagChange(q: Queryable, input: { from: string } & T
 /**
  * Change tag `from` to `to` on one lead, or on the selected leads / a segment
  * (with `expected_count` confirmed). Leads outside the scope keep `from`.
- * One audit row; no per-lead timeline rows.
+ * One audit row; no per-lead timeline rows. A non-owner (`who`, default not an
+ * owner) may change at most EDITOR_TAG_CHANGE_CAP leads in one go.
  */
 export async function changeTagOnLeads(
   db: Db,
   actor: string,
   input: { from: string; to: string; expected_count?: number | null; via?: TagVia } & TagScope,
+  who: TagChangeActor = { isOwner: false },
 ): Promise<{ companies_updated: number; scope: string }> {
   const from = cleanTag(input.from, 'from')
   const to = cleanTag(input.to, 'to')
@@ -203,12 +221,13 @@ export async function changeTagOnLeads(
   return db.tx(async (q) => {
     const { ids, label, single } = await scopeCompanyIds(q, input)
     if (single) {
-      const exists = await q.query(`select 1 from lp.companies where id = $1`, [ids[0]])
+      const exists = await q.query(`select 1 from lp.companies where id = $1 and merged_into is null`, [ids[0]])
       if (!exists.rows.length) throw new TagError(`No company ${ids[0]}.`, 404)
     }
     const targets = await targetsCarrying(q, ids, from)
     checkExpected(input.expected_count, targets.length, !single)
     if (!targets.length) throw new TagError(single ? `That lead doesn't have the tag "${from}".` : `None of those leads has the tag "${from}".`, 404)
+    if (!who.isOwner && targets.length > EDITOR_TAG_CHANGE_CAP) throw new TagError(editorCapMessage(targets.length), 403)
     await replaceOn(q, targets, from, to)
     await q.query(`insert into lp.tag_defs (tag, created_by) values ($1,$2) on conflict (tag) do nothing`, [to, actor])
     await writeTagHistory(q, from, 'change', from, to, actor, `changed "${from}" to "${to}" on ${plural(targets.length)} (${label})`, input.via)
@@ -219,7 +238,7 @@ export async function changeTagOnLeads(
 /** How many leads carry each tag now: the count a rename / merge confirm step shows. */
 export async function countLeadsWithAnyTag(q: Queryable, tags: string[]): Promise<number> {
   const clean = [...new Set(tags.map((t) => cleanTag(t)))]
-  const { rows } = await q.query<{ n: number }>(`select count(*)::int as n from lp.companies where tags && $1::text[]`, [clean])
+  const { rows } = await q.query<{ n: number }>(`select count(*)::int as n from lp.companies where tags && $1::text[] and merged_into is null`, [clean])
   return rows[0]?.n ?? 0
 }
 
@@ -249,7 +268,7 @@ export async function mergeTags(db: Db, actor: string, input: { tags: string[]; 
   const sources = [...new Set((input.tags ?? []).map((t) => cleanTag(t)))].filter((t) => t !== into)
   if (!sources.length) throw new TagError('tags must list at least one tag other than "into"')
   return db.tx(async (q) => {
-    const { rows } = await q.query<{ id: number }>(`select id from lp.companies where tags && $1::text[]`, [sources])
+    const { rows } = await q.query<{ id: number }>(`select id from lp.companies where tags && $1::text[] and merged_into is null`, [sources])
     checkExpected(input.expected_count, rows.length, true)
     await q.query(
       `update lp.companies c
@@ -257,7 +276,7 @@ export async function mergeTags(db: Db, actor: string, input: { tags: string[]; 
                         select case when x.t = any($1::text[]) then $2 else x.t end as t, min(x.ord) as min_ord
                           from unnest(c.tags) with ordinality as x(t, ord)
                          group by 1) d)
-        where c.tags && $1::text[]`,
+        where c.tags && $1::text[] and c.merged_into is null`,
       [sources, into],
     )
     await q.query(`insert into lp.tag_defs (tag, created_by) values ($1,$2) on conflict (tag) do nothing`, [into, actor])

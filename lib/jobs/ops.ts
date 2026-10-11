@@ -8,7 +8,7 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { isOwnerActor } from '../ops/actor-role.ts'
+import { requireOwnerOrSystem as requireOwnerOrSystemShared } from '../ops/actor-role.ts'
 import { claimDueJobs, finishRun, getJob, listJobRuns, listJobs, reapStale, runNow, setEnabled, upsertJob, type JobStatus } from './store.ts'
 
 type Args = Record<string, unknown>
@@ -16,7 +16,7 @@ type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unkno
 
 /** An Owner (the built-in 'owner' or any active human Owner, see isOwnerActor) or the runner ('system'). */
 async function requireOwnerOrSystem(db: Db, actor: string): Promise<void> {
-  if (actor !== 'system' && !(await isOwnerActor(db, actor))) throw new OpsError('only an owner or the system actor can manage job definitions', 403)
+  await requireOwnerOrSystemShared(db, actor, 'only an owner or the system actor can manage job definitions')
 }
 function requireSystem(actor: string): void {
   if (actor !== 'system') throw new OpsError("only actor 'system' (the runner's own key) can do this", 403)
