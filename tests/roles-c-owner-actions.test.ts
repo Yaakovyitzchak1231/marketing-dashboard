@@ -41,11 +41,11 @@ beforeAll(async () => {
   db = await createTestDb()
   holder.db = db
   // A second human owner, so we can see the audit names the real person.
-  await db.query(
+  await db.tx((q) => q.query(
     `insert into lp.actors (id, kind, display_name, email, role, active) values
        ('ed', 'human', 'Ed Itor', 'ed@example.com', 'editor', true),
        ('izzy', 'human', 'Izzy', 'izzy@example.com', 'owner', true)`,
-  )
+  ), 'owner')
 })
 afterAll(async () => {
   holder.db = null

@@ -6,6 +6,7 @@ import { TeamSection } from '@/components/settings/TeamSection'
 import { DbNotConnected, PageFrame } from '@/components/ops/bits'
 import { Card, SectionHeader } from '@/components/dashboard/primitives'
 import { listTeamMembers, type TeamMemberRow } from '@/lib/team/store'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export default async function UsersRolesPage() {
   try {
     members = await listTeamMembers(db)
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) needsMigration = true
+    if (isUndefinedTable(e)) needsMigration = true
     else throw e
   }
   const isOwner = role === 'owner'

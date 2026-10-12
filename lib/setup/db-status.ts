@@ -1,4 +1,5 @@
 import type { Db } from '@/lib/db/types'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export interface DbStatus {
   connected: boolean
@@ -20,8 +21,7 @@ export async function readDbStatus(db: Db | null): Promise<DbStatus> {
     out.reachable = true
     out.migrationsApplied = m.rows.map((r) => r.filename)
   } catch (e) {
-    const msg = (e as Error).message ?? ''
-    if (/does not exist/i.test(msg)) {
+    if (isUndefinedTable(e)) {
       out.reachable = true
       out.error = 'No tables yet: the migrations have not run. Redeploy the production deployment and they run during the build.'
     } else {

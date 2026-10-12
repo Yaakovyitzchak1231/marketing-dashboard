@@ -3,9 +3,10 @@ import { companyLists, listStaticLists } from '@/lib/segments/lists'
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import { BUTTON } from '@/components/app/PageShell'
 import { addToListAction, removeFromListAction } from '@/app/actions/lists'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 function tableMissing(e: unknown): boolean {
-  return /does not exist/i.test((e as Error)?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 /**

@@ -15,11 +15,11 @@ describe("review fix: second Owner on integrations/jobs/reconcile, Viewer acks, 
   let db: TestDb
   beforeAll(async () => {
     db = await createTestDb()
-    await db.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
+    await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
       ('vera', 'human', 'Vera', true, 'viewer', 'vera@example.com'),
       ('ed', 'human', 'Ed', true, 'editor', 'ed@example.com'),
       ('olga', 'human', 'Olga', true, 'owner', 'olga@example.com')
-      on conflict do nothing`)
+      on conflict do nothing`), 'owner')
     await db.query(`insert into lp.actors (id, kind, display_name) values
       ('hermes', 'agent', 'Hermes'), ('instinct', 'agent', 'Instinct') on conflict do nothing`)
   })

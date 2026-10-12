@@ -1,8 +1,9 @@
 'use server'
 /**
  * The retention sweep's two steps (Yaakov, Oct 11): the owner sees exactly what will be
- * deleted, chooses whether old timeline history goes too (off by default), and confirms.
- * Nothing is deleted without that confirmation. Owner only.
+ * deleted, chooses whether old timeline history goes too (off by default; the preview names
+ * the score models, traits and segments that read those events), and confirms. Nothing is
+ * deleted without that confirmation. Owner only.
  */
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
@@ -30,7 +31,7 @@ export async function previewRetentionSweepAction(): Promise<({ ok: true } & Ret
   }
 }
 
-export async function confirmRetentionSweepAction(input: { includeTimeline: boolean }): Promise<{ ok: true; total_deleted: number; total_timeline_deleted: number } | Fail> {
+export async function confirmRetentionSweepAction(input: { includeTimeline: boolean }): Promise<{ ok: true; total_deleted: number; total_timeline_deleted: number; recompute_queued: string[] } | Fail> {
   const db = getDb()
   if (!db) return NOT_CONNECTED
   try {
@@ -38,7 +39,7 @@ export async function confirmRetentionSweepAction(input: { includeTimeline: bool
     const actor = await currentActorId()
     const r = await retentionSweep(db, actor, { confirm: true, include_timeline: input.includeTimeline === true })
     revalidatePath('/settings')
-    return { ok: true, total_deleted: r.total_deleted, total_timeline_deleted: r.total_timeline_deleted }
+    return { ok: true, total_deleted: r.total_deleted, total_timeline_deleted: r.total_timeline_deleted, recompute_queued: r.recompute_queued }
   } catch (e) {
     return fail(e)
   }

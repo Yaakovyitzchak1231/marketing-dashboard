@@ -20,10 +20,17 @@
  *                        it is not the rule-set/evaluator's Ready/Parked tier,
  *                        which only affects whether a lead UPLOADS to
  *                        Instantly, not whether it can be on a campaign's list.
- *   3. suppressed    -- the company's primary (first-added) contact email is
- *                        suppressed (lp.is_suppressed via checkEmails); a
- *                        company with no contact email at all is never
- *                        suppressed on that account and proceeds.
+ *   3. suppressed    -- ANY of the company's live (not merged away) contacts
+ *                        is suppressed for this campaign or globally (email or
+ *                        domain, via checkEmails on the normalized address) or
+ *                        is marked do-not-contact (contacts.do_not_contact or
+ *                        status 'do-not-contact'). Membership is company-level,
+ *                        so one blocked person at the store keeps the whole
+ *                        store out -- the same rule the campaign lead list uses
+ *                        to park a company (lib/campaigns/leads.ts
+ *                        suppressedByCompany). Contacts with merged_into set
+ *                        are ignored (their surviving row is checked instead).
+ *                        A company with no contacts at all proceeds.
  * What's left goes through addLeadsByIds, which itself treats "already in the
  * campaign" as a no-op (on conflict do nothing) -- so calling this op again
  * (keep_syncing) only ever adds what's new.
@@ -35,7 +42,7 @@ import { getCampaign } from '../campaigns/store.ts'
 import { addLeadsByIds } from '../campaigns/leads.ts'
 import { getSegment, type Segment } from './store.ts'
 import { companyIdsForSegment, companyIdsInSegment } from './match-companies.ts'
-import { checkEmails } from '../suppressions/store.ts'
+import { checkEmails, normalizeEmail } from '../suppressions/store.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -128,16 +135,28 @@ async function addFromSegment(db: Db, actor: string, a: Args): Promise<SegmentSo
 
     const suppressedSet = new Set<number>()
     if (remaining2.length) {
-      // One primary (first-added) contact email per remaining company.
-      const { rows } = await q.query<{ company_id: string | number; email: string }>(
-        `select distinct on (ct.company_id) ct.company_id, ct.email
-           from lp.contacts ct where ct.company_id = any($1::bigint[]) and ct.email is not null
-           order by ct.company_id, ct.id`,
+      // Every live contact of every remaining company, in ONE query (no per-company
+      // round trips, no row cap). email_norm is lower(trim(email)) -- the same
+      // normalization checkEmails applies -- with a fallback for rows written before
+      // email_norm was filled. Merged-away contacts are skipped.
+      const { rows } = await q.query<{ company_id: string | number; email_norm: string | null; dnc: boolean }>(
+        `select ct.company_id,
+                coalesce(ct.email_norm, nullif(lower(trim(ct.email)), '')) as email_norm,
+                (ct.do_not_contact or ct.status = 'do-not-contact') as dnc
+           from lp.contacts ct
+          where ct.company_id = any($1::bigint[])
+            and ct.merged_into is null
+            and (ct.email is not null or ct.email_norm is not null or ct.do_not_contact or ct.status = 'do-not-contact')`,
         [remaining2],
       )
-      if (rows.length) {
-        const checks = await checkEmails(q, rows.map((r) => r.email), campaignId)
-        for (const r of rows) if (checks[r.email]?.suppressed) suppressedSet.add(Number(r.company_id))
+      for (const r of rows) if (r.dnc) suppressedSet.add(Number(r.company_id))
+      const toCheck = rows.filter((r) => r.email_norm && !suppressedSet.has(Number(r.company_id)))
+      if (toCheck.length) {
+        const keys = toCheck.map((r) => normalizeEmail(r.email_norm!))
+        const checks = await checkEmails(q, [...new Set(keys)], campaignId)
+        toCheck.forEach((r, i) => {
+          if (checks[keys[i]]?.suppressed) suppressedSet.add(Number(r.company_id))
+        })
       }
     }
     const remaining3 = remaining2.filter((id) => !suppressedSet.has(id))

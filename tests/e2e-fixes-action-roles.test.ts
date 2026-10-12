@@ -29,10 +29,10 @@ const as = (role: string | null, actor: string) => {
 beforeAll(async () => {
   db = await createTestDb()
   holder.db = db
-  await db.query(
+  await db.tx((q) => q.query(
     `insert into lp.actors (id, kind, display_name, email, role, active)
      values ('ed', 'human', 'Ed Itor', 'ed@example.com', 'editor', true)`,
-  )
+  ), 'owner')
 })
 afterAll(async () => {
   holder.db = null

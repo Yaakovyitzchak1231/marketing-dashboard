@@ -17,8 +17,8 @@ describe('team store (real Postgres via PGlite)', () => {
   beforeEach(async () => {
     // The seeded 'owner' row (migration 0029) must be the sole owner at the
     // start of every test; clear anyone a previous test added.
-    await db.query(`delete from lp.actors where id != 'owner' and kind = 'human'`)
-    await db.query(`update lp.actors set role = 'owner', active = true where id = 'owner'`)
+    await db.tx((q) => q.query(`delete from lp.actors where id != 'owner' and kind = 'human'`), 'owner')
+    await db.tx((q) => q.query(`update lp.actors set role = 'owner', active = true where id = 'owner'`), 'owner')
   })
 
   it('the seeded owner row has role owner after the migration', async () => {
@@ -68,11 +68,19 @@ describe('team store (real Postgres via PGlite)', () => {
 
   it('CAN demote/remove an owner once a second owner exists', async () => {
     const second = await addTeamMember(db, 'owner', { email: 'second@example.com', displayName: 'Second', role: 'owner' })
-    await changeTeamMemberRole(db, 'owner', 'owner', 'editor')
-    const r = await db.query<{ role: string }>(`select role from lp.actors where id = 'owner'`)
+    const third = await addTeamMember(db, 'owner', { email: 'third@example.com', displayName: 'Third', role: 'owner' })
+    await changeTeamMemberRole(db, 'owner', second.id, 'editor')
+    const r = await db.query<{ role: string }>(`select role from lp.actors where id = $1`, [second.id])
     expect(r.rows[0]?.role).toBe('editor')
-    // second is now the only owner; demoting them again should fail.
-    await expect(changeTeamMemberRole(db, second.id, second.id, 'viewer')).rejects.toThrow(/last owner/)
+    await removeTeamMember(db, 'owner', third.id)
+    const t = await db.query<{ active: boolean }>(`select active from lp.actors where id = $1`, [third.id])
+    expect(t.rows[0]?.active).toBe(false)
+    // 0052: the built-in 'owner' row (the ALLOWED_USER_EMAIL login's actor) is never
+    // demoted, even with another owner present: that would lock the permanent owner
+    // out of every database owner check.
+    const fourth = await addTeamMember(db, 'owner', { email: 'fourth@example.com', displayName: 'Fourth', role: 'owner' })
+    await expect(changeTeamMemberRole(db, fourth.id, 'owner', 'editor')).rejects.toThrow(/built-in owner/)
+    await expect(changeTeamMemberRole(db, fourth.id, 'owner', 'editor')).rejects.toThrow(TeamError)
   })
 
   it('rejects a duplicate email and a bad email', async () => {

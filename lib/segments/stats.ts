@@ -12,6 +12,7 @@ import type { Db, Queryable } from '../db/types.ts'
 import type { Segment } from './store.ts'
 import { compileSegment, matchingIds } from './compile.ts'
 import { allFields } from './fields.ts'
+import { isUndefinedTable } from '../db/errors.ts'
 
 export interface SnapshotPoint {
   taken_on: string
@@ -84,7 +85,7 @@ async function avgScore(q: Queryable, entity: 'company' | 'contact', ids: number
     const { rows } = await q.query<{ avg: string | null }>(`select avg(score)::float as avg from lp.scores where ${col} = any($1::bigint[])`, [ids])
     return { avg_score: rows[0]?.avg == null ? null : Number(rows[0].avg), avg_score_field: field }
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) return { avg_score: null, avg_score_field: field }
+    if (isUndefinedTable(e)) return { avg_score: null, avg_score_field: field }
     throw e
   }
 }

@@ -5,6 +5,7 @@ import { Notice } from '@/components/rules/bits'
 import { TD, TH } from '@/components/reports/bits'
 import { listScoreModels } from '@/lib/scoring/engine'
 import { recomputeAllScoresAction, saveScoreModelRulesAction } from '@/app/actions/scoring'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export default async function ScoringSettingsPage({ searchParams }: { searchPara
   try {
     models = await listScoreModels(db)
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) needsMigration = true
+    if (isUndefinedTable(e)) needsMigration = true
     else throw e
   }
 

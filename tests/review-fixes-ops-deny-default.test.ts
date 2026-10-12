@@ -16,12 +16,12 @@ describe('review fix: ops keys for a person are deny-by-default by role', () => 
   let company: number
   beforeAll(async () => {
     db = await createTestDb()
-    await db.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
+    await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
       ('vera', 'human', 'Vera', true, 'viewer', 'vera@example.com'),
       ('ed', 'human', 'Ed', true, 'editor', 'ed@example.com'),
       ('olga', 'human', 'Olga', true, 'owner', 'olga@example.com'),
       ('exowner', 'human', 'Ex Owner', false, 'owner', 'exowner@example.com')
-      on conflict do nothing`)
+      on conflict do nothing`), 'owner')
     await db.query(`insert into lp.actors (id, kind, display_name) values ('hermes', 'agent', 'Hermes') on conflict do nothing`)
     company = await addCompany(db, { name: 'Deny Default Co' })
   })

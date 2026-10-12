@@ -6,6 +6,7 @@
  * ONLY listFieldDefs from here, not the write path.
  */
 import type { Queryable } from '../db/types'
+import { isUndefinedTable } from '../db/errors'
 
 export type FieldEntity = 'company' | 'contact'
 export type FieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'url' | 'boolean'
@@ -85,13 +86,14 @@ export async function listFieldDefs(
 }
 
 /**
- * True when a DB error is Postgres saying a relation/column is missing (the
- * shape of every "migration 0025 hasn't run yet" failure on a preview DB,
- * which never migrates). Never matches a different failure (a bad query, a
- * connection drop, a constraint violation) -- those must still throw.
+ * True only when a DB error is Postgres' undefined_table (SQLSTATE 42P01): the
+ * shape of every "migration 0025 hasn't run yet" failure on a preview DB, which
+ * never migrates. A missing column (42703) or any other failure (a bad query, a
+ * connection drop, a constraint violation) must still throw -- it is a real bug,
+ * not a pending migration (Instinct #86 finding 2; lib/db/errors.ts).
  */
 export function isMissingTableError(e: unknown): boolean {
-  return /does not exist/i.test((e as { message?: string })?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 export interface FieldDefsRead {
