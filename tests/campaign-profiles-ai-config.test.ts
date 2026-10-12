@@ -21,15 +21,15 @@ describe('getAiConfig reads /settings first, env as a fallback', () => {
 
   it('falls back to env when nothing is saved, and is unset with neither', async () => {
     expect(await getAiConfig({})).toBeNull()
-    expect(await getAiConfig({ AI_BASE_URL: 'http://env.local/v1/', AI_MODEL: 'env-model' })).toEqual({
-      baseUrl: 'http://env.local/v1', apiKey: null, model: 'env-model',
+    expect(await getAiConfig({ AI_BASE_URL: 'https://env.example.com/v1/', AI_MODEL: 'env-model' })).toEqual({
+      baseUrl: 'https://env.example.com/v1', apiKey: null, model: 'env-model',
     })
   })
 
   it('a value saved on /settings wins over env', async () => {
     await putSetting(db, 'owner', 'ai.base_url', 'https://api.groq.com/openai/v1')
     await putSetting(db, 'owner', 'ai.model', 'llama-3.1-8b-instant')
-    expect(await getAiConfig({ AI_BASE_URL: 'http://env.local/v1', AI_MODEL: 'env-model', AI_API_KEY: 'sk-env' })).toEqual({
+    expect(await getAiConfig({ AI_BASE_URL: 'https://env.example.com/v1', AI_MODEL: 'env-model', AI_API_KEY: 'sk-env' })).toEqual({
       baseUrl: 'https://api.groq.com/openai/v1', apiKey: 'sk-env', model: 'llama-3.1-8b-instant',
     })
   })

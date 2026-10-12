@@ -19,6 +19,7 @@ import type { Db } from '../db/types.ts'
 import { ProfileError, addItems, type ItemInput, type ItemKind, upsertProfile } from './store.ts'
 import { verifyItemsAndSave } from './verify.ts'
 import { resolveConfig } from '../settings/store.ts'
+import { assertPublicHost, validatePublicHttpsUrl } from '../settings/safe-url.ts'
 
 export interface AiConfig {
   baseUrl: string
@@ -31,15 +32,22 @@ export interface AiConfig {
  * TODO(settings): switch to lib/settings's resolveConfig() once that PR lands
  * (DB first, then env) — this function is the one seam that call will replace.
  */
-export async function getAiConfig(env: Record<string, string | undefined> = process.env): Promise<AiConfig | null> {
+/** The AI config, or why there is none. A base URL that fails the SSRF guard counts as not configured. */
+export async function resolveAiConfig(env: Record<string, string | undefined> = process.env): Promise<{ cfg: AiConfig; reason?: undefined } | { cfg: null; reason: string }> {
   // Sequential on purpose: one pooled connection may serve all three reads.
   const b = await resolveConfig('ai.base_url', env)
   const m = await resolveConfig('ai.model', env)
   const k = await resolveConfig('ai.api_key', env)
   const baseUrl = b.value?.trim()
   const model = m.value?.trim()
-  if (!baseUrl || !model) return null
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: k.value?.trim() || null, model }
+  if (!baseUrl || !model) return { cfg: null, reason: 'no AI provider is configured (AI_BASE_URL / AI_MODEL)' }
+  const bad = validatePublicHttpsUrl(baseUrl)
+  if (bad) return { cfg: null, reason: `the AI provider base URL is not allowed: ${bad}` }
+  return { cfg: { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: k.value?.trim() || null, model } }
+}
+
+export async function getAiConfig(env: Record<string, string | undefined> = process.env): Promise<AiConfig | null> {
+  return (await resolveAiConfig(env)).cfg
 }
 
 export interface SuggestInput {
@@ -208,11 +216,21 @@ export function validateSuggestions(parsed: unknown): ValidatedSuggestions {
   return { profile, items, dropped }
 }
 
-async function callChat(cfg: AiConfig, systemPrompt: string, userPrompt: string): Promise<string> {
+export async function callChat(
+  cfg: AiConfig, systemPrompt: string, userPrompt: string,
+  deps: { fetchImpl?: typeof fetch; lookup?: Parameters<typeof assertPublicHost>[1] } = {},
+): Promise<string> {
+  if (validatePublicHttpsUrl(cfg.baseUrl)) throw new ProfileError('The AI provider base URL is not allowed.')
+  try {
+    await assertPublicHost(cfg.baseUrl, deps.lookup)
+  } catch (e) {
+    throw new ProfileError((e as Error).message)
+  }
+  const fetchImpl = deps.fetchImpl ?? fetch
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 60_000)
   try {
-    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    const res = await fetchImpl(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -226,7 +244,12 @@ async function callChat(cfg: AiConfig, systemPrompt: string, userPrompt: string)
       }),
       signal: controller.signal,
     })
-    if (!res.ok) throw new ProfileError(`The AI provider answered ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    if (!res.ok) {
+      // The body can echo prompts or account details: log a short excerpt server-side, show only the status.
+      const body = await res.text().catch(() => '')
+      console.error('AI provider error', res.status, body.slice(0, 300))
+      throw new ProfileError(`The AI provider answered with an error (HTTP ${res.status}).`)
+    }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
     const content = data.choices?.[0]?.message?.content
     if (!content) throw new ProfileError('The AI provider returned no message content.')
@@ -234,7 +257,8 @@ async function callChat(cfg: AiConfig, systemPrompt: string, userPrompt: string)
   } catch (e) {
     if (e instanceof ProfileError) throw e
     if (e instanceof Error && e.name === 'AbortError') throw new ProfileError('The AI provider did not answer within 60s.')
-    throw new ProfileError(`Could not reach the AI provider: ${e instanceof Error ? e.message : String(e)}`)
+    console.error('AI provider unreachable', e instanceof Error ? e.message : String(e))
+    throw new ProfileError('Could not reach the AI provider.')
   } finally {
     clearTimeout(timer)
   }
@@ -251,8 +275,8 @@ export async function suggestCampaignProfile(db: Db, actor: string, input: Sugge
   if (!Number.isInteger(campaignId) || campaignId <= 0) throw new ProfileError('campaign_id must be a positive integer.')
   const industry = typeof input.industry === 'string' ? input.industry.trim() : ''
   if (!industry) throw new ProfileError('industry is required.')
-  const cfg = await getAiConfig()
-  if (!cfg) return { configured: false, reason: 'no AI provider is configured (AI_BASE_URL / AI_MODEL)' }
+  const { cfg, reason } = await resolveAiConfig()
+  if (!cfg) return { configured: false, reason }
 
   const chat = deps.chat ?? callChat
   const content = await chat(cfg, SYSTEM_PROMPT, buildUserPrompt({ campaign_id: campaignId, industry, notes: input.notes, example_sites: input.example_sites }))

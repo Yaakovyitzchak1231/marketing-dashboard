@@ -83,12 +83,17 @@ campaign whose profile is `active`. The signed-in door is
 
 ## AI provider
 
-Free/OSS only: any OpenAI-compatible chat completions endpoint — a local Ollama on
-Yaakov's OVH server, Groq's free tier, OpenRouter's free models, etc. Configured on
+Free/OSS only: any OpenAI-compatible chat completions endpoint — Groq's free tier, OpenRouter's free models, etc. Configured on
 /settings (AI group: `ai.base_url`, `ai.api_key`, `ai.model`), with the
 `AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars as a fallback, read by
 `getAiConfig()` (`lib/campaign-profiles/suggest.ts`) through the settings store's
-`resolveConfig()`. With nothing configured, `suggest_campaign_profile`
+`resolveConfig()`. The base URL must be https on a public host
+(`lib/settings/safe-url.ts`): localhost, loopback, private, link-local/metadata, CGNAT
+and IPv6 ULA/link-local addresses are refused when saved and again when used, and the
+host is DNS-resolved right before each call and refused if it resolves privately. A
+refused URL counts as "not configured". Only an Owner can change `ai.*` settings
+(UI and ops API). Provider errors show only the HTTP status; the body is logged
+server-side, never shown. With nothing configured, `suggest_campaign_profile`
 answers `{configured:false}` and the wizard says "AI suggestions need an AI provider —
 add one in Settings" — manual entry still works either way.
 

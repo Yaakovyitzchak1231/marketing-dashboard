@@ -8,6 +8,7 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { decryptSecret, encryptSecret, settingsKeyConfigured, type EncryptedSecretRow } from './crypto.ts'
 import { integrationSpecFor, settingSpec, SETTINGS_REGISTRY, type SettingSpec } from './registry.ts'
+import { isOwnerActor } from '../ops/actor-role.ts'
 
 export class SettingsError extends Error {
   readonly status: 400 | 403 | 404
@@ -26,9 +27,13 @@ async function isHuman(q: Queryable, actor: string): Promise<boolean> {
 }
 
 /** put_setting / put a secret are config changes, same bar as other admin-ish ops (pause control, campaign rules): a person only. */
-export async function requireCanWriteSettings(q: Queryable, actor: string): Promise<void> {
+export async function requireCanWriteSettings(q: Queryable, actor: string, key?: string): Promise<void> {
   if (!(await isHuman(q, actor))) {
     throw new SettingsError('Only a person can change settings. An agent can read non-secret settings with its own key.', 403)
+  }
+  // The AI provider settings decide where the server sends requests (and an API key): Owner only, on every path (UI and ops API).
+  if (key?.startsWith('ai.') && !(await isOwnerActor(q, actor))) {
+    throw new SettingsError('Only an Owner can change the AI provider settings.', 403)
   }
 }
 
@@ -108,7 +113,7 @@ export async function putSetting(db: Db, actor: string, key: string, value: stri
   const err = spec.validate?.(v)
   if (err) throw new SettingsError(err, 400)
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     const before = await getSetting(q, key)
     const { rows } = await q.query<{ key: string; value: unknown; description: string | null; updated_by: string | null; updated_at: string; created_at: string }>(
       `insert into lp.settings (key, value, updated_by) values ($1, $2::jsonb, $3)
@@ -164,7 +169,7 @@ export async function putSecret(db: Db, actor: string, key: string, value: strin
   }
   const enc = encryptSecret(value.trim())
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     const before = await secretStatus(q, key)
     await q.query(
       `insert into lp.secrets (key, ciphertext, iv, tag, last4, updated_by) values ($1, $2, $3, $4, $5, $6)
@@ -186,7 +191,7 @@ export async function putSecret(db: Db, actor: string, key: string, value: strin
 export async function clearSecret(db: Db, actor: string, key: string, opts: { via: Via; note?: string } = { via: 'ui' }): Promise<SecretStatus> {
   requireSecretSpec(key)
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     const before = await secretStatus(q, key)
     if (before.set) {
       await q.query('delete from lp.secrets where key = $1', [key])
