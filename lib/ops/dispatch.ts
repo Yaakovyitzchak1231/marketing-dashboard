@@ -73,6 +73,7 @@ import { MERGE_OPS } from '../merge/ops.ts'
 import { RETENTION_OPS } from '../retention/ops.ts'
 import { TRIGGER_OPS } from '../triggers/ops.ts'
 import { ACTION_OPS } from '../actions/ops.ts'
+import { SENDTIME_OPS } from '../sendtime/ops.ts'
 import { checkOpRole, isOwnerActor } from './actor-role.ts'
 
 type Args = Record<string, unknown>
@@ -528,6 +529,8 @@ export const OPS: Record<string, Op> = {
   ...TRIGGER_OPS,
   // Action library (lib/actions/ops.ts, plan 3.8): do things to leads, every run in the step log.
   ...ACTION_OPS,
+  // Send-time optimisation (lib/sendtime/ops.ts, plan 3.11): per-lead optimal send windows.
+  ...SENDTIME_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {

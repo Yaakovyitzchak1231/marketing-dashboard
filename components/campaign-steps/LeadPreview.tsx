@@ -7,6 +7,17 @@ import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/pri
 import type { LeadPreview } from '@/lib/campaign-steps/preview'
 import { call } from './api'
 
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** "Tue around 10am ET" from a send window. */
+function sendWindowLabel(w: NonNullable<LeadPreview['send_window']>): string {
+  const hour = w.best_hour % 12 === 0 ? 12 : w.best_hour % 12
+  const ampm = w.best_hour < 12 ? 'am' : 'pm'
+  const tz = w.timezone.replace('America/', '').replace('_', ' ')
+  const day = w.best_dow == null ? '' : `${DOW[w.best_dow]} `
+  return `${day}around ${hour}${ampm} ${tz} (from ${w.sample_size} engagements)`
+}
+
 const OUTLOOK: Record<LeadPreview['outlook'], { tone: 'good' | 'warn' | 'bad'; text: string }> = {
   ready_personalized: { tone: 'good', text: 'Copy: Ready-personalized' },
   ready_generic: { tone: 'warn', text: 'Copy: Ready-generic' },
@@ -89,6 +100,11 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
                 <Pill tone={p.verdict.tier === 'parked' ? 'bad' : 'neutral'} title={p.verdict.reasons.map((r) => r.label).join('; ')}>
                   Rules: {TIER[p.verdict.tier] ?? p.verdict.tier}
                   {p.verdict.batch === 'role-inbox' ? ' · role-inbox batch' : ''}
+                </Pill>
+              ) : null}
+              {p.send_window ? (
+                <Pill tone="neutral" title="Learned from this lead's opens, clicks and replies; the journey scheduler sends timed steps in this window">
+                  Best send time: {sendWindowLabel(p.send_window)}
                 </Pill>
               ) : null}
             </div>
