@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isFallbackOwner } from '@/lib/auth/roles'
+import { safeNextPath } from '@/lib/auth/next-path'
 
 /**
  * The login gate. Every page and every API route (including /api/dashboard,
@@ -142,7 +143,19 @@ export async function middleware(request: NextRequest) {
     if (isApi) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    return NextResponse.redirect(new URL('/login', request.url))
+    // Carry the page they asked for so /login can send them back after
+    // sign-in. Only pathname + search (never request.url, never a host), and
+    // only if it passes the same guard the login page applies when reading it.
+    const loginUrl = new URL('/login', request.url)
+    // Drop Next's internal `_rsc` cache-buster: a session that expires
+    // mid-click arrives as an RSC fetch, and sending the user back to that URL
+    // would render the raw RSC payload instead of the page.
+    const params = new URLSearchParams(request.nextUrl.search)
+    params.delete('_rsc')
+    const query = params.toString()
+    const next = safeNextPath(request.nextUrl.pathname + (query ? `?${query}` : ''))
+    if (next && next !== '/') loginUrl.searchParams.set('next', next)
+    return NextResponse.redirect(loginUrl)
   }
 
   // Signed in, but does the account resolve to a role? The env fallback is
@@ -204,9 +217,12 @@ export function isMutatingRequest(request: NextRequest): boolean {
 export const config = {
   matcher: [
     /*
-     * Every request path except Next's own static assets and the favicon.
+     * Every request path except Next's own static assets, the favicon and
+     * robots.txt (both anchored + escaped: exactly those files, never a
+     * `/robots.txt/x` or `/robotsXtxt` prefix that would skip the gate) (public/robots.txt, Disallow: /, so crawlers get a real
+     * answer instead of a redirect to /login).
      * API routes are included on purpose: /api/dashboard is gated like a page.
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico$|robots\\.txt$).*)',
   ],
 }

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { safeNextPath } from '@/lib/auth/next-path'
+
+const BAD_CREDENTIALS = 'Incorrect email or password'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -29,7 +32,7 @@ export default function LoginPage() {
     })
 
     if (signInError) {
-      setError('Incorrect email or password')
+      setError(BAD_CREDENTIALS)
       setLoading(false)
       return
     }
@@ -37,8 +40,10 @@ export default function LoginPage() {
     // On success the page used to hang on "Signing in..." forever: nothing
     // cleared loading and nothing navigated. A full navigation is deliberate
     // rather than router.push so the server component re-renders with the
-    // session cookie already in place.
-    window.location.href = '/'
+    // session cookie already in place. `next` is the page the middleware
+    // bounced them from; it is re-checked here because anyone can craft it.
+    const next = safeNextPath(new URLSearchParams(window.location.search).get('next'))
+    window.location.href = next ?? '/'
   }
 
   // 16px below the sm breakpoint: iOS Safari zooms the page when a focused
@@ -70,6 +75,8 @@ export default function LoginPage() {
               className={input}
               placeholder="you@company.com"
               disabled={loading}
+              aria-invalid={error === BAD_CREDENTIALS || undefined}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </div>
 
@@ -88,11 +95,13 @@ export default function LoginPage() {
               className={input}
               placeholder="Password"
               disabled={loading}
+              aria-invalid={error === BAD_CREDENTIALS || undefined}
+              aria-describedby={error ? 'login-error' : undefined}
             />
           </div>
 
           {error && (
-            <p role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">
+            <p id="login-error" role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">
               {error}
             </p>
           )}

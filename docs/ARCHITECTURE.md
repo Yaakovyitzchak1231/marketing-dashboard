@@ -72,7 +72,8 @@ Read it as three paths:
 | `app/actions/` | Server actions called by forms (`'use server'`) | `campaigns.ts`, `settings.ts`, `ops.ts`, `seo.ts` |
 | `app/api/` | HTTP routes, grouped by feature | `ops/` (agents), `webhooks/` (Instantly), `verify/`, `find/`, `leads/`, `reports/`, `rules/` |
 | `components/` | Client and shared UI, grouped by page | `nav/AppNav.tsx`, `dashboard/Dashboard.tsx`, `leads/`, `campaigns/`, `settings/` |
-| `middleware.ts` | Login gate. Fails closed. Passes `/api/ops` and `/api/webhooks` to their own auth | `isSelfAuthenticatingApi`, `devAuthBypassEnabled` |
+| `middleware.ts` | Login gate. Fails closed. Passes `/api/ops` and `/api/webhooks` to their own auth. Unauthenticated page requests go to `/login?next=…` (guarded by `lib/auth/next-path.ts`) | `isSelfAuthenticatingApi`, `devAuthBypassEnabled` |
+| `public/` | Static files served as-is, outside the login gate only where the middleware matcher exempts them | `robots.txt` (`Disallow: /`) |
 | `lib/` | Server-side logic, one folder per feature, 27 folders | see below |
 | `lib/instantly/` | Read-only Instantly v2 client (retries, pagination, cache) | `client.ts`, `endpoints.ts`, `writer.ts` (approval-gated writes) |
 | `lib/dashboard/` | Campaign performance: date ranges, metrics, staged loading | `load.ts` (`getDashboardData`), `types.ts` (the contract) |
