@@ -412,7 +412,7 @@ key shows up in `segment_fields` and works in every condition kind above.
 | `segment_members` | `{id, limit?, offset?}` | static: the stored rows; dynamic: the live compiled match |
 | `segment_add_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_joined` lead events |
 | `segment_remove_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_left` lead events |
-| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job (1.10) calls for 2.12's size-over-time |
+| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job calls for 2.12's size-over-time. That job (`segment_snapshot`, kind `ops_call`) was seeded by `0033_traits.sql` and is normalised by `0058_normalize_segment_snapshot_job.sql` to **daily 07:00 UTC** (`0 7 * * *`, timezone `UTC`, payload `{"op":"segment_snapshot","args":{}}`, timeout 600 s, enabled). 0058 only changes the row while it is still exactly 0033's seed, so an operator's edits (time, pause, timeout) are kept |
 
 Deferred from this slice (left for the builder UI / later plan items, not started
 here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
