@@ -136,6 +136,35 @@ describe('delayed trigger review fixes (plan 3.3)', () => {
     expect(await fires(t)).toBe(0)
   })
 
+  it('1b. disable then re-enable with no scan in between still cancels the delays (set_trigger_enabled and upsert_trigger)', async () => {
+    const co = await company()
+    const t = await trigger()
+    await emitLeadEvent(db, { type: 'email_sent', company_id: co, source: 'test' })
+    await runOp(db, 'owner', 'set_trigger_enabled', { id: t, enabled: false })
+    expect((await delays(t)).map((d) => d.status)).toEqual(['cancelled'])
+    await runOp(db, 'owner', 'set_trigger_enabled', { id: t, enabled: true })
+    await scanDueTriggers(db, ahead(4))
+    expect(await fires(t)).toBe(0)
+    expect((await delays(t)).map((d) => d.status)).toEqual(['cancelled'])
+
+    // Same through upsert_trigger { enabled: false }, then upsert back on.
+    const co2 = await company()
+    const cfg = { after_event: 'email_sent', days: 3, unless_event: 'reply_received' }
+    const t2 = await trigger(cfg)
+    await emitLeadEvent(db, { type: 'email_sent', company_id: co2, source: 'test' })
+    await runOp(db, 'owner', 'upsert_trigger', { id: t2, name: 'renamed off', kind: 'delayed', config: cfg, enabled: false })
+    await runOp(db, 'owner', 'upsert_trigger', { id: t2, name: 'renamed on', kind: 'delayed', config: cfg, enabled: true })
+    await scanDueTriggers(db, ahead(4))
+    expect(await fires(t2, co2)).toBe(0)
+    expect((await delays(t2, co2)).map((d) => d.status)).toEqual(['cancelled'])
+
+    // A delay armed after re-enabling is live again.
+    const co3 = await company()
+    await emitLeadEvent(db, { type: 'email_sent', company_id: co3, source: 'test' })
+    await scanDueTriggers(db, ahead(4))
+    expect(await fires(t2, co3)).toBe(1)
+  })
+
   it('2. a Y that occurred after due_at does not cancel an owed fire', async () => {
     const co = await company()
     const t = await trigger()

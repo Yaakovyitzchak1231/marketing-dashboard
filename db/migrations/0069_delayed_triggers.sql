@@ -43,3 +43,24 @@ create unique index if not exists trigger_delays_source_uq
   on lp.trigger_delays (trigger_id, source_event_id) where source_event_id is not null;
 create index if not exists trigger_delays_due_idx
   on lp.trigger_delays (due_at) where status = 'pending';
+
+-- Disabling a delayed trigger cancels its pending delays in the same statement
+-- and transaction, whichever write path flips `enabled` (set_trigger_enabled,
+-- upsert_trigger, raw SQL). Without this, disable then re-enable between two
+-- trigger_scan runs would keep the old delays pending and release a stale burst.
+-- scanDelays still sweeps disabled triggers as a backstop.
+create or replace function lp.cancel_delays_on_trigger_disable() returns trigger
+language plpgsql as $$
+begin
+  update lp.trigger_delays set status = 'cancelled'
+   where trigger_id = new.id and status = 'pending';
+  return new;
+end;
+$$;
+
+drop trigger if exists triggers_cancel_delays_on_disable on lp.triggers;
+create trigger triggers_cancel_delays_on_disable
+  after update of enabled on lp.triggers
+  for each row
+  when (old.enabled and not new.enabled)
+  execute function lp.cancel_delays_on_trigger_disable();

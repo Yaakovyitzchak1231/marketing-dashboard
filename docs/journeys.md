@@ -148,9 +148,13 @@ Y must differ from X; a config where X also cancels itself is rejected.
 - Order. In one batch of events, each event is handled in order: arm any delay it
   starts, then cancel any pending delay it answers. At emit time only rows not yet
   due are cancelled; a past-due row is decided by the scan with the full window check.
-- **Disabled triggers.** A delay whose trigger is disabled is cancelled, never fired
-  and never held for later: the scan marks every pending row of a disabled trigger
-  `cancelled`. Re-enabling does not bring them back; a new X arms a new delay.
+- **Disabled triggers.** Disabling a delayed trigger cancels its pending delays in the
+  same statement: a database trigger on `lp.triggers` (`enabled` true -> false) marks
+  them `cancelled`, so every write path (`set_trigger_enabled`, `upsert_trigger` with
+  `enabled: false`, raw SQL) is covered and disable-then-re-enable between two scans
+  cannot keep them. The scan repeats the sweep as a backstop and never fires a
+  disabled trigger's row. Re-enabling does not bring cancelled delays back; a new X
+  arms a new delay.
 - Concurrency. The scan locks the due rows (`FOR UPDATE ... SKIP LOCKED`) inside one
   transaction, so overlapping scans never take the same row; the unique
   `dedupe_key` on the fire is the second guard.
