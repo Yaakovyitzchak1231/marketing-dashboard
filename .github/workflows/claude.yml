@@ -36,6 +36,10 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
+          # Pin the model: reviews are high-volume, so use the fast/cheap small model.
+          claude_args: |
+            --model claude-haiku-5-5
+
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"
 
