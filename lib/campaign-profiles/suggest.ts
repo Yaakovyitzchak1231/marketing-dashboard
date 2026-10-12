@@ -18,8 +18,7 @@ import 'server-only'
 import type { Db } from '../db/types.ts'
 import { ProfileError, addItems, type ItemInput, type ItemKind, upsertProfile } from './store.ts'
 import { verifyItemsAndSave } from './verify.ts'
-import { resolveConfig } from '../settings/store.ts'
-import { assertPublicHost, validatePublicHttpsUrl } from '../settings/safe-url.ts'
+import { AiProviderError, providerFetch, resolveAiProviderConfig, type Lookup } from '../settings/ai-provider.ts'
 
 export interface AiConfig {
   baseUrl: string
@@ -27,23 +26,9 @@ export interface AiConfig {
   model: string
 }
 
-/**
- * Reads AI_BASE_URL / AI_API_KEY / AI_MODEL from the environment.
- * TODO(settings): switch to lib/settings's resolveConfig() once that PR lands
- * (DB first, then env) — this function is the one seam that call will replace.
- */
-/** The AI config, or why there is none. A base URL that fails the SSRF guard counts as not configured. */
+/** The AI config, or why there is none (shared guard: lib/settings/ai-provider.ts). */
 export async function resolveAiConfig(env: Record<string, string | undefined> = process.env): Promise<{ cfg: AiConfig; reason?: undefined } | { cfg: null; reason: string }> {
-  // Sequential on purpose: one pooled connection may serve all three reads.
-  const b = await resolveConfig('ai.base_url', env)
-  const m = await resolveConfig('ai.model', env)
-  const k = await resolveConfig('ai.api_key', env)
-  const baseUrl = b.value?.trim()
-  const model = m.value?.trim()
-  if (!baseUrl || !model) return { cfg: null, reason: 'no AI provider is configured (AI_BASE_URL / AI_MODEL)' }
-  const bad = validatePublicHttpsUrl(baseUrl)
-  if (bad) return { cfg: null, reason: `the AI provider base URL is not allowed: ${bad}` }
-  return { cfg: { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: k.value?.trim() || null, model } }
+  return resolveAiProviderConfig(env)
 }
 
 export async function getAiConfig(env: Record<string, string | undefined> = process.env): Promise<AiConfig | null> {
@@ -218,19 +203,12 @@ export function validateSuggestions(parsed: unknown): ValidatedSuggestions {
 
 export async function callChat(
   cfg: AiConfig, systemPrompt: string, userPrompt: string,
-  deps: { fetchImpl?: typeof fetch; lookup?: Parameters<typeof assertPublicHost>[1] } = {},
+  deps: { fetchImpl?: typeof fetch; lookup?: Lookup } = {},
 ): Promise<string> {
-  if (validatePublicHttpsUrl(cfg.baseUrl)) throw new ProfileError('The AI provider base URL is not allowed.')
-  try {
-    await assertPublicHost(cfg.baseUrl, deps.lookup)
-  } catch (e) {
-    throw new ProfileError((e as Error).message)
-  }
-  const fetchImpl = deps.fetchImpl ?? fetch
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 60_000)
   try {
-    const res = await fetchImpl(`${cfg.baseUrl}/chat/completions`, {
+    const res = await providerFetch(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -243,22 +221,16 @@ export async function callChat(
         response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
-    })
-    if (!res.ok) {
-      // The body can echo prompts or account details: log a short excerpt server-side, show only the status.
-      const body = await res.text().catch(() => '')
-      console.error('AI provider error', res.status, body.slice(0, 300))
-      throw new ProfileError(`The AI provider answered with an error (HTTP ${res.status}).`)
-    }
+    }, { fetchImpl: deps.fetchImpl, lookup: deps.lookup })
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
     const content = data.choices?.[0]?.message?.content
     if (!content) throw new ProfileError('The AI provider returned no message content.')
     return content
   } catch (e) {
     if (e instanceof ProfileError) throw e
+    if (e instanceof AiProviderError) throw new ProfileError(e.message)
     if (e instanceof Error && e.name === 'AbortError') throw new ProfileError('The AI provider did not answer within 60s.')
-    console.error('AI provider unreachable', e instanceof Error ? e.message : String(e))
-    throw new ProfileError('Could not reach the AI provider.')
+    throw new ProfileError('Could not read the AI provider reply.')
   } finally {
     clearTimeout(timer)
   }

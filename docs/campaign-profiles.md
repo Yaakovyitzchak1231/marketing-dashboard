@@ -91,7 +91,7 @@ Free/OSS only: any OpenAI-compatible chat completions endpoint — Groq's free t
 (`lib/settings/safe-url.ts`): localhost, loopback, private, link-local/metadata, CGNAT
 and IPv6 ULA/link-local addresses are refused when saved and again when used, and the
 host is DNS-resolved right before each call and refused if it resolves privately. A
-refused URL counts as "not configured". Only an Owner can change `ai.*` settings
+refused URL (saved or env) counts as "not configured". Every provider fetch (suggestions, segment "Describe it", the /settings model list) goes through `providerFetch()` in `lib/settings/ai-provider.ts`: redirects are never followed, and errors show only the HTTP status. Loading the model list is Owner-only. Only an Owner can change `ai.*` settings
 (UI and ops API). Provider errors show only the HTTP status; the body is logged
 server-side, never shown. With nothing configured, `suggest_campaign_profile`
 answers `{configured:false}` and the wizard says "AI suggestions need an AI provider —

@@ -16,7 +16,6 @@ const DIR = join(process.cwd(), 'app', 'actions')
  * action is always a POST), so an entry here is reachable by Editors and Owners only.
  */
 const ALLOW: Record<string, string> = {
-  'ai-models.ts:listAiModelsAction': 'read: lists the AI provider models',
   'campaign-profiles.ts:getProfileAction': 'read',
   'campaign-profiles.ts:aiConfiguredAction': 'read: is the AI key set',
   'campaign-profiles.ts:verifyFeedAction': 'read: fetches a feed URL to check it, stores nothing',
