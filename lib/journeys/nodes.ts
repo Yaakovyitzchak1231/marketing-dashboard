@@ -144,7 +144,121 @@ const noteHandler: NodeHandler = {
   },
 }
 
+const OPENED = 'email_opened'
+const CLICKED = 'email_link_clicked'
+const COMPANY_FIELDS = ['stage', 'city', 'state', 'country'] as const
+const CONTACT_FIELDS = ['status', 'verification_status'] as const
+
+/** Where a branch measures from: `journey` = the lead's entry (default), `node` = arrival at this branch. */
+export const BRANCH_SINCE = ['journey', 'node'] as const
+const BRANCH_CONFIG_KEYS = ['if', 'since']
+const IF_KEYS = ['event', 'entity', 'field', 'equals']
 const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
+
+// Path labels each branch mode routes to. Matching ignores case; the first label
+// in a list that the node has wins.
+const YES_LABELS = ['yes', 'true']
+const NO_LABELS = ['no', 'else']
+const CLICKED_LABELS = ['clicked']
+const OPENED_LABELS = ['opened']
+const NO_OPEN_LABELS = ['no-open', 'no open', 'else', 'no']
+/** Opened or clicked, but the graph has no path for that: the catch-all. */
+const OTHER_LABELS = ['else', 'no-open', 'no open', 'no']
+
+/** The node's own spelling of the first wanted label it has, or null. Never "some other path". */
+function findLabel(node: GraphNode, wanted: string[]): string | null {
+  for (const w of wanted) {
+    const hit = node.paths.find((p) => p.label.toLowerCase() === w)
+    if (hit) return hit.label
+  }
+  return null
+}
+
+function pathLabel(node: GraphNode, wanted: string[]): string {
+  const label = findLabel(node, wanted)
+  if (label == null) throw new Error(`branch '${node.id}' has no path labelled ${wanted.map((w) => `'${w}'`).join(' or ')}`)
+  return label
+}
+
+function isPlain(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v)
+}
+
+function branchSince(config: Record<string, unknown>): 'journey' | 'node' {
+  return config.since === 'node' ? 'node' : 'journey'
+}
+
+function validateIf(spec: Record<string, unknown>): string[] {
+  const errs: string[] = []
+  for (const k of Object.keys(spec)) if (!IF_KEYS.includes(k)) errs.push(`if has an unknown key '${k}' (use event, or entity + field + equals)`)
+  const hasEvent = spec.event !== undefined
+  const hasField = spec.entity !== undefined || spec.field !== undefined || 'equals' in spec
+  if (hasEvent && hasField) {
+    errs.push('if takes either {event} or {entity, field, equals}, not both')
+    return errs
+  }
+  if (hasEvent) {
+    if (typeof spec.event !== 'string' || !EVENT_RE.test(spec.event.trim())) errs.push('if.event must be an event type such as reply_received')
+    return errs
+  }
+  if (!hasField) {
+    errs.push('if needs {event} or {entity, field, equals}')
+    return errs
+  }
+  const entity = spec.entity
+  if (entity !== 'contact' && entity !== 'company') {
+    errs.push("if.entity must be 'contact' or 'company'")
+    return errs
+  }
+  const allowed: readonly string[] = entity === 'contact' ? CONTACT_FIELDS : COMPANY_FIELDS
+  if (typeof spec.field !== 'string' || !allowed.includes(spec.field)) errs.push(`if.field for a ${entity} must be one of: ${allowed.join(', ')}`)
+  if (!('equals' in spec)) errs.push('if.equals is required (use null to match an empty field)')
+  else if (spec.equals !== null && !['string', 'number', 'boolean'].includes(typeof spec.equals)) errs.push('if.equals must be text, a number, true/false, or null')
+  return errs
+}
+
+const branchHandler: NodeHandler = {
+  kind: 'branch',
+  validate(node) {
+    const errs: string[] = []
+    if (!node.paths.length) errs.push('add at least one path')
+    const labels = new Set(node.paths.map((p) => p.label.toLowerCase()))
+    if (labels.size !== node.paths.length) errs.push('path labels must be unique (ignoring case)')
+    for (const k of Object.keys(node.config)) if (!BRANCH_CONFIG_KEYS.includes(k)) errs.push(`unknown config key '${k}' (use if, since)`)
+    const since = node.config.since
+    if (since !== undefined && !(BRANCH_SINCE as readonly unknown[]).includes(since)) errs.push(`since must be one of: ${BRANCH_SINCE.join(', ')} (default journey)`)
+    const iff = node.config.if
+    if (iff !== undefined) {
+      if (!isPlain(iff)) {
+        errs.push('if must be {event} or {entity, field, equals}')
+        return errs
+      }
+      errs.push(...validateIf(iff))
+      if (!findLabel(node, YES_LABELS)) errs.push("an if branch needs a path labelled 'yes' (or 'true')")
+      if (!findLabel(node, NO_LABELS)) errs.push("an if branch needs a path labelled 'no' (or 'else')")
+    } else {
+      if (!findLabel(node, CLICKED_LABELS) && !findLabel(node, OPENED_LABELS)) errs.push("an open/click branch needs a path labelled 'opened' and/or 'clicked'")
+      if (!findLabel(node, NO_OPEN_LABELS)) errs.push("an open/click branch needs a fallback path labelled 'no-open' (or 'else')")
+    }
+    return errs
+  },
+  async run({ q, run, node }) {
+    const iff = node.config.if
+    const sinceAt = branchSince(node.config) === 'node' ? run.node_entered_at : run.entered_at
+    if (isPlain(iff)) {
+      const yes = await branchIf(q, run, iff, sinceAt)
+      return { type: 'next', path: pathLabel(node, yes ? YES_LABELS : NO_LABELS), result: { yes } }
+    }
+    const types = await seenSince(q, run, [OPENED, CLICKED], sinceAt)
+    const clicked = types.has(CLICKED)
+    const opened = types.has(OPENED)
+    let label: string
+    if (clicked) label = findLabel(node, CLICKED_LABELS) ?? findLabel(node, OPENED_LABELS) ?? pathLabel(node, OTHER_LABELS)
+    else if (opened) label = findLabel(node, OPENED_LABELS) ?? pathLabel(node, OTHER_LABELS)
+    else label = pathLabel(node, NO_OPEN_LABELS)
+    return { type: 'next', path: label, result: { opened, clicked } }
+  },
+}
 
 const goalHandler: NodeHandler = {
   kind: 'goal',
@@ -183,9 +297,12 @@ const gotoHandler: NodeHandler = {
 }
 
 /**
- * Which of `types` happened for this run's lead since `since` (by `occurred_at`).
- * Identity is scoped to the run: a contact run matches events for that contact,
- * a company run matches events for that company.
+ * Which of `types` happened for this run's lead since `since`. Measured on `occurred_at`
+ * (when it happened), not `recorded_at` (when we stored it): a backfill writes an old open
+ * with recorded_at = now, and that must not count for a lead who entered later.
+ * Identity is scoped to the run, one rule for every node (branch, goal, exit): a contact run
+ * matches events for that contact only, a company run matches events for that company.
+ * resolveLead fills company_id on contact runs too, so a colleague's event must not count.
  */
 async function seenSince(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
   if (!types.length || (run.company_id == null && run.contact_id == null)) return new Set()
@@ -201,9 +318,32 @@ async function seenSince(q: Queryable, run: RunState, types: string[], since: Da
   return new Set(rows.map((r) => r.type))
 }
 
+/**
+ * The `if` check. A missing row or a NULL column is "we do not know": it is never
+ * equal to '' or to anything else. Only an explicit `equals: null` matches a NULL
+ * column (and still not a missing row).
+ */
+async function branchIf(q: Queryable, run: RunState, spec: Record<string, unknown>, since: Date): Promise<boolean> {
+  const event = typeof spec.event === 'string' ? spec.event.trim() : ''
+  if (event) return (await seenSince(q, run, [event], since)).has(event)
+  const entity = spec.entity === 'contact' ? 'contact' : spec.entity === 'company' ? 'company' : ''
+  const field = typeof spec.field === 'string' ? spec.field : ''
+  const allowed: readonly string[] = entity === 'contact' ? CONTACT_FIELDS : entity === 'company' ? COMPANY_FIELDS : []
+  if (!entity || !allowed.includes(field) || !('equals' in spec)) return false
+  const id = entity === 'contact' ? run.contact_id : run.company_id
+  if (id == null) return false
+  const table = entity === 'contact' ? 'lp.contacts' : 'lp.companies'
+  const { rows } = await q.query<Record<string, unknown>>(`select ${field} as v from ${table} where id = $1`, [id])
+  if (!rows[0]) return false
+  const value = rows[0].v
+  if (value == null) return spec.equals === null
+  if (spec.equals === null) return false
+  return String(value) === String(spec.equals)
+}
+
 export { seenSince }
 
-const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, goalHandler, gotoHandler]
+const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, branchHandler, goalHandler, gotoHandler]
 const REGISTRY = new Map<string, NodeHandler>(BUILT_IN.map((h) => [h.kind, h]))
 
 export function registerNodeHandler(handler: NodeHandler): void {

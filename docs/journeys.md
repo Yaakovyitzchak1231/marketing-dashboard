@@ -58,10 +58,53 @@ checks shape, unique ids, known kinds, each kind's own config, that every edge
 points at a node, and that every node is reachable. Loops are allowed.
 
 Built-in kinds (`lib/journeys/nodes.ts`): `wait` ({minutes, hours, days},
-measured from `node_entered_at`), `exit` ({reason}; ends as `exited`), and
-`note` (does nothing; moves on), `goal` and `goto` (3.7, below). `branch` above is an example of a kind 3.5 adds.
-`ab_split` (3.6, `lib/journeys/ab-split.ts`, config {experiment_id, variants}) routes a
+measured from `node_entered_at`), `exit` ({reason}; ends as `exited`),
+`note` (does nothing; moves on), `branch` (3.5, below), `goal` and `goto` (3.7, below),
+and `ab_split` (3.6, `lib/journeys/ab-split.ts`, config {experiment_id, variants}), which routes a
 lead down the path named after its A/B variant: [experiments.md](experiments.md).
+
+## Branch nodes (plan 3.5)
+
+A `branch` picks one of its labelled `paths`; it never uses `next`. Config:
+`{ if?, since? }`. Path labels are matched ignoring case, and the graph is
+rejected at publish (and by `journey_validate`) when the labels a mode needs are
+missing. A branch never falls through to "some other path".
+
+`since` is `journey` (default: events from the lead's entry into the journey) or
+`node` (events from when the run arrived at this branch). Anything else is
+rejected. Events are measured on `occurred_at` (when it happened), not
+`recorded_at` (when we stored it), so an open from before entry that a backfill
+stores later does not count.
+
+Whose events count follows the 3.7 rule: a branch on a contact's run counts only
+that contact's events, and a branch on a company's run counts that company's. A
+colleague at the same company opening, clicking or replying does not move a
+contact's run.
+
+**Open/click** (no `if`): paths `clicked` and/or `opened`, plus a fallback
+`no-open` (or `no open`, `else`, `no`). A lead with an `email_link_clicked` takes
+`clicked` (or `opened` if there is no `clicked` path); one with only an
+`email_opened` takes `opened`; if the graph has no path for what happened, or
+nothing happened, the lead takes the fallback (`else` preferred for the former).
+
+**If/else** (`if` set): paths `yes` (or `true`) and `no` (or `else`). Two forms:
+
+- `{ "event": "reply_received" }` — yes when that event type happened since `since`.
+- `{ "entity": "company"|"contact", "field": "...", "equals": ... }` — yes when the
+  field equals the value. Fields: company `stage`, `city`, `state`, `country`;
+  contact `status`, `verification_status`. `equals` is required, and compared as text.
+
+NULL is "unknown", never `''`: a missing row or a NULL column is `no`, unless
+`equals` is explicitly `null`, which matches only a NULL column. Unknown `if`
+keys, an unknown entity, a non-whitelisted field, or an empty `if` are rejected.
+
+```json
+{ "id": "gate", "kind": "branch", "config": { "if": { "event": "reply_received" }, "since": "node" },
+  "paths": [ { "label": "yes", "to": "thanks" }, { "label": "no", "to": "nudge" } ] }
+```
+
+Graphs are validated by `publishVersion` before anything is stored (the only
+writer of `lp.journey_versions`); `journey_upsert` stores no graph.
 
 ## Goals, go-to, exits and the entry cap (3.7)
 
@@ -268,7 +311,7 @@ Agent keys are otherwise not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
-- Node kinds beyond wait/exit/note/goal/goto/ab_split: branch (3.5), actions (3.8), send (3.9).
+- Node kinds beyond wait/exit/note/branch/goal/goto/ab_split: actions (3.8), send (3.9).
 - A delayed trigger (3.3) is a trigger kind, not a node; see "Delayed triggers" below. It writes `lp.trigger_fires` with `cancel_on`; enrolment copies that list onto `run.context.cancel_on`.
 - Journey-level approval UI (the builder, 3.13). The approval gate itself is in place now.
 - A journeys page and the builder (3.13). There is no UI in 3.1.
