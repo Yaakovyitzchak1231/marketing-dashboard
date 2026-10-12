@@ -10,7 +10,7 @@
  * Provider: free/OSS only, any OpenAI-compatible chat completions endpoint
  * (Groq's free tier, OpenRouter's free models, a hosted Ollama, ...). The base URL
  * must be a public https host: localhost / private / link-local addresses and ports
- * other than 80/443 are refused (lib/settings/safe-url.ts).
+ * other than 443 are refused (lib/settings/safe-url.ts).
  *
  * Config is async: getAiConfig() / resolveAiConfig() read the Settings AI values
  * (ai.base_url, ai.api_key, ai.model) through lib/settings/store.ts's resolveConfig() —

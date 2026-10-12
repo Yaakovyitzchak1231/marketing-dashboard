@@ -17,7 +17,6 @@ describe('validatePublicHttpsUrl (SSRF guard for ai.base_url)', () => {
     'https://8.8.8.8/v1',
     'https://[2606:4700::1111]/v1',
     'https://api.groq.com:443/openai/v1',
-    'https://api.example.com:80/v1',
     'https://1.1.1.1/v1',
     'https://[64:ff9b::808:808]/v1', // NAT64 of 8.8.8.8
     'https://[2002:808:808::1]/v1', // 6to4 of 8.8.8.8
@@ -108,15 +107,14 @@ describe('isBlockedIp covers every non-public range', () => {
   ])('validatePublicHttpsUrl refuses %s', (u) => expect(validatePublicHttpsUrl(u)).toMatch(/public address/))
 })
 
-describe('validatePublicHttpsUrl: ports are 80 or 443 only', () => {
-  it.each(['https://api.example.com:8443/v1', 'https://api.example.com:11434/v1', 'https://api.example.com:8080/v1', 'https://api.example.com:22/v1', 'https://8.8.8.8:6379/v1'])(
+describe('validatePublicHttpsUrl: port 443 only', () => {
+  it.each(['https://api.example.com:80/v1', 'https://api.example.com:8443/v1', 'https://api.example.com:11434/v1', 'https://api.example.com:8080/v1', 'https://api.example.com:22/v1', 'https://8.8.8.8:6379/v1'])(
     'refuses %s with a clear reason',
-    (u) => expect(validatePublicHttpsUrl(u)).toBe('Port must be 80 or 443 (or left out); other ports are not allowed.'),
+    (u) => expect(validatePublicHttpsUrl(u)).toBe('Port must be 443 (or left out); other ports are not allowed.'),
   )
-  it('allows the default and explicit 443/80', () => {
+  it('allows the default and explicit 443', () => {
     expect(validatePublicHttpsUrl('https://api.example.com/v1')).toBeNull()
     expect(validatePublicHttpsUrl('https://api.example.com:443/v1')).toBeNull()
-    expect(validatePublicHttpsUrl('https://api.example.com:80/v1')).toBeNull()
   })
 })
 

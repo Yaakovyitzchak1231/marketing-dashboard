@@ -19,7 +19,7 @@ describe('segmentFromTextAction surfaces why the AI provider is unusable', () =>
     ['a private address', 'https://10.0.0.5/v1', /base URL is not allowed: Must be a public address/],
     ['localhost', 'https://localhost/v1', /base URL is not allowed: Must be a public host/],
     ['a plain-http URL', 'http://api.example.com/v1', /base URL is not allowed: Must be an https/],
-    ['a non-80/443 port', 'https://api.example.com:8443/v1', /base URL is not allowed: Port must be 80 or 443/],
+    ['a non-443 port', 'https://api.example.com:8443/v1', /base URL is not allowed: Port must be 443/],
   ])('%s: the person sees the guard reason, not the generic message', async (_n, baseUrl, reason) => {
     vi.stubEnv('AI_BASE_URL', baseUrl)
     vi.stubEnv('AI_MODEL', 'm')

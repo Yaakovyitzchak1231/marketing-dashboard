@@ -87,7 +87,7 @@ Free/OSS only: any OpenAI-compatible chat completions endpoint — Groq's free t
 /settings (AI group: `ai.base_url`, `ai.api_key`, `ai.model`), with the
 `AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars as a fallback, read by
 `getAiConfig()` (`lib/campaign-profiles/suggest.ts`, async: always `await` it) through the settings store's
-`resolveConfig()`. The base URL must be https on a public host, on port 80 or 443 (explicit or default)
+`resolveConfig()`. The base URL must be https on a public host, on port 443 (explicit or default)
 (`lib/settings/safe-url.ts`). Refused when saved and again when used: localhost, `*.local`/`*.internal`, and any
 literal address in 0.0.0.0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0.0/24, 192.168/16, 198.18/15,
 224/4, 240/4, `::`, `::1`, fc00::/7, fe80::/10, fec0::/10, ff00::/8, 64:ff9b::/96 and 64:ff9b:1::/48 (NAT64),

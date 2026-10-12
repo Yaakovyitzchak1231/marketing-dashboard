@@ -3,7 +3,7 @@
  * A value that fails here is treated as "not configured" — never fetched.
  *
  * validatePublicHttpsUrl() (static, no DNS):
- * - https only, port 80 or 443 only (explicit or default), no user:password
+ * - https only, port 443 only (explicit or default; https on any other port, 80 included, is refused), no user:password
  * - no localhost / *.localhost / *.local / *.internal hostnames
  * - no literal IP in a non-public range (see v4Blocked / v6Blocked below), including
  *   the IPv4 embedded in IPv4-mapped, IPv4-compatible, NAT64 and 6to4 IPv6 forms
@@ -105,7 +105,7 @@ export function isBlockedIp(ip: string): boolean {
   return true
 }
 
-/** null when `value` is an https URL to a public host on port 80/443; otherwise the reason. */
+/** null when `value` is an https URL to a public host on port 443; otherwise the reason. */
 export function validatePublicHttpsUrl(value: string): string | null {
   let u: URL
   try {
@@ -116,7 +116,7 @@ export function validatePublicHttpsUrl(value: string): string | null {
   if (u.protocol !== 'https:') return 'Must be an https:// URL.'
   if (u.username || u.password) return 'Must not contain a username or password.'
   // URL drops a default port (443 for https) so `port` is '' then; anything else is explicit.
-  if (u.port && u.port !== '80' && u.port !== '443') return 'Port must be 80 or 443 (or left out); other ports are not allowed.'
+  if (u.port && u.port !== '443') return 'Port must be 443 (or left out); other ports are not allowed.'
   const host = u.hostname.toLowerCase().replace(/\.$/, '')
   if (!host) return 'Must include a host name.'
   if (host === 'localhost' || /\.(localhost|local|internal)$/.test(host)) return 'Must be a public host, not a local one.'
