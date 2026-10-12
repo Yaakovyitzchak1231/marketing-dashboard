@@ -14,7 +14,7 @@ import { companyIdsForSegment } from '../segments/match-companies.ts'
 import { GraphError, validateGraph } from './graph.ts'
 import { nodeKinds } from './nodes.ts'
 import {
-  JourneyError, approveCurrentVersion, getJourney, getVersionGraph, listJourneys, listVersions, publishVersion, setJourneyStatus,
+  JourneyError, approveVersion, getJourney, getVersionGraph, listJourneys, listVersions, publishVersion, setJourneyStatus,
   upsertJourney, type EntryMode,
 } from './store.ts'
 import { enrollLead, exitRuns, retryRun, runDueJourneys, type EnrollResult } from './runner.ts'
@@ -22,8 +22,15 @@ import { enrollLead, exitRuns, retryRun, runDueJourneys, type EnrollResult } fro
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
 
-/** Most leads one journey_enroll call takes (a segment bigger than this needs several calls with offset). */
+/** Most leads one journey_enroll call takes. A bigger segment continues with next_after_company_id. */
 export const MAX_ENROLL_PER_CALL = 2000
+/** Leads per transaction in journey_enroll, so one call never holds a long lock. */
+export const ENROLL_CHUNK = 200
+
+/** One lead's result in journey_enroll. `invalid` means its own checks failed; the others still went on. */
+type LeadResult = Omit<EnrollResult, 'reason'> & {
+  company_id: number | null; contact_id: number | null; reason?: string; error?: string
+}
 
 function id(v: unknown, field: string): number {
   const n = Number(v)
@@ -147,10 +154,10 @@ export const JOURNEY_OPS: Record<string, Op> = {
     }),
   },
   journey_approve: {
-    args: '{journey_id}  -- owner only: approve the current version. Send-capable nodes do not run on a version nobody approved.',
+    args: '{journey_id, version?}  -- owner only: approve a version (default: the current one). Each version needs its own approval; send-capable nodes do not run on one nobody approved.',
     run: (db, actor, a) => wrap(async () => {
       await requireOwnerActor(db, actor, 'journey_approve is owner only')
-      return approveCurrentVersion(db, actor, id(a.journey_id, 'journey_id'))
+      return approveVersion(db, actor, id(a.journey_id, 'journey_id'), optId(a.version, 'version'))
     }),
   },
   journey_retry: {
@@ -158,41 +165,71 @@ export const JOURNEY_OPS: Record<string, Op> = {
     run: (db, actor, a) => wrap(() => retryRun(db, actor, id(a.run_id, 'run_id'))),
   },
   journey_enroll: {
-    args: '{journey_id, company_id? | contact_id? | company_ids?: [] | segment_id?, offset?, context?, source?: manual|api}  -- live journeys; testing too (a try on a few leads)',
+    args: '{journey_id, company_id? | contact_id? | company_ids?: [] | segment_id?, after_company_id?, context?, source?: manual|api}  -- live or testing journeys. A segment is read up to 2000 companies per call: pass next_after_company_id back as after_company_id until more is false.',
     run: (db, actor, a) => wrap(async () => {
       const jid = id(a.journey_id, 'journey_id')
       const context = obj(a.context, 'context')
       const source = a.source === 'api' ? 'api' : 'manual'
       const leads: { company_id: number | null; contact_id: number | null }[] = []
       let fromSegment = false
+      let more = false
+      let nextAfter: number | null = null
       if (a.segment_id != null) {
         const seg = await getSegment(db, id(a.segment_id, 'segment_id'))
         if (!seg) throw new OpsError('no segment with that id', 404)
-        const offset = Math.max(Number(a.offset) || 0, 0)
-        const ids = await companyIdsForSegment(db, seg, offset + MAX_ENROLL_PER_CALL)
-        for (const c of ids.slice(offset)) leads.push({ company_id: c, contact_id: null })
+        const after = optId(a.after_company_id, 'after_company_id') ?? 0
+        // Keyset paging: sorted here, so the page boundary does not depend on the query's
+        // row order, and an enrolment in between cannot make a later page skip or repeat leads.
+        const rest = (await companyIdsForSegment(db, seg, null)).filter((c) => c > after).sort((x, y) => x - y)
+        const page = rest.slice(0, MAX_ENROLL_PER_CALL)
+        for (const c of page) leads.push({ company_id: c, contact_id: null })
         fromSegment = true
+        more = rest.length > page.length
+        nextAfter = page.length ? page[page.length - 1] : null
       } else if (Array.isArray(a.company_ids)) {
         if (a.company_ids.length > MAX_ENROLL_PER_CALL) throw new OpsError(`at most ${MAX_ENROLL_PER_CALL} company_ids per call`)
         for (const c of a.company_ids) leads.push({ company_id: id(c, 'company_ids[]'), contact_id: null })
       } else {
         leads.push({ company_id: optId(a.company_id, 'company_id'), contact_id: optId(a.contact_id, 'contact_id') })
       }
-      const results: (EnrollResult & { company_id: number | null; contact_id: number | null })[] = await db.tx(async (q) => {
-        const out: (EnrollResult & { company_id: number | null; contact_id: number | null })[] = []
-        for (const l of leads) {
-          const r = await enrollLead(q, actor, jid, {
-            ...l, context, source: fromSegment ? 'segment' : source, allow_testing: true,
-          })
-          out.push({ ...l, ...r })
-        }
-        return out
-      }, actor)
+      // Journey-level problems fail the call up front. Per-lead problems do not (below).
+      const jr = await getJourney(db, jid)
+      if (!jr) throw new OpsError('no journey with that id', 404)
+      if (!(jr.status === 'live' || jr.status === 'testing')) {
+        throw new OpsError(`journey is ${jr.status}; leads can enter only while it is live or testing`, 409)
+      }
+      if (jr.current_version == null) throw new OpsError('journey has no published version', 409)
+
+      const results: LeadResult[] = []
+      for (let i = 0; i < leads.length; i += ENROLL_CHUNK) {
+        const chunk = leads.slice(i, i + ENROLL_CHUNK)
+        // One transaction per chunk. A lead that fails its own checks (no such company, a
+        // contact in another company) is reported as invalid, and the rest of the call goes on.
+        const part = await db.tx(async (q) => {
+          const out: LeadResult[] = []
+          for (const l of chunk) {
+            try {
+              const r = await enrollLead(q, actor, jid, {
+                ...l, context, source: fromSegment ? 'segment' : source, allow_testing: true,
+              })
+              out.push({ ...l, ...r })
+            } catch (e) {
+              // A JourneyError is raised before enrollLead writes anything, so the transaction stays usable.
+              if (!(e instanceof JourneyError)) throw e
+              out.push({ ...l, enrolled: false, run_id: null, reason: 'invalid', error: e.message })
+            }
+          }
+          return out
+        }, actor)
+        results.push(...part)
+      }
       return {
         enrolled: results.filter((r) => r.enrolled).length,
         skipped: results.filter((r) => !r.enrolled).length,
+        failed: results.filter((r) => r.reason === 'invalid').length,
         results: results.slice(0, 200),
-        more: fromSegment && leads.length === MAX_ENROLL_PER_CALL,
+        more,
+        next_after_company_id: more ? nextAfter : null,
       }
     }),
   },

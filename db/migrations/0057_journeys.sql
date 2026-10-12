@@ -33,12 +33,16 @@ create table if not exists lp.journeys (
 
 create index if not exists journeys_trigger_idx on lp.journeys (trigger_id) where trigger_id is not null;
 
--- Owner approval. A send-capable node kind will not run until the run's version
--- is approved (journey_approve, owner only). Approval is per version: publishing
--- a new version needs a new approval.
+-- Owner approval is per version (lp.journey_versions.approved_*): a send-capable
+-- node kind does not run on a version nobody approved, so runs already in flight
+-- on an older version keep their own approval. The journeys.approved_* columns
+-- record the most recent approval, for display only.
 alter table lp.journeys add column if not exists approved_version integer;
 alter table lp.journeys add column if not exists approved_by     text references lp.actors(id);
 alter table lp.journeys add column if not exists approved_at    timestamptz;
+-- When the journey was last paused. Resuming moves its open runs' due times
+-- forward by the pause length, so a long pause does not make every wait due at once.
+alter table lp.journeys add column if not exists paused_at      timestamptz;
 
 drop trigger if exists journeys_updated on lp.journeys;
 create trigger journeys_updated before update on lp.journeys for each row execute function lp.touch_updated_at();
@@ -50,8 +54,13 @@ create table if not exists lp.journey_versions (
   note          text check (note is null or length(note) <= 500),
   published_by  text references lp.actors(id),
   published_at  timestamptz not null default now(),
+  -- Owner approval of this version (journey_approve). Send-capable nodes need it.
+  approved_by   text references lp.actors(id),
+  approved_at   timestamptz,
   primary key (journey_id, version)
 );
+alter table lp.journey_versions add column if not exists approved_by text references lp.actors(id);
+alter table lp.journey_versions add column if not exists approved_at timestamptz;
 
 create table if not exists lp.journey_runs (
   id               bigint generated always as identity primary key,

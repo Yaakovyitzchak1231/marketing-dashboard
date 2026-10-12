@@ -15,7 +15,7 @@ import type { Db, Queryable } from '../db/types.ts'
 import { emitLeadEvent } from '../events/emit.ts'
 import { findNode, type JourneyGraph } from './graph.ts'
 import { getNodeHandler, type NodeOutcome, type RunState } from './nodes.ts'
-import { JourneyError, getVersionGraph } from './store.ts'
+import { JourneyError, getVersionGraph, versionApproved } from './store.ts'
 
 /** Steps one run may take in a single advance, so a loop of instant nodes cannot spin forever. */
 export const MAX_STEPS_PER_ADVANCE = 50
@@ -199,7 +199,7 @@ export async function exitRuns(
   }, actor)
 }
 
-type RunRow = RunState & { status: string; campaign_id: number | null; journey_status: string; approved_version: number | null }
+type RunRow = RunState & { status: string; campaign_id: number | null; journey_status: string }
 
 export interface AdvanceResult {
   run_id: number
@@ -220,7 +220,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
     return await db.tx(async (q) => {
       const { rows } = await q.query<RunRow>(
         `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at,
-                r.context, r.status, j.campaign_id, j.status as journey_status, j.approved_version
+                r.context, r.status, j.campaign_id, j.status as journey_status
            from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
           where r.id = $1 and r.status in ${OPEN} and r.next_run_at <= $2
             and j.status in ('live', 'testing', 'sunset')
@@ -246,7 +246,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
       for (;;) {
         if (steps >= MAX_STEPS_PER_ADVANCE) {
           // Not an error: park it and continue on the next tick (a long chain of instant nodes).
-          await q.query(`update lp.journey_runs set status = 'active', next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
+          await q.query(`update lp.journey_runs set status = 'active', attempts = 0, next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
             [run.id, now.toISOString(), run.node_id, run.node_entered_at.toISOString(), JSON.stringify(run.context)])
           await logStep(q, run, run.node_id, 'step_limit', { steps }, actor)
           return { run_id: run.id, advanced: true, steps, status: 'active', node_id: run.node_id }
@@ -259,17 +259,17 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         const block = await leadBlock(q, run, row.campaign_id)
         if (block) {
           await q.query(
-            `update lp.journey_runs set status = 'exited', finished_at = $2, next_run_at = null, node_id = $3, context = $4 where id = $1`,
+            `update lp.journey_runs set status = 'exited', attempts = 0, finished_at = $2, next_run_at = null, node_id = $3, context = $4 where id = $1`,
             [run.id, now.toISOString(), node.id, JSON.stringify(run.context)],
           )
           await logStep(q, run, node.id, 'exited_suppressed', { reason: block }, actor)
           await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', node_id: node.id, reason: block })
           return { run_id: run.id, advanced: true, steps, status: 'exited', node_id: node.id }
         }
-        // A send-capable node waits for the owner's approval of this version. Nothing is sent meanwhile.
-        if (handler.sends && (row.approved_version == null || Number(row.approved_version) !== run.version)) {
+        // A send-capable node waits for the owner's approval of this run's version. Nothing is sent meanwhile.
+        if (handler.sends && !(await versionApproved(q, run.journey_id, run.version))) {
           await q.query(
-            `update lp.journey_runs set status = 'waiting', next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
+            `update lp.journey_runs set status = 'waiting', attempts = 0, next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
             [run.id, new Date(now.getTime() + 60 * 60_000).toISOString(), node.id, run.node_entered_at.toISOString(), JSON.stringify(run.context)],
           )
           await logStep(q, run, node.id, 'awaiting_approval', { version: run.version }, actor)
@@ -282,7 +282,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         if (out.type === 'wait') {
           if (!(out.until instanceof Date) || Number.isNaN(out.until.getTime())) throw new Error(`node '${node.id}' returned a bad wait time`)
           await q.query(
-            `update lp.journey_runs set status = 'waiting', next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
+            `update lp.journey_runs set status = 'waiting', attempts = 0, next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
             [run.id, out.until.toISOString(), run.node_id, run.node_entered_at.toISOString(), JSON.stringify(run.context)],
           )
           // Log the wait once, when it starts, not on every early re-check.
@@ -291,7 +291,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         }
         if (out.type === 'finish') {
           await q.query(
-            `update lp.journey_runs set status = $2, finished_at = $3, next_run_at = null, node_id = $4, context = $5 where id = $1`,
+            `update lp.journey_runs set status = $2, attempts = 0, finished_at = $3, next_run_at = null, node_id = $4, context = $5 where id = $1`,
             [run.id, out.status, now.toISOString(), node.id, JSON.stringify(run.context)],
           )
           await logStep(q, run, node.id, `${node.kind}:${out.status}`, out.result ?? {}, actor)
@@ -310,7 +310,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         await logStep(q, run, node.id, node.kind, { ...(out.result ?? {}), ...(out.path ? { path: out.path } : {}), to }, actor)
         if (to == null) {
           await q.query(
-            `update lp.journey_runs set status = 'done', finished_at = $2, next_run_at = null, context = $3, node_id = $4, node_entered_at = $5 where id = $1`,
+            `update lp.journey_runs set status = 'done', attempts = 0, finished_at = $2, next_run_at = null, context = $3, node_id = $4, node_entered_at = $5 where id = $1`,
             [run.id, now.toISOString(), JSON.stringify(run.context), node.id, run.node_entered_at.toISOString()],
           )
           await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'done', node_id: node.id })
@@ -401,13 +401,23 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
   return out
 }
 
-/** One runner tick. */
+/** A tick stops taking new runs after this long, so the job finishes inside its 120 s timeout. */
+export const TICK_BUDGET_MS = 90_000
+
+/**
+ * One runner tick. Due runs are taken oldest first. Each run commits on its own, so a
+ * tick that runs out of time just leaves the rest for the next one (`deadline_reached`).
+ */
 export async function runDueJourneys(
-  db: Db, opts: { limit?: number; now?: Date; actor?: string } = {},
-): Promise<{ enrolled_from_triggers: number; skipped_fires: number; due: number; advanced: number; errors: number; results: AdvanceResult[] }> {
+  db: Db, opts: { limit?: number; now?: Date; actor?: string; budgetMs?: number } = {},
+): Promise<{
+  enrolled_from_triggers: number; skipped_fires: number; due: number; advanced: number; errors: number;
+  deadline_reached: boolean; results: AdvanceResult[]
+}> {
   const now = opts.now ?? new Date()
   const actor = opts.actor ?? 'system'
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000)
+  const deadline = Date.now() + Math.max(opts.budgetMs ?? TICK_BUDGET_MS, 0)
   const consumed = await consumeTriggerFires(db, actor)
   const { rows } = await db.query<{ id: number }>(
     `select r.id from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
@@ -416,7 +426,12 @@ export async function runDueJourneys(
     [now.toISOString(), limit],
   )
   const results: AdvanceResult[] = []
+  let deadlineReached = false
   for (const r of rows) {
+    if (Date.now() >= deadline) {
+      deadlineReached = true
+      break
+    }
     // advanceRun reports its own failures; this catches anything it did not expect, so one run cannot stop the rest.
     results.push(await advanceRun(db, Number(r.id), now, actor).catch((e): AdvanceResult => ({
       run_id: Number(r.id), advanced: false, steps: 0, status: 'unrecorded', error: e instanceof Error ? e.message : String(e),
@@ -428,6 +443,7 @@ export async function runDueJourneys(
     due: rows.length,
     advanced: results.filter((r) => r.advanced).length,
     errors: results.filter((r) => r.status === 'error').length,
+    deadline_reached: deadlineReached,
     results: results.filter((r) => r.advanced || r.error),
   }
 }

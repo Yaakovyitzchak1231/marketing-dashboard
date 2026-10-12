@@ -153,6 +153,8 @@ describe('journeys: model, versions and the runner (plan 3.1)', () => {
     await emitLeadEvent(db, { type: 'custom', company_id: co, source: 'test' })
     expect((await runDueJourneys(db)).enrolled_from_triggers).toBe(0) // testing: fires wait
     await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    expect((await runDueJourneys(db)).enrolled_from_triggers).toBe(0) // going live does not replay the fire from testing
+    await emitLeadEvent(db, { type: 'custom', company_id: co, source: 'test' })
     expect((await runDueJourneys(db)).enrolled_from_triggers).toBe(1)
     expect((await runDueJourneys(db)).enrolled_from_triggers).toBe(0)
     const runs = await runOp(db, 'owner', 'journey_runs', { journey_id: j.id }) as { runs: { company_id: number; source: string; status: string }[] }
@@ -211,6 +213,123 @@ describe('journeys: model, versions and the runner (plan 3.1)', () => {
       `select field, changed_by from lp.status_history where entity_type = 'journey' and entity_id = $1 order by changed_at, id`, [j.id],
     )
     expect(rows.map((r) => r.field)).toEqual(['created', 'version'])
+  })
+
+  it('approval is per version: approving v2 does not release a v1 run, and approving v1 does', async () => {
+    registerNodeHandler({ kind: 'sendish_test', sends: true, validate: () => [], run: async () => ({ type: 'next' }) })
+    const far = new Date(Date.now() + 40 * day)
+    const graph = { start: 's', nodes: [{ id: 's', kind: 'sendish_test' }] }
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Approvals', entry_mode: 'multiple' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', { journey_id: j.id, graph })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const a = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: co }) as { results: { run_id: number }[] }
+    await runDueJourneys(db, { now: far })
+    expect(await run(a.results[0].run_id)).toMatchObject({ status: 'waiting', node_id: 's', version: 1 })
+    await expect(runOp(db, 'eddie', 'journey_approve', { journey_id: j.id })).rejects.toMatchObject({ status: 403 })
+
+    await runOp(db, 'owner', 'journey_publish', { journey_id: j.id, graph })
+    await runOp(db, 'owner', 'journey_approve', { journey_id: j.id, version: 2 })
+    const b = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: co2 }) as { results: { run_id: number }[] }
+    await runDueJourneys(db, { now: new Date(far.getTime() + 3 * 3600_000) })
+    expect(await run(b.results[0].run_id)).toMatchObject({ status: 'done', version: 2 })
+    // v1 is still unapproved, so its run waits (re-checked hourly) even though v2 is approved.
+    await runDueJourneys(db, { now: new Date(far.getTime() + 4 * 3600_000) })
+    expect(await run(a.results[0].run_id)).toMatchObject({ status: 'waiting', version: 1 })
+    const log = await runOp(db, 'owner', 'journey_run_log', { run_id: a.results[0].run_id }) as { steps: { action: string }[] }
+    expect(log.steps.map((s) => s.action)).toContain('awaiting_approval')
+
+    await runOp(db, 'owner', 'journey_approve', { journey_id: j.id, version: 1 })
+    await runDueJourneys(db, { now: new Date(far.getTime() + 6 * 3600_000) })
+    expect(await run(a.results[0].run_id)).toMatchObject({ status: 'done', version: 1 })
+  })
+
+  it('attempts count only failures since the last success, so a recovered run is not closer to error', async () => {
+    const left: Record<string, number> = { fa: 1, fb: 2 }
+    registerNodeHandler({
+      kind: 'flaky_test',
+      validate: () => [],
+      run: async ({ node }) => {
+        if ((left[node.id] ?? 0) > 0) {
+          left[node.id]--
+          throw new Error(`flaky ${node.id}`)
+        }
+        return { type: 'next' }
+      },
+    })
+    const co3 = await addCompany(db, { name: 'Pearl Co', domain: 'pearl.example', city: 'Towson' })
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Flaky', entry_mode: 'multiple' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', {
+      journey_id: j.id,
+      graph: {
+        start: 'fa',
+        nodes: [
+          { id: 'fa', kind: 'flaky_test', next: 'w' },
+          { id: 'w', kind: 'wait', config: { hours: 1 }, next: 'fb' },
+          { id: 'fb', kind: 'flaky_test' },
+        ],
+      },
+    })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: co3 }) as { results: { run_id: number }[] }
+    const runId = en.results[0].run_id
+    const attempts = async () => (await db.query<{ attempts: number }>('select attempts from lp.journey_runs where id = $1', [runId])).rows[0].attempts
+    const T = Date.now() + 60 * day
+
+    await runDueJourneys(db, { now: new Date(T) }) // fa throws (1)
+    expect(await run(runId)).toMatchObject({ status: 'active', node_id: 'fa' })
+    expect(await attempts()).toBe(1)
+    await runDueJourneys(db, { now: new Date(T + 2 * day) }) // fa succeeds, the wait commits
+    expect(await run(runId)).toMatchObject({ status: 'waiting', node_id: 'w' })
+    expect(await attempts()).toBe(0)
+    await runDueJourneys(db, { now: new Date(T + 3 * day) }) // fb throws (1 since the success)
+    expect(await run(runId)).toMatchObject({ status: 'active', node_id: 'fb' })
+    expect(await attempts()).toBe(1)
+    await runDueJourneys(db, { now: new Date(T + 5 * day) }) // fb throws (2): still not error
+    expect(await run(runId)).toMatchObject({ status: 'active', node_id: 'fb' })
+    expect(await attempts()).toBe(2)
+    await runDueJourneys(db, { now: new Date(T + 7 * day) })
+    expect(await run(runId)).toMatchObject({ status: 'done' })
+  })
+
+  it('resuming a paused journey moves its waits forward by the pause; fires from the pause are not replayed', async () => {
+    const trig = await runOp(db, 'owner', 'upsert_trigger', { name: 'Resume (journey)', kind: 'event', config: { event_type: 'custom' } }) as { id: number }
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Pausable', trigger_id: trig.id, entry_mode: 'multiple' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', { journey_id: j.id, graph: { start: 'w', nodes: [{ id: 'w', kind: 'wait', config: { days: 3 } }] } })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: co }) as { results: { run_id: number }[] }
+    const runId = en.results[0].run_id
+    await runDueJourneys(db)
+    const before = new Date((await run(runId)).next_run_at as Date).getTime()
+
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'paused' })
+    await emitLeadEvent(db, { type: 'custom', company_id: co2, source: 'test' }) // fired while paused
+    await db.query(`update lp.journeys set paused_at = now() - interval '2 days' where id = $1`, [j.id])
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const after = new Date((await run(runId)).next_run_at as Date).getTime()
+    expect(Math.abs(after - before - 2 * day)).toBeLessThan(60_000)
+    expect((await runDueJourneys(db)).enrolled_from_triggers).toBe(0)
+  })
+
+  it('journey_enroll reports a lead that fails its own checks and still enrols the rest', async () => {
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Batch', entry_mode: 'multiple' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', { journey_id: j.id, graph: { start: 'w', nodes: [{ id: 'w', kind: 'wait', config: { hours: 1 } }] } })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const r = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_ids: [co, 999999, co2] }) as {
+      enrolled: number; failed: number; results: { reason?: string; error?: string }[]
+    }
+    expect(r).toMatchObject({ enrolled: 2, failed: 1 })
+    expect(r.results[1]).toMatchObject({ reason: 'invalid', error: expect.stringMatching(/no company 999999/) })
+  })
+
+  it('the tick stops taking runs when its time budget is spent, and leaves the rest for the next tick', async () => {
+    const r = await runDueJourneys(db, { now: new Date(Date.now() + 80 * day), budgetMs: 0 })
+    expect(r.advanced).toBe(0)
+    expect(r.deadline_reached).toBe(r.due > 0)
+  })
+
+  it("a caller cannot claim the runner's own event dedupe keys", async () => {
+    await expect(runOp(db, 'owner', 'track_event', { type: 'custom', company_id: co, dedupe_key: 'journey_entered:1' }))
+      .rejects.toThrow(/reserved for the journey runner/)
   })
 
   it('the migration is safe to run twice', async () => {

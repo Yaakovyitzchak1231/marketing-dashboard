@@ -39,6 +39,7 @@ export interface Journey {
   approved_version: number | null
   approved_by: string | null
   approved_at: string | null
+  paused_at: string | null
   created_by: string | null
   updated_by: string | null
   created_at: string
@@ -46,7 +47,7 @@ export interface Journey {
 }
 
 const COLS = `id, name, status, campaign_id, trigger_id, trigger_cursor, entry_mode, goal, settings,
-  current_version, approved_version, approved_by, approved_at, created_by, updated_by, created_at, updated_at`
+  current_version, approved_version, approved_by, approved_at, paused_at, created_by, updated_by, created_at, updated_at`
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
@@ -169,20 +170,44 @@ export async function publishVersion(
   }, actor)
 }
 
-/** Owner approval of the journey's current version. The runner checks it before any send-capable node. */
-export async function approveCurrentVersion(db: Db, actor: string, journeyId: number): Promise<Journey> {
+/**
+ * Owner approval of one version (default: the current one). Each version needs its own
+ * approval, so approving a new version does not stop runs still on an older one.
+ */
+export async function approveVersion(db: Db, actor: string, journeyId: number, version: number | null = null): Promise<Journey> {
   return db.tx(async (q) => {
     const cur = await getJourney(q, journeyId)
     if (!cur) throw new JourneyError('no journey with that id', 404)
-    if (cur.current_version == null) throw new JourneyError('publish a version before approving it', 409)
+    const target = version ?? cur.current_version
+    if (target == null) throw new JourneyError('publish a version before approving it', 409)
+    const { rows: vs } = await q.query('select 1 from lp.journey_versions where journey_id = $1 and version = $2', [journeyId, target])
+    if (!vs[0]) throw new JourneyError(`this journey has no version ${target}`, 404)
+    await q.query(
+      'update lp.journey_versions set approved_by = $3, approved_at = now() where journey_id = $1 and version = $2',
+      [journeyId, target, actor],
+    )
     const { rows } = await q.query<Journey>(
       `update lp.journeys set approved_version = $2, approved_by = $3, approved_at = now(), updated_by = $3
         where id = $1 returning ${COLS}`,
-      [journeyId, cur.current_version, actor],
+      [journeyId, target, actor],
     )
-    await history(q, journeyId, 'approved_version', cur.approved_version, cur.current_version, actor, 'ops_api')
+    await history(q, journeyId, 'approved_version', cur.approved_version, target, actor, 'ops_api')
     return rows[0]
   }, actor)
+}
+
+/** Approve the journey's current version. */
+export function approveCurrentVersion(db: Db, actor: string, journeyId: number): Promise<Journey> {
+  return approveVersion(db, actor, journeyId, null)
+}
+
+/** True when the version has an owner approval. Send-capable nodes check it for the run's own version. */
+export async function versionApproved(q: Queryable, journeyId: number, version: number): Promise<boolean> {
+  const { rows } = await q.query(
+    'select 1 from lp.journey_versions where journey_id = $1 and version = $2 and approved_at is not null',
+    [journeyId, version],
+  )
+  return !!rows[0]
 }
 
 export async function setJourneyStatus(db: Db, actor: string, journeyId: number, status: string, via: 'ui' | 'ops_api' = 'ops_api'): Promise<Journey> {
@@ -197,8 +222,27 @@ export async function setJourneyStatus(db: Db, actor: string, journeyId: number,
       const open = await q.query(`select 1 from lp.journey_runs where journey_id = $1 and status in ('active','waiting') limit 1`, [journeyId])
       if (open.rows[0]) throw new JourneyError('this journey has leads in it; pause or sunset it instead of going back to draft', 409)
     }
+    if (cur.status === 'paused' && status !== 'paused' && cur.paused_at) {
+      // Resuming: move every open run's due time forward by the length of the pause, so
+      // waits carry on where they were instead of all coming due at once.
+      await q.query(
+        `update lp.journey_runs set next_run_at = next_run_at + (now() - $2::timestamptz)
+          where journey_id = $1 and status in ('active', 'waiting') and next_run_at is not null`,
+        [journeyId, cur.paused_at],
+      )
+    }
+    if (status === 'live' && cur.status !== 'live') {
+      // Going live reads trigger fires from now on. Fires from before (draft, testing,
+      // paused) are not replayed, so a journey does not enrol weeks-old leads.
+      await q.query(
+        'update lp.journeys set trigger_cursor = coalesce((select max(id) from lp.trigger_fires where trigger_id = $1), 0) where id = $2',
+        [cur.trigger_id, journeyId],
+      )
+    }
     const { rows } = await q.query<Journey>(
-      `update lp.journeys set status = $2, updated_by = $3 where id = $1 returning ${COLS}`,
+      `update lp.journeys set status = $2, updated_by = $3,
+              paused_at = case when $2 = 'paused' then now() else null end
+        where id = $1 returning ${COLS}`,
       [journeyId, status, actor],
     )
     if (cur.status !== status) await history(q, journeyId, 'status', cur.status, status, actor, via)
@@ -214,9 +258,14 @@ export async function getVersionGraph(q: Queryable, journeyId: number, version: 
   return rows[0]?.graph ?? null
 }
 
-export async function listVersions(q: Queryable, journeyId: number): Promise<{ version: number; note: string | null; published_by: string | null; published_at: string }[]> {
-  const { rows } = await q.query<{ version: number; note: string | null; published_by: string | null; published_at: string }>(
-    'select version, note, published_by, published_at from lp.journey_versions where journey_id = $1 order by version desc',
+export async function listVersions(q: Queryable, journeyId: number): Promise<{
+  version: number; note: string | null; published_by: string | null; published_at: string; approved_by: string | null; approved_at: string | null
+}[]> {
+  const { rows } = await q.query<{
+    version: number; note: string | null; published_by: string | null; published_at: string; approved_by: string | null; approved_at: string | null
+  }>(
+    `select version, note, published_by, published_at, approved_by, approved_at
+       from lp.journey_versions where journey_id = $1 order by version desc`,
     [journeyId],
   )
   return rows
