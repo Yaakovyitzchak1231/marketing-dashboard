@@ -4,6 +4,7 @@ import { PageShell, DbNotConnected } from '@/components/app/PageShell'
 import { Card, EmptyNote } from '@/components/dashboard/primitives'
 import { parseLeadQuery, leadsHref, defaultDir, SORT_KEYS, VIEW_LABELS, NONE, activeFilterCount, parseSegParam, decodeAdvancedFilter } from '@/lib/leads/filters'
 import { listLeads, kanbanLeads, campaignGroups, regionGroups, leadFacets } from '@/lib/leads/queries'
+import { leadScoreChips } from '@/lib/scoring/engine'
 import { resolveAdvancedFilter } from '@/lib/leads/advanced'
 import { listPools } from '@/lib/pools/store'
 import { LeadsTable, type SortLink } from '@/components/leads/LeadsTable'
@@ -70,6 +71,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
     body = <RegionGroups q={q} groups={groups} />
   } else {
     const page = await listLeads(db, qEff)
+    const chips = await leadScoreChips(db, page.rows.map((r) => r.id))
+    for (const r of page.rows) {
+      const c = chips.get(r.id)
+      r.score = c?.score ?? null
+      r.score_model = c?.model_name ?? null
+      r.score_threshold = c?.threshold_label ?? null
+    }
     matchingTotal = page.total
     meta = `${page.total.toLocaleString('en-US')} ${filtered || q.view !== 'table' ? 'matching ' : ''}lead${page.total === 1 ? '' : 's'}`
     const sortLinks: SortLink[] = SORT_KEYS.map((k) => {
