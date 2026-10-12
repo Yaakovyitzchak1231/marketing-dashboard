@@ -14,6 +14,8 @@ import { RegistryError } from '@/lib/edit/registry'
 import { MAX_BULK_EDIT, bulkEditSentence, bulkUpdateCompanies } from '@/lib/edit/bulk'
 
 export const dynamic = 'force-dynamic'
+// Up to 5,000 leads, each its own validated transaction: give it the same budget as the other bulk routes.
+export const maxDuration = 300
 
 export async function PATCH(req: Request) {
   const role = await currentRole()
