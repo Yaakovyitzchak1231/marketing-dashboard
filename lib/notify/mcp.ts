@@ -97,7 +97,7 @@ export const MCP_TOOLS: Tool[] = [
   {
     name: 'track_event',
     description:
-      "Record one lead event (lp.lead_events): an email opened, a reply, a tag, anything worth a mark on a lead's timeline. Needs company_id, contact_id or email so it lands on a lead, and a type already in list_event_types (register a new one with register_event_type first; an agent can add new keys but not relabel existing ones). A repeated dedupe_key is a no-op, not an error.",
+      "Record one lead event (lp.lead_events): an email opened, a reply, a tag, anything worth a mark on a lead's timeline. Needs company_id, contact_id or email so it lands on a lead, and a type already in list_event_types (register a new one with register_event_type first; an agent can add new keys but not relabel existing ones; re-registering an existing key with identical label, category and props_schema is a no-op that returns unchanged: true). A repeated dedupe_key is a no-op, not an error.",
     inputSchema: obj(
       {
         type: { type: 'string' },

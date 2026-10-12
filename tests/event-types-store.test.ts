@@ -45,7 +45,7 @@ describe('event type registry core (lib/events/types-store)', () => {
     await updateEventType(db, 'owner', 'demo_given', { active: true })
     await expect(emitLeadEvent(db, { type: 'demo_given', company_id: co, source: 'test' })).resolves.toMatchObject({ inserted: true })
     const { rows } = await db.query<{ summary: string }>("select summary from lp.events where kind = 'event_type.updated' and entity_id = 'demo_given' order by id")
-    expect(rows.map((r) => r.summary)).toEqual(['Updated event type demo_given', 'Deactivated event type demo_given', 'Activated event type demo_given'])
+    expect(rows.map((r) => r.summary)).toEqual(['Relabeled event type demo_given', 'Deactivated event type demo_given', 'Activated event type demo_given'])
   })
 
   it('an unknown key is a 404', async () => {
@@ -87,5 +87,28 @@ describe('event type registry core (lib/events/types-store)', () => {
     await expect(registerEventType(db, 'owner', { key: 'ps_a', label: 'x', category: 'custom', props_schema: [1] })).rejects.toThrow(/JSON object/)
     await expect(registerEventType(db, 'owner', { key: 'ps_b', label: 'x', category: 'custom', props_schema: { big: 'x'.repeat(20000) } })).rejects.toThrow(/too large/)
     await expect(registerEventType(db, 'owner', { key: 'ps_c', label: 'x', category: 'custom', props_schema: { url: 'string' } })).resolves.toMatchObject({ props_schema: { url: 'string' } })
+  })
+
+  it('identical re-register is a no-op 200 (unchanged, no audit row) for agents and built-ins; a differing one is 409', async () => {
+    await registerEventType(db, 'owner', { key: 'seeded', label: 'Seeded', category: 'signal', props_schema: { a: 'string', b: 1 } })
+    const audits = async () => (await db.query<{ n: number }>("select count(*)::int as n from lp.events where entity_type = 'event_type' and entity_id = any($1::text[])", [['seeded', 'email_sent']])).rows[0].n
+    const before = await audits()
+    const r = (await runOp(db, 'hermes', 'register_event_type', { key: 'seeded', label: ' Seeded ', category: 'signal', props_schema: { b: 1, a: 'string' } })) as { unchanged?: boolean; label: string }
+    expect(r).toMatchObject({ unchanged: true, label: 'Seeded' })
+    const { rows: bi } = await db.query<{ label: string; category: string }>("select label, category from lp.event_types where key = 'email_sent'")
+    const b = (await runOp(db, 'hermes', 'register_event_type', { key: 'email_sent', label: bi[0].label, category: bi[0].category })) as { unchanged?: boolean }
+    expect(b.unchanged).toBe(true)
+    expect(await audits()).toBe(before)
+    await expect(runOp(db, 'hermes', 'register_event_type', { key: 'seeded', label: 'Seeded', category: 'signal', props_schema: { a: 'number' } })).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('audit summaries say Relabeled / Deactivated / Activated / Registered', async () => {
+    await registerEventType(db, 'owner', { key: 'aud_t', label: 'Aud', category: 'custom' })
+    await registerEventType(db, 'owner', { key: 'aud_t', label: 'Aud two', category: 'custom' })
+    await updateEventType(db, 'owner', 'aud_t', { category: 'deal' })
+    await updateEventType(db, 'owner', 'aud_t', { active: false })
+    await updateEventType(db, 'owner', 'aud_t', { active: true })
+    const { rows } = await db.query<{ summary: string }>("select summary from lp.events where entity_type = 'event_type' and entity_id = 'aud_t' order by id")
+    expect(rows.map((r) => r.summary.split(' ')[0])).toEqual(['Registered', 'Relabeled', 'Relabeled', 'Deactivated', 'Activated'])
   })
 })

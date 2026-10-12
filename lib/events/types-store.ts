@@ -30,6 +30,8 @@ export type EventTypeRow = {
   active: boolean
   created_by: string | null
   created_at: string | Date
+  /** true when an identical re-register was a no-op (nothing written, no audit row) */
+  unchanged?: boolean
 }
 
 const COLS = 'key, label, category, source, props_schema, active, created_by, created_at'
@@ -79,12 +81,21 @@ export async function registerEventType(
   const category = cleanCategory(input.category)
   const schema = cleanPropsSchema(input.props_schema)
   const canRelabel = opts.canRelabel !== false
-  if (!canRelabel) {
-    const { rows: ex } = await q.query<{ source: string }>('select source from lp.event_types where key = $1', [key])
-    if (ex[0]) {
-      if (BUILT_IN_SOURCES.has(ex[0].source)) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
-      throw new EventTypeError(`'${key}' is already registered; a person can relabel it in Settings → Event types`, 409)
+  const { rows: ex } = await q.query<EventTypeRow & { same: boolean }>(
+    `select ${COLS}, (label = $2 and category is not distinct from $3 and props_schema is not distinct from $4::jsonb) as same
+       from lp.event_types where key = $1 for update`,
+    [key, label, category, schema],
+  )
+  const existing = ex[0]
+  if (existing) {
+    // Identical re-register (label, category, props_schema — jsonb equality) is an
+    // idempotent no-op for everyone, built-ins included, so seeds can re-run: no write, no audit.
+    if (existing.same) {
+      const { same: _same, ...row } = existing
+      return { ...row, unchanged: true }
     }
+    if (BUILT_IN_SOURCES.has(existing.source)) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
+    if (!canRelabel) throw new EventTypeError(`'${key}' is already registered with a different label/category/props_schema; a person can relabel it in Settings → Event types`, 409)
   }
   const { rows } = await q.query<EventTypeRow>(
     `insert into lp.event_types (key, label, category, source, props_schema, created_by)
@@ -95,7 +106,14 @@ export async function registerEventType(
     [key, label, category, input.source ?? 'agent', schema, actor],
   )
   if (!rows[0]) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
-  await audit(q, actor, 'event_type.registered', key, `Registered event type ${key} (${label})`, { label, category })
+  if (existing) {
+    const changes: Record<string, { from: unknown; to: unknown }> = {}
+    if (label !== existing.label) changes.label = { from: existing.label, to: label }
+    if (category !== existing.category) changes.category = { from: existing.category, to: category }
+    await audit(q, actor, 'event_type.updated', key, `Relabeled event type ${key} (${label})`, changes)
+  } else {
+    await audit(q, actor, 'event_type.registered', key, `Registered event type ${key} (${label})`, { label, category })
+  }
   return rows[0]
 }
 
@@ -123,7 +141,7 @@ export async function updateEventType(
   if (category !== old.category) changes.category = { from: old.category, to: category }
   if (active !== old.active) changes.active = { from: old.active, to: active }
   if (Object.keys(changes).length) {
-    const what = changes.active ? (active ? 'Activated' : 'Deactivated') : 'Updated'
+    const what = changes.active ? (active ? 'Activated' : 'Deactivated') : 'Relabeled'
     await audit(q, actor, 'event_type.updated', key, `${what} event type ${key}`, changes)
   }
   return rows[0]
