@@ -51,6 +51,7 @@ function isObject(v: unknown): v is Record<string, unknown> {
 export function outgoing(node: GraphNode): string[] {
   const out = node.paths.map((p) => p.to)
   if (node.next) out.push(node.next)
+  if (node.kind === 'goto' && typeof node.config.to === 'string' && node.config.to.trim()) out.push(node.config.to.trim())
   return out
 }
 
@@ -99,7 +100,8 @@ export function validateGraph(raw: unknown): JourneyGraph {
         })
       }
     }
-    nodes.push({ id, kind, config: isObject(n.config) ? n.config : {}, next, paths })
+    const built: GraphNode = { id, kind, config: isObject(n.config) ? n.config : {}, next, paths }
+    nodes.push(getNodeHandler(kind)?.normalize?.(built) ?? built)
   })
   if (errors.length) throw new GraphError(errors)
 
