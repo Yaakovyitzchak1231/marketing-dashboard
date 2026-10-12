@@ -1,11 +1,17 @@
-/** GET /api/verify/runs/:id -> { run } */
+/** GET /api/verify/runs/:id -> { run }. Editor role or above: a run carries spend, estimates and per-lead tallies. */
 import { NextResponse } from 'next/server'
 import { getRun } from '@/lib/verify/runs'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId } from '../../_shared'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await actorFor('editor')
+  } catch (e) {
+    return fail(e)
+  }
   const db = dbOrNull()
   if (!db) return notConnected()
   const id = parseRunId((await params).id)

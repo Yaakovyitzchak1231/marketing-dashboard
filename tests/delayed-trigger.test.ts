@@ -165,6 +165,21 @@ describe('delayed trigger review fixes (plan 3.3)', () => {
     expect(await fires(t2, co3)).toBe(1)
   })
 
+  it('1c. a fire written before the trigger was disabled is not enrolled by the runner', async () => {
+    const co = await company()
+    const t = await trigger({ after_event: 'custom', days: 1, unless_event: 'meeting_booked' })
+    const journey = await runOp(db, 'owner', 'journey_upsert', { name: 'Disabled before enrol', trigger_id: t, entry_mode: 'once' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', { journey_id: journey.id, graph: { start: 'n', nodes: [{ id: 'n', kind: 'note' }] } })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: journey.id, status: 'live' })
+    await emitLeadEvent(db, { type: 'custom', company_id: co, source: 'test' })
+    expect((await scanDueTriggers(db, ahead(2))).delayed).toBeGreaterThanOrEqual(1)
+    expect(await fires(t, co)).toBe(1)
+    await runOp(db, 'owner', 'set_trigger_enabled', { id: t, enabled: false })
+    await runDueJourneys(db)
+    const { rows } = await db.query<{ n: number }>('select count(*) as n from lp.journey_runs where journey_id = $1', [journey.id])
+    expect(Number(rows[0].n)).toBe(0)
+  })
+
   it('2. a Y that occurred after due_at does not cancel an owed fire', async () => {
     const co = await company()
     const t = await trigger()

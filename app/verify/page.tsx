@@ -1,6 +1,8 @@
 import { getDb } from '@/lib/db'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { listRuns, getRun, runVerdictCount, type RunRow } from '@/lib/verify/runs'
-import { providerBalances, verificationCounts, VERIFICATION_STATUSES } from '@/lib/verify/overview'
+import { providerBalancesAsync, verificationCounts, VERIFICATION_STATUSES } from '@/lib/verify/overview'
 import { getPricing } from '@/lib/verify/pricing'
 import type { LeadFilter } from '@/lib/verify/select'
 import type { ProviderBalance } from '@/lib/verify/types'
@@ -28,6 +30,19 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams
+  // Runs carry spend, estimates and per-lead results, and the /api/verify reads
+  // need editor access; the screen asks for the same so a viewer cannot read
+  // the same numbers here instead.
+  if (!canAtLeast(await currentRole(), 'editor')) {
+    return (
+      <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
+        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Verification</h1>
+        <Card className="mt-6">
+          <EmptyNote>This screen shows spend and per-lead results, so it needs editor access. Ask an owner if you need it.</EmptyNote>
+        </Card>
+      </main>
+    )
+  }
   const db = getDb()
   const pricing = getPricing()
 
@@ -42,7 +57,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
     if (v) filter[k] = v
   }
 
-  const providersP = providerBalances()
+  const providersP = providerBalancesAsync()
   let counts: Awaited<ReturnType<typeof verificationCounts>> | null = null
   let runs: RunRow[] = []
   let resume: RunRow | null = null
@@ -177,7 +192,7 @@ function ProviderCard({ name, env, b, perCheck, note }: { name: string; env: str
             <span className="text-ink-muted">Balance unavailable{b.error ? `: ${b.error}` : ''}</span>
           )
         ) : (
-          <span className="text-ink-muted">Add {env} in Vercel to enable this tier.</span>
+          <span className="text-ink-muted">Save the key on <a href="/settings" className="underline">Settings</a> (or set {env} in Vercel) to enable this tier.</span>
         )}
       </p>
       <p className="mt-1 text-[11px] text-ink-faint">
