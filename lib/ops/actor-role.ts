@@ -45,6 +45,7 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'list_jobs', 'get_job', 'job_runs',
   'recent_lead_events', 'list_event_types',
   'get_campaign_profile', 'list_profile_items', 'list_pools', 'sources_health',
+  'validate_campaign_profile', 'export_campaign_profile',
   'list_score_models', 'get_score_model', 'lead_scores',
   'list_tags', 'tag_trends', 'merge_candidates',
   'count_tagged', // #87: counts leads with a tag before a change (read-only)
@@ -132,4 +133,20 @@ export async function requireOwnerActor(q: Queryable, actor: string, message: st
 export async function requireOwnerOrSystem(q: Queryable, actor: string, message: string): Promise<void> {
   if (actor === 'system') return
   await requireOwnerActor(q, actor, message)
+}
+
+/**
+ * True when `actor` is a person who may edit shared definitions: the built-in
+ * 'owner' actor, or an active human whose role is editor or owner. Agents and
+ * the runner are never editors (lp.actors.role is humans-only).
+ */
+export async function isEditorActor(q: Queryable, actor: string): Promise<boolean> {
+  if (actor === 'owner') return true
+  const row = await readActor(q, actor)
+  return !!row && row.kind === 'human' && row.active && row.has_role_col && (row.role === 'editor' || row.role === 'owner')
+}
+
+/** Throws OpsError 403 unless `actor` is an Editor or Owner person (see isEditorActor). */
+export async function requireEditorActor(q: Queryable, actor: string, message: string): Promise<void> {
+  if (!(await isEditorActor(q, actor))) throw new OpsError(message, 403)
 }

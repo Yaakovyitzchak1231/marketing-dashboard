@@ -198,3 +198,19 @@ describe('the gate', () => {
     }
   })
 })
+
+describe('disabled agent (row 6)', () => {
+  it('an agent disabled on /agents gets 403 on every /api/ops route with its OPS_AGENT_TOKENS env token; re-enabling restores it', async () => {
+    const { setAgentActive } = await import('@/lib/ops/agents-admin')
+    await setAgentActive(db, 'owner', 'tab', false)
+    const after = await hitEveryRoute(TAB)
+    expect(after).toEqual({ list: 403, op: 403, claim: 403, importGet: 403, importPost: 403, exportGet: 403, weekly: 403 })
+    const j = await (await opsGet(nreq('https://x/api/ops', { headers: auth(TAB) }), ctx())).json()
+    expect(j).toMatchObject({ ok: false, disabled: true })
+    expect(j.error).toMatch(/disabled/)
+    // Other agents are unaffected.
+    expect(Object.values(await hitEveryRoute(HERMES)).includes(403)).toBe(false)
+    await setAgentActive(db, 'owner', 'tab', true)
+    expect(Object.values(await hitEveryRoute(TAB)).includes(403)).toBe(false)
+  })
+})

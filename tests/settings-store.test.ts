@@ -18,6 +18,7 @@ import {
   setActorTakesKinds,
   SettingsError,
 } from '@/lib/settings/store'
+import { mailConfiguredAsync, sendMail } from '@/lib/notify/mail'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 const KEY_B64 = Buffer.alloc(32, 5).toString('base64')
@@ -136,6 +137,43 @@ describe('settings store (real Postgres via PGlite)', () => {
     expect(await resolveConfig('instantly.api_key', { INSTANTLY_API_KEY: 'env-key-123' })).toEqual({ value: 'env-key-123', source: 'env' })
 
     expect(await resolveConfig('mail.api_key', {})).toEqual({ value: null, source: 'unset' })
+  })
+
+  it('mail delivery uses saved settings before environment fallbacks', async () => {
+    const previousSettingsKey = process.env.SETTINGS_KEY
+    process.env.SETTINGS_KEY = KEY_B64
+    try {
+      await putSetting(db, 'owner', 'mail.provider', 'resend')
+      await putSetting(db, 'owner', 'mail.from', 'DB Alerts <db-alerts@example.com>')
+      await putSecret(db, 'owner', 'mail.api_key', 'db-resend-api-key')
+
+      const env = {
+        NODE_ENV: 'test' as const,
+        MAIL_PROVIDER: 'brevo',
+        MAIL_API_KEY: 'env-brevo-api-key',
+        MAIL_FROM: 'Env Alerts <env-alerts@example.com>',
+      }
+      expect(await mailConfiguredAsync({})).toBe(true)
+
+      const requests: { url: string; init?: RequestInit }[] = []
+      const result = await sendMail(
+        { to: 'person@example.com', subject: 'Saved config', text: 'Mail from the settings store' },
+        async (url, init) => {
+          requests.push({ url, init })
+          return Response.json({ id: 'db-mail-1' })
+        },
+        env,
+      )
+
+      expect(result).toEqual({ ok: true, id: 'db-mail-1' })
+      expect(requests).toHaveLength(1)
+      expect(requests[0].url).toBe('https://api.resend.com/emails')
+      expect(new Headers(requests[0].init?.headers).get('authorization')).toBe('Bearer db-resend-api-key')
+      expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({ from: 'DB Alerts <db-alerts@example.com>' })
+    } finally {
+      if (previousSettingsKey === undefined) delete process.env.SETTINGS_KEY
+      else process.env.SETTINGS_KEY = previousSettingsKey
+    }
   })
 
   it('listSettings / listSecretStatuses cover the full registry shape without leaking secret values', async () => {

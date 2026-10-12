@@ -7,8 +7,11 @@
  * pause not made by a human.
  */
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { OpsError } from '@/lib/ops/core'
 import { getDb } from '@/lib/db'
 import { pauseAgent, pauseAll, resumeAgent, resumeAll } from '@/lib/ops/pause'
+import { renameAgent, setAgentActive, setAgentCanSend } from '@/lib/ops/agents-admin'
 import { actorFor } from '@/lib/auth/act'
 
 function db() {
@@ -55,4 +58,39 @@ export async function resumeAllAction(f: FormData) {
   if (s(f, 'confirm') !== 'yes') return
   await resumeAll(db(), ME)
   refresh()
+}
+
+/**
+ * Rename / disable / re-enable / can_send (lib/ops/agents-admin.ts). Owner only, agents only.
+ * A refusal (blank name, too long, not an agent) comes back as a note on the agent's page
+ * instead of the generic error page. Rename takes no confirm: it is reversible, keeps the id,
+ * and is logged; disable is the one that cuts keys off, so only it asks twice.
+ */
+async function adminStep(id: string, run: () => Promise<unknown>) {
+  try {
+    await run()
+  } catch (e) {
+    if (!(e instanceof OpsError)) throw e
+    redirect(`/agents/${encodeURIComponent(id)}?tone=bad&note=${encodeURIComponent(e.message)}`)
+  }
+  refresh(id)
+}
+
+export async function renameAgentAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  await adminStep(id, () => renameAgent(db(), ME, id, s(f, 'display_name')))
+}
+
+export async function setAgentActiveAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  if (s(f, 'confirm') !== 'yes') return
+  await adminStep(id, () => setAgentActive(db(), ME, id, s(f, 'active') === 'true'))
+}
+
+export async function setAgentCanSendAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  await adminStep(id, () => setAgentCanSend(db(), ME, id, s(f, 'can_send') === 'true'))
 }

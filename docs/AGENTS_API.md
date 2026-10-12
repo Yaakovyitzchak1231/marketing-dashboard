@@ -162,7 +162,8 @@ the write (`lib/events/emit.ts`'s `emitLeadEvent` / `emitLeadEvents`, used insid
 | `track_events` | `{events: [...]}` (same shape, at most 500) | One multi-row insert. Returns one `{ok, ...}` result per item, same order — a bad item (unknown type, missing identity) fails only that item, not the batch. |
 | `recent_lead_events` | `{company_id? \| contact_id? \| campaign_id?, type?, since?, limit?}` | A lead's (or a campaign's) timeline, newest first. At least one filter is required. |
 | `list_event_types` | `{category?, active_only?}` | The event type registry (for building a UI or picking a type before `track_event`). |
-| `register_event_type` | `{key, label, category, props_schema?}` | Add a new type (slug key, e.g. `review_posted`). Any authenticated actor may register one; it only opens the door for `track_event` to use the key — it never emits an event on its own. |
+| `register_event_type` | `{key, label, category, props_schema?}` | Add a new type (slug key, e.g. `review_posted`). Any authenticated actor, agents included, may register a NEW key; it only opens the door for `track_event` to use the key — it never emits an event on its own. Re-registering an existing key with the **same** label, category and `props_schema` (JSON equality; an omitted `props_schema` means "keep the stored one" and is not compared, an explicit `null` clears it) is an idempotent no-op for everyone, built-ins included: **200** with the existing row and `unchanged: true`, nothing written, no audit row (so seed scripts can re-run). A **differing** re-register: an agent gets **409** ("already registered; a person can relabel it in Settings"); a person (editor or owner) changes it instead: a new label/category is audited "Relabeled" and comes back with `relabeled: true`; a new `props_schema` is written too (audit "Updated props_schema", or "…; props_schema updated" alongside a relabel) and comes back with `schema_updated: true`. An agent can never overwrite a row someone else registered at the same moment: the insert is `on conflict do nothing`, then the same rules re-run against the row that won. A differing re-register of a built-in key (`source` `instantly`/`system`) is **409** for everyone. `props_schema` must be a JSON object (or omitted), at most 16 KB. |
+| `update_event_type` | `{key, label?, category?, active?}` | People only: an editor or owner (or the owner actor); an agent key gets **403**. Changes a custom type's label/category or switches it off (`active:false` makes `track_event` refuse the key). The key never changes. Built-in types (`source` `instantly`/`system`) are **409**. Also on the dashboard at Settings → Data → Event types. Each change writes an `lp.events` row (`event_type.registered` / `event_type.updated`) whose summary reads "Registered", "Relabeled" (label/category), "Activated" or "Deactivated". A patch that changes nothing writes no audit row and returns the row with `unchanged: true`. |
 
 A `track_event` worth sending from an agent: a custom milestone (`type: 'custom', props: {instantly_type: '...'}` isn't
 needed outside the Instantly webhook — for your own events, `register_event_type` a real key first,
@@ -187,6 +188,11 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+| `validate_campaign_profile` | `{profile?, items?}` — check a portable document. Writes nothing. Unknown keys refused. A Viewer may call it. |
+| `export_campaign_profile` | `{campaign_id}` → `{exists, profile, items}`. Non-archived items, no ids. Creates nothing. 404 if the campaign is missing. A Viewer may call it. |
+| `import_campaign_profile` | `{campaign_id, profile?, items?}` — merge. Existing live items are left alone. Every new item is `source:'import'` (the caller's source is ignored). Editor or agent; a Viewer gets 403. |
+
+People read the approved profile at `GET /api/campaigns/:id/profile` (`lib/campaigns/profile.ts` `profileFor`). `PATCH` updates the scalar fields and needs editor. `activeProfiles()` is the same read across every non-archived campaign whose profile `setup_status` is `active`. Competitors stay items of kind `competitor`; there is no separate registry table.
 
 
 ## Instantly reconcile & data sources health (P2-D, plan 1.6 + 1.11)
@@ -406,7 +412,7 @@ key shows up in `segment_fields` and works in every condition kind above.
 | `segment_members` | `{id, limit?, offset?}` | static: the stored rows; dynamic: the live compiled match |
 | `segment_add_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_joined` lead events |
 | `segment_remove_members` | `{id, company_ids? \| contact_ids?}` | static segments only; emits `segment_left` lead events |
-| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job (1.10) calls for 2.12's size-over-time |
+| `segment_snapshot` | `{}` | writes one `lp.segment_snapshots` row per live segment (companies/contacts/verified-sendable counts) -- the op the runner's nightly job calls for 2.12's size-over-time. That job (`segment_snapshot`, kind `ops_call`) was seeded by `0033_traits.sql` and is normalised by `0058_normalize_segment_snapshot_job.sql` to **daily 07:00 UTC** (`0 7 * * *`, timezone `UTC`, payload `{"op":"segment_snapshot","args":{}}`, timeout 600 s, enabled). 0058 only changes the row while it is still exactly 0033's seed, so an operator's edits (time, pause, timeout) are kept |
 
 Deferred from this slice (left for the builder UI / later plan items, not started
 here): the builder UI itself (2.2), saved presets (2.3), the leads-filter drawer
@@ -541,7 +547,8 @@ Roles, also Oct 11: managing people and roles, agent keys, agents, the Tools hub
 
 Build a journey, publish its graph as a version, set it live, and enrol leads:
 `journey_upsert`, `journey_publish`, `journey_set_status`, `journey_enroll`,
-`journey_exit`; read with `journey_list`, `journey_get`, `journey_runs`,
+`journey_exit`, `journey_retry` (re-open an errored run); owner only: `journey_approve`
+and setting a journey `live`. Read with `journey_list`, `journey_get`, `journey_runs`,
 `journey_run_log`, `journey_validate`. The runner tick is `run_journeys`
 (owner or `system`). Tables, graph format, node kinds and how later rows add
 node kinds: [journeys.md](journeys.md).

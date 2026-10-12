@@ -64,6 +64,16 @@ export function dateTime(d: Date | string | null): string {
   return DATETIME_FMT.format(new Date(d))
 }
 
+/** A lead's score for the leads table: the number, plus the threshold label when the model has one. */
+export function ScorePill({ score, thresholdLabel, title }: { score: number; thresholdLabel?: string | null; title?: string }) {
+  return (
+    <Pill tone="accent" title={title}>
+      <span className="tabular-nums">{score}</span>
+      {thresholdLabel ? <span className="ml-1 font-normal text-ink-faint">· {thresholdLabel}</span> : null}
+    </Pill>
+  )
+}
+
 /** A tag pill using the tag's own colour when it has one (no colour = the neutral Pill tone). */
 export function TagPill({ tag, colour }: { tag: string; colour: string | null }) {
   if (!colour) return <Pill tone="neutral">{tag}</Pill>

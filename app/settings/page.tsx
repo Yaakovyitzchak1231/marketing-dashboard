@@ -6,14 +6,17 @@ import { SecretField } from '@/components/settings/SecretField'
 import { AgentsSection } from '@/components/settings/AgentsSection'
 import { NeedsSetup } from '@/components/settings/NeedsSetup'
 import { MailInUse } from '@/components/settings/MailInUse'
+import { DeliveryReadiness } from '@/components/settings/DeliveryReadiness'
 import { QuietHoursField } from '@/components/settings/QuietHoursField'
 import { QUIET_END_KEY, QUIET_START_KEY } from '@/lib/settings/quiet-hours'
 import { ModelPicker } from '@/components/settings/ModelPicker'
 import { listAiModelsAction } from '@/app/actions/ai-models'
 import { recordEnvSecretsSeen } from '@/lib/settings/env-seen'
 import { resolveTimezone } from '@/lib/dashboard/dates'
-import { listActorKinds, listIntegrationSettings, listSecretStatuses, listSettings } from '@/lib/settings/store'
+import { listActorKinds, listIntegrationSettings, listSecretStatuses, listSettings, resolveConfig } from '@/lib/settings/store'
 import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/settings/registry'
+import { envStatus } from '@/lib/setup/env'
+import { readDeliveryHealth } from '@/lib/notify/health'
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
 import { clearSecretAction, replaceSecretAction, saveQuietHoursAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
@@ -51,21 +54,24 @@ async function listTeamMembersSafe(db: NonNullable<ReturnType<typeof getDb>>): P
 
 export default async function SettingsPage() {
   const db = getDb()
+  const notificationEnv = envStatus('notifications')
   if (!db) {
     return (
       <PageFrame title="Settings" meta="API keys, mail, Google sheets, and workspace defaults">
         <DbNotConnected what="Settings" />
+        <DeliveryReadiness health={await readDeliveryHealth(null)} notificationEnv={notificationEnv} />
       </PageFrame>
     )
   }
 
-  const [settingsRows, secretRows, actors, integrations, team, role] = await Promise.all([
+  const [settingsRows, secretRows, actors, integrations, team, role, deliveryHealth] = await Promise.all([
     listSettings(db),
     listSecretStatuses(db),
     listActorKinds(db),
     listIntegrationSettings(db),
     listTeamMembersSafe(db),
     currentRole(),
+    readDeliveryHealth(db),
   ])
   const { members: teamMembers, needsMigration: needsTeamMigration } = team
   let retentionPolicies: Awaited<ReturnType<typeof listRetentionPolicies>> = []
@@ -84,15 +90,23 @@ export default async function SettingsPage() {
   // Env-backed secrets: last 4 + when first seen (only those 4 chars reach the client).
   const envSeen = await recordEnvSecretsSeen(db, SETTINGS_REGISTRY.filter((s) => s.secret && s.envFallback && !secretsByKey.get(s.key)?.set).map((s) => s.envFallback as string))
   const timeZone = resolveTimezone(settingsByKey.get('workspace.timezone')?.value ?? process.env.DASHBOARD_TZ)
-  // Sending (lib/notify/mail.ts) reads MAIL_* from the server env only, so the
-  // Email sending group shows what is actually in use and says so plainly.
+  // Match the effective DB-first values that sendMail resolves; show only a mask for the key.
+  const [mailProvider, mailKey, mailFrom] = await Promise.all([
+    resolveConfig('mail.provider'),
+    resolveConfig('mail.api_key'),
+    resolveConfig('mail.from'),
+  ])
   const mailKeySeen = (await recordEnvSecretsSeen(db, ['MAIL_API_KEY'])).get('MAIL_API_KEY')
+  const mailKeyStatus = secretsByKey.get('mail.api_key')
   const mailInUse = {
-    provider: process.env.MAIL_PROVIDER?.trim() || null,
-    from: process.env.MAIL_FROM?.trim() || null,
-    keySet: Boolean(process.env.MAIL_API_KEY?.trim()),
-    keyLast4: process.env.MAIL_API_KEY?.trim() ? (mailKeySeen?.last4 ?? null) : null,
-    keySeenAt: process.env.MAIL_API_KEY?.trim() ? (mailKeySeen?.firstSeenAt ?? null) : null,
+    provider: mailProvider.value,
+    providerSource: mailProvider.source,
+    from: mailFrom.value,
+    fromSource: mailFrom.source,
+    keySet: Boolean(mailKey.value),
+    keySource: mailKey.source,
+    keyLast4: mailKey.source === 'db' ? (mailKeyStatus?.last4 ?? null) : mailKeySeen?.last4 ?? null,
+    keySeenAt: mailKey.source === 'db' ? (mailKeyStatus?.updated_at ?? null) : mailKeySeen?.firstSeenAt ?? null,
   }
 
   // Source badge without a DB round trip per field: a saved row means 'db';
@@ -152,6 +166,7 @@ export default async function SettingsPage() {
       ) : null}
 
       <NeedsSetup items={setupItems} />
+      <DeliveryReadiness health={deliveryHealth} notificationEnv={notificationEnv} />
 
       <section className="mb-6">
         <SectionHeader title="More settings" />
@@ -159,6 +174,7 @@ export default async function SettingsPage() {
           <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
           <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
           <Link href="/settings/pools" className="text-accent hover:underline">Pools — industries a campaign can target</Link>
+          <Link href="/settings/event-types" className="text-accent hover:underline">Data → Event types — register, relabel, switch off</Link>
         </Card>
       </section>
 
@@ -171,7 +187,7 @@ export default async function SettingsPage() {
           <section key={group} className="mb-6">
             <SectionHeader title={group} />
             {SETTING_GROUP_HELP[group] ? <p className="-mt-1 mb-2 max-w-3xl text-[12.5px] leading-snug text-ink-muted">{SETTING_GROUP_HELP[group]}</p> : null}
-            {group === 'Email sending' ? <MailInUse keySet={mailInUse.keySet} provider={mailInUse.provider} from={mailInUse.from} keyLast4={mailInUse.keyLast4} keySeenAt={mailInUse.keySeenAt} timeZone={timeZone} /> : null}
+            {group === 'Email sending' ? <MailInUse keySet={mailInUse.keySet} keySource={mailInUse.keySource} provider={mailInUse.provider} providerSource={mailInUse.providerSource} from={mailInUse.from} fromSource={mailInUse.fromSource} keyLast4={mailInUse.keyLast4} keySeenAt={mailInUse.keySeenAt} timeZone={timeZone} /> : null}
             <Card className="p-4">
               {nonSecret.map((spec) =>
                 spec.key === 'ai.model' ? (
@@ -314,8 +330,7 @@ export default async function SettingsPage() {
       </section>
 
       <p className="text-[12px] leading-relaxed text-ink-faint">
-        A key saved here is read before its environment variable, everywhere that has been wired up to the settings store (Instantly, so far). Everything else still
-        reads its environment variable directly until it is wired up too.
+        A value saved here is read before its environment variable by Instantly, email delivery, and verification. Other integrations still read their environment variable directly until they are wired up too.
       </p>
     </PageFrame>
   )

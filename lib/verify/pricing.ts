@@ -152,3 +152,13 @@ export function parseCeiling(text: string): number | null {
   const n = Number(t)
   return Number.isFinite(n) && n >= 0 ? n : null
 }
+
+/**
+ * Approving a ceiling above this needs an explicit `confirm_high_spend: true`
+ * (the approve route enforces it; the Approve screen asks first). A typo like
+ * 5000 for 50 would otherwise authorise thousands of dollars of paid checks.
+ */
+export const HIGH_SPEND_CONFIRM_USD = 500
+
+/** The hard server-side cap on any ceiling, confirmed or not. */
+export const MAX_CEILING_USD = 10_000
