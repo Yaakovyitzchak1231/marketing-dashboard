@@ -41,7 +41,7 @@ function fakeNet(calls: string[] = []) {
 }
 
 const params = (o: Record<string, unknown> = {}) =>
-  normalizeFindParams({ states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ['discover', 'crawl', 'owner', 'build'], ...o })
+  normalizeFindParams({ segment: 'jeweler', states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ['discover', 'crawl', 'owner', 'build'], ...o })
 
 const deps = (o: Partial<Parameters<typeof runFindLeads>[3]> = {}) => ({
   agent: 'tab',
@@ -202,7 +202,7 @@ describe('runFindLeads', () => {
     try {
       const calls: string[] = []
       const task = await createTask(db3, 'owner', { kind: 'find_leads', title: 'file', assigned_to: 'tab', payload: {} })
-      const out = await runFindLeads(db3, task.id, normalizeFindParams({ source: 'file', file_path: file, max_businesses: 10 }), deps({ fetch: fakeNet(calls) }))
+      const out = await runFindLeads(db3, task.id, normalizeFindParams({ segment: 'jeweler', source: 'file', file_path: file, max_businesses: 10 }), deps({ fetch: fakeNet(calls) }))
       expect(out.status).toBe('done')
       // Zales also matches the pool's built-in negative-keyword list ('zales'), checked
       // before the jeweler-specific chain-name regex, so it is dropped as excluded_by_negative_keyword.
