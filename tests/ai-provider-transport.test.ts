@@ -112,6 +112,13 @@ describe('pinnedHttpsFetch', () => {
     expect((await pinnedHttpsFetch('https://api.example.com/v1', {}, { lookup: pub })).status).toBe(304)
   })
 
+  it.each([600, 999, 199, 0])('an out-of-range status (%s) rejects with a person-safe error instead of throwing in the stream', async (status) => {
+    h.reply = { status, headers: {}, body: 'x' }
+    await expect(pinnedHttpsFetch('https://api.example.com/v1', {}, { lookup: pub })).rejects.toThrow(
+      new AiProviderError(`The AI provider answered with an invalid status (${status}).`),
+    )
+  })
+
   it('times out and destroys the request', async () => {
     h.mode = 'hang'
     await expect(pinnedHttpsFetch('https://api.example.com/v1', {}, { lookup: pub, timeoutMs: 20 })).rejects.toMatchObject({ name: 'AbortError' })

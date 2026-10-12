@@ -108,17 +108,24 @@ export function pinnedHttpsFetch(
         res.on('end', () =>
           done(() => {
             const status = res.statusCode ?? 0
-            const rh = new Headers()
-            for (const [k, v] of Object.entries(res.headers)) {
-              if (v === undefined) continue
-              try {
-                for (const x of Array.isArray(v) ? v : [v]) rh.append(k, x)
-              } catch {
-                // a header value fetch's Headers refuses: not needed here
+            // Node's parser takes any 3-digit status; Response only 200-599. Never let the
+            // RangeError escape this listener (it would be uncaught and leave the promise open).
+            if (status < 200 || status > 599) return reject(new AiProviderError(`The AI provider answered with an invalid status (${status}).`))
+            try {
+              const rh = new Headers()
+              for (const [k, v] of Object.entries(res.headers)) {
+                if (v === undefined) continue
+                try {
+                  for (const x of Array.isArray(v) ? v : [v]) rh.append(k, x)
+                } catch {
+                  // a header value fetch's Headers refuses: not needed here
+                }
               }
+              const nullBody = status === 204 || status === 205 || status === 304
+              resolve(new Response(nullBody ? null : new Uint8Array(Buffer.concat(chunks as unknown as readonly Uint8Array[])), { status, headers: rh }))
+            } catch {
+              reject(new AiProviderError('Could not read the AI provider reply.'))
             }
-            const nullBody = status === 204 || status === 205 || status === 304
-            resolve(new Response(nullBody ? null : new Uint8Array(Buffer.concat(chunks as unknown as readonly Uint8Array[])), { status, headers: rh }))
           }),
         )
         res.on('error', (e) => done(() => reject(e)))
