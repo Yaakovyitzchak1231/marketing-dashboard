@@ -12,7 +12,8 @@ import {
 } from '@/lib/experiments/store'
 import { assignVariant, getAssignment, hashBucket, pickVariant, variantForBucket } from '@/lib/experiments/assign'
 import { evaluateExperiment, selectVariantWinner } from '@/lib/experiments/winner'
-import { nodeTypes, runJourneyNode } from '@/lib/journeys/nodes'
+import { getNodeHandler, nodeKinds, type NodeContext } from '@/lib/journeys/nodes'
+import '@/lib/journeys/ab-split'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
@@ -229,26 +230,37 @@ describe('experiments store + node (db)', () => {
   })
 
   it('exposes ab_split through the journey node registry', async () => {
-    expect(nodeTypes()).toContain('ab_split')
+    expect(nodeKinds()).toContain('ab_split')
+    const handler = getNodeHandler('ab_split')
+    expect(handler?.kind).toBe('ab_split')
+    const node = (config: Record<string, unknown>) => ({ id: 'n1', kind: 'ab_split', config, next: null, paths: [] })
+    expect(handler!.validate(node({}))).not.toHaveLength(0)
+    expect(handler!.validate(node({ experiment_id: 7 }))).toHaveLength(0)
+
     const exp = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 1, name: 'Node' })
     await updateExperiment(db, ACTOR, exp.id, { status: 'running' })
-    const res = await runJourneyNode(
-      db,
-      ACTOR,
-      { id: 'n1', type: 'ab_split', config: { experiment_id: exp.id } },
-      { campaign_id: campaignId, company_id: companyId, contact_id: contactId },
+    const jr = await db.query<{ id: number }>(
+      `insert into lp.journeys (name, campaign_id, status) values ('AB journey', $1, 'live') returning id`,
+      [campaignId],
     )
-    expect(res.ok).toBe(true)
-    if (res.ok) {
-      expect(res.data.variant).toBe(pickVariant({ ...exp, status: 'running' }, companyId, contactId))
-      expect(res.data.experiment_id).toBe(exp.id)
+    const now = new Date()
+    const ctx: NodeContext = {
+      q: db,
+      run: {
+        id: 1, journey_id: jr.rows[0].id, version: 1,
+        company_id: companyId, contact_id: contactId,
+        node_id: 'n1', node_entered_at: now, entered_at: now, context: {},
+      },
+      node: node({ experiment_id: exp.id }),
+      graph: { start: 'n1', nodes: [] },
+      now,
     }
-    const bad = await runJourneyNode(
-      db,
-      ACTOR,
-      { id: 'n2', type: 'nope', config: {} },
-      { campaign_id: campaignId, company_id: companyId, contact_id: null },
-    )
-    expect(bad).toMatchObject({ ok: false })
+    const res = await handler!.run(ctx)
+    expect(res.type).toBe('next')
+    if (res.type === 'next') {
+      expect(res.result?.variant).toBe(pickVariant({ ...exp, status: 'running' }, companyId, contactId))
+      expect(res.result?.experiment_id).toBe(exp.id)
+    }
+    expect(getNodeHandler('nope')).toBeUndefined()
   })
 })

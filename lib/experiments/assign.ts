@@ -5,7 +5,7 @@
  * Assignment rows are inserted idempotently.
  */
 import { createHash } from 'node:crypto'
-import type { Db, Queryable } from '../db/types.ts'
+import type { Queryable } from '../db/types.ts'
 import { ExperimentsError, getExperiment } from './store.ts'
 import type { Experiment } from './types.ts'
 
@@ -50,7 +50,7 @@ export interface Assignment {
  * already decided, the lead goes straight to the winner.
  */
 export async function assignVariant(
-  db: Db,
+  db: Queryable,
   experimentId: number,
   companyId: number,
   contactId: number | null = null,

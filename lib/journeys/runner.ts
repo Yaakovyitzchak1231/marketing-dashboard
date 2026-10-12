@@ -15,6 +15,7 @@ import type { Db, Queryable } from '../db/types.ts'
 import { emitLeadEvent } from '../events/emit.ts'
 import { findNode, type JourneyGraph } from './graph.ts'
 import { getNodeHandler, type NodeOutcome, type RunState } from './nodes.ts'
+import './ab-split.ts'
 import { JourneyError, getVersionGraph, versionApproved } from './store.ts'
 
 /** Steps one run may take in a single advance, so a loop of instant nodes cannot spin forever. */
