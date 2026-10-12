@@ -6,7 +6,7 @@
 import type { Db } from '@/lib/db/types'
 import { OpsError } from '@/lib/ops/core'
 import { requireOwnerOrSystem } from '@/lib/ops/actor-role'
-import { getScoreModel, leadScores, listScoreModels, recomputeScores, upsertScoreModel, ScoringError, type UpsertScoreModelInput } from './engine'
+import { getScoreModel, leadScores, listScoreModels, recomputeScores, upsertScoreModel, adjustScore, ScoringError, type UpsertScoreModelInput } from './engine'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -82,6 +82,21 @@ export const SCORING_OPS: Record<string, Op> = {
         changed: results.filter((r) => r.score !== r.previous_score).length,
         threshold_crossings: results.filter((r) => r.threshold_crossed).length,
       }
+    }),
+  },
+  adjust_score: {
+    args: '{model_id, company_id? | contact_id?, points (nonzero integer, negative subtracts), reason, idempotency_key?}  -- manual score adjustment with an audit trail (score_adjusted lead event); the adjustment survives recomputes and never expires. Same idempotency_key + model + lead replays the original instead of adding points twice. OWNER OR SYSTEM ONLY',
+    run: wrap(async (db, actor, a) => {
+      await requireOwnerOrSystem(db, actor, 'Adjusting a score needs the owner (or the system runner).')
+      return adjustScore(db, actor, {
+        model_id: posInt(a.model_id, 'model_id'),
+        company_id: a.company_id == null ? null : posInt(a.company_id, 'company_id'),
+        contact_id: a.contact_id == null ? null : posInt(a.contact_id, 'contact_id'),
+        points: Number(a.points),
+        reason: String(a.reason ?? ''),
+        idempotency_key: typeof a.idempotency_key === 'string' && a.idempotency_key.trim() ? a.idempotency_key.trim() : undefined,
+        source: 'ops_api',
+      })
     }),
   },
   lead_scores: {

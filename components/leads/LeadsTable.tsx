@@ -6,7 +6,7 @@ import type { LeadListRow } from '@/lib/leads/queries'
 import type { SortKey } from '@/lib/leads/filters'
 import { STAGE_LABELS } from '@/lib/leads/filters'
 import { STAGES } from '@/lib/leads/types'
-import { StagePill, VerificationPill, ResearchPill, place } from './pills'
+import { StagePill, VerificationPill, ResearchPill, ScorePill, place } from './pills'
 import { BulkBar } from './BulkBar'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 
@@ -23,6 +23,7 @@ const COLS: { key: SortKey | null; label: string; className?: string }[] = [
   { key: 'name', label: 'Lead' },
   { key: 'state', label: 'Place' },
   { key: 'stage', label: 'Stage' },
+  { key: null, label: 'Score' },
   { key: 'email', label: 'Email' },
   { key: 'verification', label: 'Verified' },
   { key: 'campaign', label: 'Campaign' },
@@ -114,6 +115,13 @@ export function LeadsTable({
                 <td className="px-3 py-2 align-top">
                   <InlineEditCell type="company" id={r.id} field="stage" value={r.stage} label={`Stage for ${r.name}`} options={STAGE_OPTIONS} />
                 </td>
+                <td className="whitespace-nowrap px-3 py-2 align-top">
+                  {r.score != null ? (
+                    <ScorePill score={r.score} thresholdLabel={r.score_threshold} title={r.score_model ?? undefined} />
+                  ) : (
+                    <Dash />
+                  )}
+                </td>
                 <td className="max-w-[220px] truncate px-3 py-2 align-top text-ink-muted" title={r.primary_email ?? undefined}>
                   {r.primary_email ?? <Dash />}
                   {r.contact_count > 1 ? <span className="ml-1 text-[11px] text-ink-faint tabular-nums">+{r.contact_count - 1}</span> : null}
@@ -144,6 +152,7 @@ export function LeadsTable({
                 <div className="truncate text-[12px] text-ink-muted" title={r.primary_email ?? r.website_domain ?? undefined}>{r.primary_email ?? r.website_domain ?? 'No email yet'}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   <StagePill stage={r.stage} />
+                  {r.score != null ? <ScorePill score={r.score} thresholdLabel={r.score_threshold} title={r.score_model ?? undefined} /> : null}
                   {r.primary_verification ? <VerificationPill status={r.primary_verification} /> : null}
                   {showResearch ? <ResearchPill status={r.research_status} /> : null}
                 </div>

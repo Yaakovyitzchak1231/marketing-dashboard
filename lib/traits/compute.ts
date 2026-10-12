@@ -86,6 +86,9 @@ interface ComputedValue {
  *  come back with value null (count comes back 0 -- "zero events" is a known fact; sum/min/
  *  max/last/days_since come back null -- "never happened" is not the same as zero). */
 export async function computeTraitValues(q: Queryable, trait: Pick<Trait, 'entity' | 'definition'>, ids: number[] | 'all'): Promise<ComputedValue[]> {
+  if (trait.definition.prop != null && !/^[a-zA-Z0-9_]+$/.test(trait.definition.prop)) {
+    throw new Error('Invalid input')
+  }
   const col = idCol(trait.entity)
   const table = trait.entity === 'company' ? 'lp.companies' : 'lp.contacts'
   // $1 is always the id source (either the explicit array, or a no-op placeholder when

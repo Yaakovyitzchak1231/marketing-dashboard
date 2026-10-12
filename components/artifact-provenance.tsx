@@ -352,11 +352,11 @@ export function ArtifactProvenance({
                 <div>
                   <p className="text-[11px] text-ink">
                     {a.status === 'approved'
-                      ? COPY.workspace.approvedByActor(a.actor ?? 'agent')
+                      ? COPY.workspace.approvedByActor(a.actor ?? COPY.workspace.authorNotRecorded)
                       : a.status === 'requested'
-                        ? COPY.workspace.requestChangesTo(a.owner ?? 'owner')
+                        ? COPY.workspace.requestChangesTo(a.owner ?? COPY.workspace.ownerNotRecorded)
                         : a.status === 'dismissed'
-                          ? COPY.workspace.dismissedBy(a.actor ?? 'agent')
+                          ? COPY.workspace.dismissedBy(a.actor ?? COPY.workspace.authorNotRecorded)
                           : a.status}
                   </p>
                   {a.reason ? (
@@ -438,7 +438,7 @@ export function ArtifactProvenance({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Say something"
-                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none"
+                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               />
             </label>
             <button

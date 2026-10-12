@@ -1,5 +1,6 @@
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import type { EngagementSection } from '@/lib/leads/profile'
+import { AskToChange } from '@/components/edit/AskToChange'
 
 const COLS: { key: 'opens' | 'replies' | 'steps'; label: string }[] = [
   { key: 'steps', label: 'Emails sent' },
@@ -9,8 +10,9 @@ const COLS: { key: 'opens' | 'replies' | 'steps'; label: string }[] = [
 
 /** Engagement tab (plan 2.10): this lead vs. its campaign's average, counted straight
  *  from lp.lead_events -- never a guess. "available: false" just means no campaign
- *  has recorded events for this lead yet. */
-export function EngagementPanel({ data }: { data: EngagementSection }) {
+ *  has recorded events for this lead yet. These counts come from Instantly's events, so they
+ *  are never edited in place: "Ask to change" files a request for approval instead. */
+export function EngagementPanel({ data, companyId }: { data: EngagementSection; companyId?: number }) {
   if (!data.benchmarks.length) {
     return (
       <Card className="p-4">
@@ -32,8 +34,9 @@ export function EngagementPanel({ data }: { data: EngagementSection }) {
               return (
                 <div key={c.key} className="min-w-0 rounded-card border border-line-soft p-2 text-center xs:p-3">
                   <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">{c.label}</div>
-                  <div className="mt-1 text-[20px] font-semibold text-ink">{mine}</div>
+                  <div className="mt-1 text-[20px] font-semibold tabular-nums text-ink">{mine}</div>
                   <div className={`mt-0.5 text-[12px] ${ahead ? 'text-good' : 'text-ink-faint'}`}>campaign avg {avg}</div>
+                  {companyId ? <AskToChange companyId={companyId} campaignId={b.campaign_id} field={c.key} label={c.label} /> : null}
                 </div>
               )
             })}

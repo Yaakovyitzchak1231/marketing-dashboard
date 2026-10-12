@@ -433,3 +433,162 @@ export async function leadScores(q: Queryable, companyId: number): Promise<{ mod
 export async function recomputeAllScores(db: Db, actor = 'system'): Promise<RecomputeOneResult[]> {
   return recomputeScores(db, actor, {})
 }
+
+// ---------------------------------------------------------------------------
+// Manual score adjustments (row 2.8).
+
+/** rule_key for manual adjustments in lp.score_points. No source event: recomputes keep these rows. */
+export const MANUAL_ADJUSTMENT_RULE_KEY = 'manual_adjustment'
+/** A single manual adjustment may not move a score by more than this. */
+export const MAX_ADJUST_POINTS = 1000
+
+export interface AdjustScoreInput {
+  model_id: number
+  company_id?: number | null
+  contact_id?: number | null
+  /** Points to add (positive) or subtract (negative). Never zero. */
+  points: number
+  /** Why the adjustment was made -- stored in the audit trail. Required. */
+  reason: string
+  /**
+   * Optional idempotency key: a retried call with the same key returns the
+   * original adjustment instead of inserting duplicate points. Scoped to the
+   * model + lead — the same key under a different model/lead is a new
+   * adjustment. Stored in the score_adjusted audit event props.
+   */
+  idempotency_key?: string
+  /** Where the adjustment came from; recorded on the audit event. */
+  source?: 'dashboard' | 'ops_api'
+}
+
+export interface AdjustScoreResult extends RecomputeOneResult {
+  /** The lp.score_points row for this adjustment. */
+  adjustment_id: number
+}
+
+/**
+ * Manually adjust a lead's score under one model, with an audit trail.
+ *
+ * The adjustment is a score_points row with rule_key 'manual_adjustment' and
+ * no source event, so recomputeBatch keeps it (it only rebuilds event-sourced
+ * points) and it never expires. The lead's score is re-summed immediately; a
+ * 'score_adjusted' lead event records who/when/how much/why plus the
+ * before/after scores, so the adjustment is visible in the lead's timeline
+ * and queryable by segments like any other event.
+ *
+ * Pass idempotency_key to make retried calls safe: a repeat with the same key
+ * (same model + lead) returns the original adjustment_id and the current
+ * scores without inserting new points.
+ */
+export async function adjustScore(db: Db, actor: string, input: AdjustScoreInput): Promise<AdjustScoreResult> {
+  const model = await getScoreModel(db, input.model_id)
+  if (!model) throw new ScoringError(`No score model ${input.model_id}.`, 404)
+  if (!model.active) throw new ScoringError(`Score model "${model.name}" is not active.`, 400)
+  const leadId = model.entity === 'company' ? (input.company_id ?? null) : (input.contact_id ?? null)
+  const idName = model.entity === 'company' ? 'company_id' : 'contact_id'
+  if (leadId == null || !Number.isInteger(leadId) || leadId <= 0) {
+    throw new ScoringError(`This model scores ${model.entity === 'company' ? 'companies' : 'contacts'}: give ${idName}.`, 400)
+  }
+  const points = Number(input.points)
+  if (!Number.isInteger(points) || points === 0) throw new ScoringError('points must be a nonzero integer (negative allowed).', 400)
+  if (Math.abs(points) > MAX_ADJUST_POINTS) throw new ScoringError(`points must be between -${MAX_ADJUST_POINTS} and ${MAX_ADJUST_POINTS}.`, 400)
+  const reason = (input.reason ?? '').trim()
+  if (!reason) throw new ScoringError('reason is required: say why the score is being adjusted.', 400)
+  if (reason.length > 500) throw new ScoringError('reason must be 500 characters or fewer.', 400)
+  const col = model.entity === 'company' ? 'company_id' : 'contact_id'
+  const now = new Date()
+
+  return db.tx(async (q) => {
+    const idemKey = (input.idempotency_key ?? '').trim()
+    if (idemKey) {
+      // Idempotency: a retry of the same key (model + lead + key) replays the
+      // original adjustment instead of inserting the points twice. The score
+      // is re-summed so the caller sees the current state; recomputeBatch
+      // never rebuilds manual rows, so the replay adds nothing new.
+      const { rows: prior } = await q.query<{ adjustment_id: number | null }>(
+        `select (props->>'adjustment_id')::bigint as adjustment_id
+           from lp.lead_events
+          where type = 'score_adjusted'
+            and ${col} = $1
+            and (props->>'model_id')::bigint = $2
+            and props->>'idempotency_key' = $3
+          order by id desc
+          limit 1`,
+        [leadId, model.id, idemKey],
+      )
+      const hit = prior[0]?.adjustment_id
+      if (hit != null) {
+        const [replayed] = await recomputeBatch(q, model, [leadId], actor, now)
+        return { ...replayed, adjustment_id: hit }
+      }
+    }
+    const { rows } = await q.query<{ id: number }>(
+      `insert into lp.score_points (model_id, ${col}, rule_key, points, source_event_id, awarded_at, expires_at)
+       values ($1, $2, '${MANUAL_ADJUSTMENT_RULE_KEY}', $3, null, $4, null) returning id`,
+      [model.id, leadId, points, now],
+    )
+    const [recomputed] = await recomputeBatch(q, model, [leadId], actor, now)
+    try {
+      await emitLeadEvent(q, {
+        type: 'score_adjusted',
+        company_id: model.entity === 'company' ? leadId : null,
+        contact_id: model.entity === 'contact' ? leadId : null,
+        source: input.source ?? 'dashboard',
+        actor,
+        occurred_at: now,
+        props: {
+          model_id: model.id,
+          model_name: model.name,
+          points,
+          reason,
+          previous_score: recomputed.previous_score,
+          new_score: recomputed.score,
+          adjustment_id: rows[0].id,
+          // Stored so a retried call can find the original adjustment.
+          ...(idemKey ? { idempotency_key: idemKey } : {}),
+        },
+      })
+    } catch (e) {
+      // The audit event type is seeded by migration 0056; if it is missing,
+      // say so plainly instead of leaking the emit internals.
+      throw new ScoringError(`Could not record the adjustment audit event: ${(e as Error).message}`, 500)
+    }
+    return { ...recomputed, adjustment_id: rows[0].id }
+  }, actor)
+}
+
+export interface LeadScoreChip {
+  company_id: number
+  score: number
+  model_name: string
+  threshold_label: string | null
+}
+
+/**
+ * One chip per company for the leads table: its highest score across active
+ * company models, with the model's name and threshold label. Batch: a single
+ * query for the whole page.
+ */
+export async function leadScoreChips(q: Queryable, companyIds: number[]): Promise<Map<number, LeadScoreChip>> {
+  const out = new Map<number, LeadScoreChip>()
+  const ids = [...new Set(companyIds.filter((n) => Number.isInteger(n) && n > 0))]
+  if (!ids.length) return out
+  const { rows } = await q.query<{ company_id: number; score: number; model_name: string; thresholds: unknown }>(
+    `select distinct on (s.company_id) s.company_id, s.score, m.name as model_name, m.thresholds
+       from lp.scores s join lp.score_models m on m.id = s.model_id
+      where s.company_id = any($1::bigint[]) and m.active and m.entity = 'company'
+      order by s.company_id, s.score desc`,
+    [ids],
+  )
+  for (const r of rows) {
+    const company_id = Number(r.company_id)
+    const score = Number(r.score)
+    out.set(company_id, {
+      company_id,
+      score,
+      model_name: r.model_name,
+      threshold_label: thresholdFor(score, parseThresholds(r.thresholds))?.label ?? null,
+    })
+  }
+  return out
+}
