@@ -54,7 +54,9 @@ describe('page comments for a viewer', () => {
     const f = stubFetch('viewer')
     render(<PageComments />)
     await waitFor(() => expect(screen.getByText(VIEW_ONLY_NOTE)).toBeInTheDocument())
-    expect(f).toHaveBeenCalledWith('/api/page-comments', expect.anything())
+    // The layer renders as soon as the role is known; its list GET starts in an effect just after,
+    // so wait for the call instead of asserting it on the same tick (it raced under CI load).
+    await waitFor(() => expect(f).toHaveBeenCalledWith('/api/page-comments', expect.anything()))
     expect(actionMocks.listMyCommentsAction).not.toHaveBeenCalled()
     noWrites()
     expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull()
@@ -66,7 +68,9 @@ describe('page comments for a viewer', () => {
     render(<PageComments />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Comment' })).toBeInTheDocument())
     expect(screen.queryByText(VIEW_ONLY_NOTE)).toBeNull()
-    expect(f).toHaveBeenCalledWith('/api/page-comments', expect.anything())
+    // The layer renders as soon as the role is known; its list GET starts in an effect just after,
+    // so wait for the call instead of asserting it on the same tick (it raced under CI load).
+    await waitFor(() => expect(f).toHaveBeenCalledWith('/api/page-comments', expect.anything()))
     expect(actionMocks.listMyCommentsAction).not.toHaveBeenCalled()
   })
 

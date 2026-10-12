@@ -15,6 +15,7 @@ import type { Db, Queryable } from '../db/types.ts'
 import { emitLeadEvent } from '../events/emit.ts'
 import { findNode, type JourneyGraph } from './graph.ts'
 import { getNodeHandler, seenSince, type NodeOutcome, type RunState } from './nodes.ts'
+import './ab-split.ts'
 import { JourneyError, getVersionGraph, versionApproved } from './store.ts'
 
 /** Steps one run may take in a single advance, so a loop of instant nodes cannot spin forever. */
@@ -39,6 +40,13 @@ export interface EnrollResult {
   enrolled: boolean
   run_id: number | null
   reason?: 'already_in' | 'already_entered' | 'duplicate_fire' | 'do_not_contact' | 'suppressed'
+}
+
+/** A delayed trigger (3.3) puts cancel_on on the fire payload. Copy it onto the run so later nodes can read it. */
+function enrollContext(payload: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const body = payload ?? {}
+  const cancel = Array.isArray(body.cancel_on) ? body.cancel_on.filter((x) => typeof x === 'string') : []
+  return cancel.length ? { trigger_payload: body, cancel_on: cancel } : { trigger_payload: body }
 }
 
 async function logStep(q: Queryable, run: { id: number; journey_id: number; version: number }, nodeId: string, action: string, result: Record<string, unknown>, actor: string | null): Promise<void> {
@@ -539,7 +547,7 @@ export async function consumeTriggerFires(
             const r = await withSavepoint(q, 'fire_sp', () => enrollLead(q, actor, Number(id), {
               company_id: f.company_id == null ? null : Number(f.company_id),
               contact_id: f.contact_id == null ? null : Number(f.contact_id),
-              source: 'trigger', trigger_fire_id: Number(f.id), context: { trigger_payload: f.payload ?? {} },
+              source: 'trigger', trigger_fire_id: Number(f.id), context: enrollContext(f.payload),
             }))
             if (r.enrolled) enrolled++
           } catch (e) {
