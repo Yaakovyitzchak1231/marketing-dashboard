@@ -123,6 +123,37 @@ are not role-gated, as with every other op.
 ## Not in 3.1 (left for later rows)
 
 - Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
-- A delayed trigger (3.3) is a trigger kind, not a node. It writes `lp.trigger_fires` with `cancel_on`; enrolment copies that list onto `run.context.cancel_on`.
+- A delayed trigger (3.3) is a trigger kind, not a node; see "Delayed triggers" below. It writes `lp.trigger_fires` with `cancel_on`; enrolment copies that list onto `run.context.cancel_on`.
 - Human approval before a send-capable journey goes live (lands with 3.9, when a send kind exists).
 - A journeys page and the builder (3.13). There is no UI in 3.1.
+
+## Delayed triggers (3.3)
+
+A `delayed` trigger fires N days after event X unless event Y happens first:
+`config = {after_event: X, days: 1..365, unless_event: Y}` (or `unless_events: [Y1, Y2]`).
+Y must differ from X; a config where X also cancels itself is rejected.
+
+- X arms a row in `lp.trigger_delays` (`status` pending | fired | cancelled). The
+  `trigger_scan` job fires the due ones, writing one `lp.trigger_fires` row
+  (`dedupe_key = delay:<id>`, payload `{delay_id, cancel_on}`).
+- **Timing windows use `occurred_at`, never `recorded_at`.** `source_at` is X's
+  `occurred_at`; `due_at = source_at + N days`. A backfilled X starts its clock when
+  it happened, so it can be due the moment it is stored. Y cancels only if its
+  `occurred_at` is in `[source_at, due_at]`: a Y from before X, or one that
+  happened after the delay was already owed, does not cancel it. This holds
+  at emit time and in the scan, so a late-recorded Y or a backlog never cancels an owed fire.
+- **Identity.** A delay armed for a contact is answered only by a Y for that same
+  contact (not by a company-level Y, not by another contact at the company). A
+  company-level delay (X had no contact) is answered by any Y at that company.
+- Order. In one batch of events, each event is handled in order: arm any delay it
+  starts, then cancel any pending delay it answers. At emit time only rows not yet
+  due are cancelled; a past-due row is decided by the scan with the full window check.
+- **Disabled triggers.** A delay whose trigger is disabled is cancelled, never fired
+  and never held for later: the scan marks every pending row of a disabled trigger
+  `cancelled`. Re-enabling does not bring them back; a new X arms a new delay.
+- Concurrency. The scan locks the due rows (`FOR UPDATE ... SKIP LOCKED`) inside one
+  transaction, so overlapping scans never take the same row; the unique
+  `dedupe_key` on the fire is the second guard.
+- Migration 0069 replaces the `triggers_kind_check` constraint from 0053 (the name
+  Postgres gives that inline column check). The drop is `if exists`, the add is not
+  guarded: it fails loudly if a stored kind is outside the list.

@@ -9,7 +9,7 @@
  * No journey table is touched. 3.1's runner reads lp.trigger_fires.
  */
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import type { Queryable } from '@/lib/db/types'
+import type { Db, Queryable } from '@/lib/db/types'
 import { isUndefinedTable } from '@/lib/db/errors'
 import { CronError, nextRun } from '@/lib/jobs/cron'
 import { normalizeEmail } from '@/lib/leads/normalize'
@@ -148,6 +148,7 @@ export function validateTriggerConfig(kind: TriggerKind, raw: unknown): Record<s
     if (!Number.isInteger(days) || days < 1 || days > 365) throw new TriggerError('delayed config.days must be an integer from 1 to 365')
     const unless = unlessEvents(c)
     if (!unless.length) throw new TriggerError('delayed triggers need config.unless_event (the Y that cancels them)')
+    if (unless.includes(after)) throw new TriggerError(`delayed config.unless_event cannot be the same event as after_event ("${after}"): it would cancel itself`)
     return { after_event: after, days, unless_events: unless }
   }
   return {}
@@ -239,11 +240,14 @@ export async function matchEmittedEvents(q: Queryable, events: EmittedEvent[]): 
       `select id, kind, campaign_id, config from lp.triggers where enabled and kind in ('segment_entry', 'segment_exit')`,
     )).rows.map((r) => ({ ...r, config: cfg(r) }))
     : []
-  await armDelayed(q, events)
-  await cancelDelayed(q, events)
-  if (!eventTriggers.length && !segTriggers.length) return 0
+  const delayTriggers = await loadDelayTriggers(q, types)
   let fired = 0
+  // In order, one event at a time: arm any delay this event starts, then cancel
+  // any pending delay this event answers. A Y that comes before an X in the
+  // batch must never cancel the delay the X is about to start.
   for (const e of events) {
+    await armDelayed(q, delayTriggers, e)
+    await cancelDelayed(q, e)
     for (const t of eventTriggers) {
       if (t.config.event_type !== e.type) continue
       if (!(await campaignOk(q, t.campaign_id, e))) continue
@@ -454,98 +458,160 @@ export async function scanDueTriggers(q: Queryable, now = new Date()): Promise<{
   return { segment, date, schedule, delayed }
 }
 
-async function armDelayed(q: Queryable, events: EmittedEvent[]): Promise<void> {
+/**
+ * Delayed triggers (plan 3.3).
+ *
+ * House rule: timing windows use lp.lead_events.occurred_at (when it happened),
+ * never recorded_at (when we stored it), so a backfilled X starts its N-day
+ * clock when X happened. A pending delay covers [source_at, due_at], where
+ * source_at is X's occurred_at and due_at = source_at + N days; a Y cancels it
+ * only if Y's occurred_at falls inside that window.
+ *
+ * Identity: a delay armed for a contact is answered only by a Y for that same
+ * contact. A company-level delay (no contact) is answered by a Y at that
+ * company, whichever contact it names. Never the other way round.
+ */
+interface DelayTriggerRow {
+  id: number
+  campaign_id: number | null
+  config: Record<string, unknown>
+}
+
+async function loadDelayTriggers(q: Queryable, types: string[]): Promise<DelayTriggerRow[]> {
   try {
-    const types = [...new Set(events.map((e) => e.type))]
-    if (!types.length) return
-    const triggers = (await q.query<TriggerRow>(
+    return (await q.query<TriggerRow>(
       `select id, kind, campaign_id, config from lp.triggers
         where enabled and kind = 'delayed' and config->>'after_event' = any($1::text[])`,
       [types],
-    )).rows.map((r) => ({ ...r, config: cfg(r) }))
-    if (!triggers.length) return
-    for (const e of events) {
-      if (e.company_id == null && e.contact_id == null) continue
-      for (const t of triggers) {
-        if (t.config.after_event !== e.type) continue
-        if (!(await campaignOk(q, t.campaign_id, e))) continue
-        const unless = Array.isArray(t.config.unless_events) ? t.config.unless_events : []
-        await q.query(
-          `insert into lp.trigger_delays (trigger_id, company_id, contact_id, source_event_id, due_at, unless_events)
-           select $1, $2, $3, le.id, le.recorded_at + make_interval(days => $5::int), $6::text[]
-             from lp.lead_events le where le.id = $4
-           on conflict (trigger_id, source_event_id) where source_event_id is not null do nothing`,
-          [t.id, e.company_id, e.contact_id, e.id, Number(t.config.days), unless],
-        )
-      }
-    }
+    )).rows.map((r) => ({ id: r.id, campaign_id: r.campaign_id, config: cfg(r) }))
   } catch (e) {
     if (!isUndefinedTable(e)) throw e
+    return []
   }
 }
 
-async function cancelDelayed(q: Queryable, events: EmittedEvent[]): Promise<void> {
+async function armDelayed(q: Queryable, triggers: DelayTriggerRow[], e: EmittedEvent): Promise<void> {
+  if (!triggers.length) return
+  if (e.company_id == null && e.contact_id == null) return
   try {
-    for (const e of events) {
-      if (e.company_id == null && e.contact_id == null) continue
+    for (const t of triggers) {
+      if (t.config.after_event !== e.type) continue
+      if (!(await campaignOk(q, t.campaign_id, e))) continue
+      const unless = Array.isArray(t.config.unless_events) ? t.config.unless_events : []
       await q.query(
-        `update lp.trigger_delays
-            set status = 'cancelled'
-          where status = 'pending'
-            and unless_events && array[$1]::text[]
-            and (
-              ($2::bigint is not null and company_id = $2)
-              or ($3::bigint is not null and contact_id = $3)
-            )`,
-        [e.type, e.company_id, e.contact_id],
+        `insert into lp.trigger_delays (trigger_id, company_id, contact_id, source_event_id, source_at, due_at, unless_events)
+         select $1, $2, $3, le.id, le.occurred_at, le.occurred_at + make_interval(days => $5::int), $6::text[]
+           from lp.lead_events le where le.id = $4
+         on conflict (trigger_id, source_event_id) where source_event_id is not null do nothing`,
+        [t.id, e.company_id, e.contact_id, e.id, Number(t.config.days), unless],
       )
     }
-  } catch (e) {
-    if (!isUndefinedTable(e)) throw e
+  } catch (err) {
+    if (!isUndefinedTable(err)) throw err
   }
 }
 
+/**
+ * Cancel the pending delays this event answers. Only rows that are not yet due:
+ * a past-due row belongs to scanDelays, which fires or cancels it with the full
+ * [source_at, due_at] check.
+ */
+async function cancelDelayed(q: Queryable, e: EmittedEvent): Promise<void> {
+  if (e.company_id == null && e.contact_id == null) return
+  try {
+    await q.query(
+      `update lp.trigger_delays d
+          set status = 'cancelled'
+         from lp.lead_events le
+        where le.id = $1
+          and d.status = 'pending'
+          and d.due_at > now()
+          and le.type = any(d.unless_events)
+          and le.occurred_at >= coalesce(d.source_at, d.created_at)
+          and le.occurred_at <= d.due_at
+          and (
+            (d.contact_id is not null and d.contact_id = $3::bigint)
+            or (d.contact_id is null and d.company_id is not null and d.company_id = $2::bigint)
+          )`,
+      [e.id, e.company_id, e.contact_id],
+    )
+  } catch (err) {
+    if (!isUndefinedTable(err)) throw err
+  }
+}
+
+/** Run fn in one transaction when q can open one (a Db), else in the caller's own. */
+function inTx<T>(q: Queryable, fn: (t: Queryable) => Promise<T>): Promise<T> {
+  const maybe = q as Partial<Db>
+  return typeof maybe.tx === 'function' ? maybe.tx(fn) : fn(q)
+}
+
+/**
+ * Fire or cancel delays that are due.
+ *
+ * - A pending delay whose trigger is disabled (or no longer a delayed trigger)
+ *   is cancelled, not fired and not left to fire later. Cancelling is the
+ *   safer choice: re-enabling a trigger never releases a stale burst of fires.
+ *   Only delays that are still pending when the trigger is disabled are lost;
+ *   re-enable and re-arm by a new X.
+ * - The due rows are locked with FOR UPDATE SKIP LOCKED inside one
+ *   transaction, so two concurrent trigger_scan runs never take the same row.
+ *   trigger_fires.dedupe_key ('delay:<id>', unique) is the second guard.
+ */
 async function scanDelays(q: Queryable, now: Date): Promise<number> {
   try {
-    const due = await q.query<{
-      id: number
-      trigger_id: number
-      company_id: number | null
-      contact_id: number | null
-      unless_events: string[]
-      created_at: string
-    }>(
-      `select id, trigger_id, company_id, contact_id, unless_events, created_at
-         from lp.trigger_delays
-        where status = 'pending' and due_at <= $1
-        order by id
-        limit 200`,
-      [now.toISOString()],
-    )
-    let fired = 0
-    for (const row of due.rows) {
-      const hit = await q.query(
-        `select 1 from lp.lead_events
-          where type = any($1::text[])
-            and recorded_at >= $2
-            and (
-              ($3::bigint is not null and company_id = $3)
-              or ($4::bigint is not null and contact_id = $4)
-            )
-          limit 1`,
-        [row.unless_events, row.created_at, row.company_id, row.contact_id],
+    return await inTx(q, async (t) => {
+      await t.query(
+        `update lp.trigger_delays d set status = 'cancelled'
+           from lp.triggers tr
+          where tr.id = d.trigger_id and d.status = 'pending'
+            and (not tr.enabled or tr.kind <> 'delayed')`,
       )
-      if (hit.rows.length) {
-        await q.query(`update lp.trigger_delays set status = 'cancelled' where id = $1 and status = 'pending'`, [row.id])
-        continue
+      const due = await t.query<{
+        id: number
+        trigger_id: number
+        company_id: number | null
+        contact_id: number | null
+        unless_events: string[]
+      }>(
+        `select d.id, d.trigger_id, d.company_id, d.contact_id, d.unless_events
+           from lp.trigger_delays d
+           join lp.triggers tr on tr.id = d.trigger_id and tr.enabled and tr.kind = 'delayed'
+          where d.status = 'pending' and d.due_at <= $1
+          order by d.id
+          limit 200
+            for update of d skip locked`,
+        [now.toISOString()],
+      )
+      let fired = 0
+      for (const row of due.rows) {
+        const hit = await t.query(
+          `select 1
+             from lp.trigger_delays d
+             join lp.lead_events le
+               on le.type = any(d.unless_events)
+              and le.occurred_at >= coalesce(d.source_at, d.created_at)
+              and le.occurred_at <= d.due_at
+              and (
+                (d.contact_id is not null and le.contact_id = d.contact_id)
+                or (d.contact_id is null and d.company_id is not null and le.company_id = d.company_id)
+              )
+            where d.id = $1
+            limit 1`,
+          [row.id],
+        )
+        if (hit.rows.length) {
+          await t.query(`update lp.trigger_delays set status = 'cancelled' where id = $1 and status = 'pending'`, [row.id])
+          continue
+        }
+        const wrote = await insertFire(t, row.trigger_id, row, {
+          delay_id: row.id, cancel_on: row.unless_events,
+        }, `delay:${row.id}`)
+        await t.query(`update lp.trigger_delays set status = 'fired' where id = $1 and status = 'pending'`, [row.id])
+        if (wrote) fired++
       }
-      const wrote = await insertFire(q, row.trigger_id, row, {
-        delay_id: row.id, cancel_on: row.unless_events,
-      }, `delay:${row.id}`)
-      await q.query(`update lp.trigger_delays set status = 'fired' where id = $1 and status = 'pending'`, [row.id])
-      if (wrote) fired++
-    }
-    return fired
+      return fired
+    })
   } catch (e) {
     if (!isUndefinedTable(e)) throw e
     return 0
