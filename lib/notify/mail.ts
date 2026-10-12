@@ -17,11 +17,9 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
  * following the same pattern as lib/instantly/client.ts's clientFromConfig. */
 async function readMailConfig(env: Record<string, string | undefined>) {
   const { resolveConfig } = await import('../settings/store.ts')
-  const [{ value: provider }, { value: key }, { value: from }] = await Promise.all([
-    resolveConfig('mail.provider', env),
-    resolveConfig('mail.api_key', env),
-    resolveConfig('mail.from', env),
-  ])
+  const { value: provider } = await resolveConfig('mail.provider', env)
+  const { value: key } = await resolveConfig('mail.api_key', env)
+  const { value: from } = await resolveConfig('mail.from', env)
   return { provider: provider || undefined, key: key || undefined, from: from || undefined }
 }
 
