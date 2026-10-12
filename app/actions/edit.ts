@@ -12,6 +12,7 @@ import { getDb } from '@/lib/db'
 import { updateEntity, updateEntityFields, RegistryError, LeadEditError } from '@/lib/edit/update'
 import { FieldError } from '@/lib/fields/store'
 import { entityHistory, type HistoryRow } from '@/lib/edit/history'
+import { requestValueChange } from '@/lib/edit/ask-change'
 
 type Fail = { ok: false; error: string }
 const NOT_CONNECTED: Fail = { ok: false, error: 'The database is not connected, so this is not saved.' }
@@ -85,6 +86,32 @@ export async function entityHistoryAction(input: {
   try {
     const rows = await entityHistory(db, input.type, input.id, { limit: input.limit, before: input.before })
     return { ok: true, rows }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/**
+ * "Ask to change" an Instantly-backed number (Engagement tab). Never edits the
+ * count: files a pending approval on Activity with the stored current value,
+ * the proposed value and the reason (lib/edit/ask-change.ts).
+ */
+export async function askToChangeAction(input: {
+  companyId: number
+  campaignId: number
+  field: string
+  proposed: string
+  reason: string
+}): Promise<{ ok: true; approvalId: number; current: number } | Fail> {
+  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (who instanceof Error) return { ok: false, error: who.message }
+  const ME = who
+  const db = getDb()
+  if (!db) return NOT_CONNECTED
+  try {
+    const r = await requestValueChange(db, ME, input)
+    revalidatePath('/activity')
+    return { ok: true, approvalId: r.approval.id, current: r.payload.current }
   } catch (e) {
     return fail(e)
   }

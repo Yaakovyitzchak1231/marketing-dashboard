@@ -218,3 +218,33 @@ describe('checkpoints route', () => {
     })
   })
 })
+
+describe('approvals duplicate', () => {
+  it('returns 409 with an honest message when the decision exists', async () => {
+    const { POST } = await import('@/app/api/approvals/route')
+    getClient.mockResolvedValue({
+      from: () => ({
+        insert: () => ({
+          select: () => ({
+            single: () =>
+              Promise.resolve({
+                data: null,
+                error: { code: '23505', message: 'duplicate key value' },
+              }),
+          }),
+        }),
+      }),
+    })
+    const res = await POST(
+      jsonReq('http://x/api/approvals', {
+        artifact_type: 'ideas',
+        artifact_id: 'c4f4',
+        status: 'approved',
+      }),
+    )
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: 'This decision is already recorded for this row.',
+    })
+  })
+})
