@@ -7,7 +7,7 @@
  * -> 201 { run }
  */
 import { NextResponse } from 'next/server'
-import { createPreview, verifyEnvFromProcess } from '@/lib/verify/runs'
+import { createPreview, verifyEnvFromConfig } from '@/lib/verify/runs'
 import type { LeadFilter } from '@/lib/verify/select'
 import { dbOrNull, fail, notConnected, NO_STORE, readJson } from '../_shared'
 
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         recheck_days: recheck != null && Number.isFinite(recheck) ? recheck : undefined,
         actor: 'owner',
       },
-      verifyEnvFromProcess(),
+      await verifyEnvFromConfig(),
     )
     return NextResponse.json({ run }, { status: 201, headers: NO_STORE })
   } catch (e) {

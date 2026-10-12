@@ -15,7 +15,7 @@
 import type { Db, Queryable } from '@/lib/db/types'
 import { logEvent } from '@/lib/ops/events'
 import { emitLeadEvent } from '@/lib/events/emit'
-import { createPrechecker, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
+import { createPrecheckerAsync, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
 import { estimateCost, getPricing, usd4, type CostEstimate, type Pricing } from './pricing'
 import { selectCandidates, cleanFilter, mvPending, type LeadFilter, DEFAULT_RECHECK_DAYS } from './select'
 import { nextContactStatus, precheckStep, runWaterfall, worstCaseCost, type StepRecord, type WaterfallKeys, type WaterfallOutcome } from './waterfall'
@@ -86,6 +86,21 @@ export function verifyEnvFromProcess(env: Record<string, string | undefined> = p
   }
 }
 
+/** Settings-aware env: MillionVerifier/ZeroBounce keys resolve through the
+ * settings store (DB first, env fallback) the same way lib/instantly/client.ts
+ * and lib/notify/mail.ts do, so a key saved on /settings takes effect at once. */
+export async function verifyEnvFromConfig(env: Record<string, string | undefined> = process.env): Promise<VerifyEnv> {
+  const { resolveConfig } = await import('../settings/store.ts')
+  const [{ value: mv }, { value: zb }] = await Promise.all([
+    resolveConfig('millionverifier.api_key', env),
+    resolveConfig('zerobounce.api_key', env),
+  ])
+  return {
+    keys: { millionverifier: mv || null, zerobounce: zb || null },
+    pricing: getPricing(env),
+  }
+}
+
 const RUN_COLUMNS = `id, status, requested_by, approved_by, contact_ids, contact_count, precheck_pass, est_mv_checks,
   est_zb_checks, est_cost_usd, max_cost_usd, spent_usd, processed, summary, created_at, approved_at, finished_at`
 
@@ -151,7 +166,7 @@ export async function createPreview(db: Db, input: PreviewInput, env: VerifyEnv)
     force: Boolean(input.force),
     recheck_days: recheckDays,
   })
-  const checker = createPrechecker({ resolver: env.resolver })
+  const checker = await createPrecheckerAsync({ resolver: env.resolver })
   const pre = await precheckMany(sel.eligible.map((c) => c.email_norm as string), checker)
 
   const byResult: Record<string, number> = {}
@@ -406,7 +421,7 @@ export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOpti
     )
     const preById = new Map(preRows.map((p) => [Number(p.contact_id), p]))
 
-    const checker = createPrechecker({ resolver: env.resolver })
+    const checker = await createPrecheckerAsync({ resolver: env.resolver })
     const ctx = { prechecker: checker, keys: env.keys, pricing: env.pricing, fetch: env.fetch }
     const worst = worstCaseCost(env.keys, env.pricing)
 
