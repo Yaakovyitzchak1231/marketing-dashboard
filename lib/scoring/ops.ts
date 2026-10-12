@@ -5,6 +5,7 @@
  */
 import type { Db } from '@/lib/db/types'
 import { OpsError } from '@/lib/ops/core'
+import { requireOwnerOrSystem } from '@/lib/ops/actor-role'
 import { getScoreModel, leadScores, listScoreModels, recomputeScores, upsertScoreModel, ScoringError, type UpsertScoreModelInput } from './engine'
 
 type Args = Record<string, unknown>
@@ -47,9 +48,11 @@ export const SCORING_OPS: Record<string, Op> = {
     }),
   },
   upsert_score_model: {
-    args: '{id?, name, entity: "company"|"contact", kind: "engagement"|"fit", campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}',
-    run: wrap((db, actor, a) =>
-      upsertScoreModel(db, actor, {
+    args: '{id?, name, entity: "company"|"contact", kind: "engagement"|"fit", campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}  -- OWNER OR SYSTEM ONLY (an agent or Editor key gets 403)',
+    run: wrap(async (db, actor, a) => {
+      // Checked before any argument parsing, so a refused caller learns nothing about validation.
+      await requireOwnerOrSystem(db, actor, 'Changing a score model needs the owner (or the system runner). Ask the owner to do it in the dashboard (Settings > Scoring).')
+      return upsertScoreModel(db, actor, {
         id: a.id == null ? undefined : posInt(a.id, 'id'),
         name: String(a.name ?? ''),
         entity: a.entity as UpsertScoreModelInput['entity'],
@@ -60,12 +63,13 @@ export const SCORING_OPS: Record<string, Op> = {
         // Left out = keep the stored cap (an update that only sends rules used to wipe it).
         max_points: a.max_points === undefined ? undefined : a.max_points === null || a.max_points === '' ? null : Number(a.max_points),
         active: a.active == null ? undefined : a.active === true || a.active === 'true',
-      }),
-    ),
+      })
+    }),
   },
   recompute_scores: {
-    args: '{model_id?, company_id?, contact_id?, summary?}  -- re-evaluates events, expires stale points, re-sums; omit all args to recompute everyone under every active model (committed in batches of 250). summary: true returns counts instead of one row per lead (what the score_refresh job uses)',
+    args: '{model_id?, company_id?, contact_id?, summary?}  -- re-evaluates events, expires stale points, re-sums; omit all args to recompute everyone under every active model (committed in batches of 250). summary: true returns counts instead of one row per lead (what the score_refresh job uses). OWNER OR SYSTEM ONLY: the nightly score_refresh job runs it as system',
     run: wrap(async (db, actor, a) => {
+      await requireOwnerOrSystem(db, actor, 'Recomputing scores needs the owner (or the system runner). The nightly score_refresh job already does it.')
       const results = await recomputeScores(db, actor, {
         model_id: a.model_id == null ? null : posInt(a.model_id, 'model_id'),
         company_id: a.company_id == null ? null : posInt(a.company_id, 'company_id'),

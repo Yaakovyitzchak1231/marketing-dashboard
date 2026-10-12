@@ -1,7 +1,8 @@
 'use server'
 
 /**
- * Campaigns workspace, from the dashboard (the signed-in human, 'owner'). The
+ * Campaigns workspace, from the dashboard (the signed-in human; every action
+ * checks Editor via actorFor and writes as that person, not as 'owner'). The
  * same functions agents reach through /api/ops (lib/campaigns/ops.ts). A bad
  * input comes back to the page as ?error=… instead of an error screen.
  * Nothing here sends anything to Instantly.
@@ -16,10 +17,7 @@ import { addLeadsByFilter, addLeadsByIds, parseLeadPatch, removeLeads, updateCam
 import { CampaignError, parseCampaignPatch, parseIds, parsePick } from '@/lib/campaigns/types'
 import { runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
-import { currentRole } from '@/lib/auth/session'
-import { requireRole } from '@/lib/auth/roles'
-
-const ME = 'owner'
+import { actorFor } from '@/lib/auth/act'
 
 function db() {
   const d = getDb()
@@ -56,6 +54,7 @@ async function guarded(path: string, fn: () => Promise<string | void>): Promise<
 }
 
 export async function createCampaignAction(f: FormData) {
+  const ME = await actorFor('editor')
   await guarded('/campaigns', async () => {
     const from = Number(s(f, 'from_id'))
     if (Number.isInteger(from) && from > 0) {
@@ -72,6 +71,7 @@ export async function createCampaignAction(f: FormData) {
 }
 
 export async function duplicateCampaignAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const r = await duplicateCampaign(db(), ME, id, {
@@ -84,6 +84,7 @@ export async function duplicateCampaignAction(f: FormData) {
 }
 
 export async function archiveCampaignAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   const returnTo = s(f, 'return_to').startsWith('/') ? s(f, 'return_to') : `/campaigns/${id}`
   await guarded(returnTo, async () => {
@@ -94,18 +95,21 @@ export async function archiveCampaignAction(f: FormData) {
 }
 
 export async function addStatusAction(f: FormData) {
+  const ME = await actorFor('editor')
   await guarded('/campaigns', async () => {
     await addStatus(db(), ME, { id: s(f, 'id'), label: s(f, 'label'), is_archived: s(f, 'is_archived') === 'on' })
   })
 }
 
 export async function toggleStatusAction(f: FormData) {
+  const ME = await actorFor('editor')
   await guarded('/campaigns', async () => {
     await setStatusActive(db(), ME, s(f, 'id'), s(f, 'active') === 'yes')
   })
 }
 
 export async function addLeadsByFilterAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const pick = parsePick({
@@ -125,6 +129,7 @@ export async function addLeadsByFilterAction(f: FormData) {
 }
 
 export async function addLeadsByIdsAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const r = await addLeadsByIds(db(), ME, id, parseIds(s(f, 'company_ids'), 'lead ids'), 'hand')
@@ -134,6 +139,7 @@ export async function addLeadsByIdsAction(f: FormData) {
 }
 
 export async function removeLeadsAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const ids = f.getAll('company_id').map(String)
@@ -145,6 +151,7 @@ export async function removeLeadsAction(f: FormData) {
 }
 
 export async function updateCampaignLeadAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   const companyId = idOf(f, 'company_id')
   const ret = `/campaigns/${id}?lead=${companyId}`
@@ -162,6 +169,7 @@ export async function updateCampaignLeadAction(f: FormData) {
 }
 
 export async function makeOwnRulesAction(f: FormData) {
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     await makeOwnRules(db(), ME, id)
@@ -171,7 +179,7 @@ export async function makeOwnRulesAction(f: FormData) {
 }
 
 export async function addFromSegmentAction(f: FormData) {
-  requireRole(await currentRole(), 'editor')
+  const ME = await actorFor('editor')
   const id = idOf(f)
   await guarded(`/campaigns/${id}`, async () => {
     const segmentId = Number(s(f, 'segment_id'))
