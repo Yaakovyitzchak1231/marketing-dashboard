@@ -143,7 +143,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
           </div>
           <section aria-labelledby="c-h">
             <SectionHeader id="c-h" title="Campaigns" />
-            <Card>{table(live, canEdit ? 'No campaigns yet. Start one with the New campaign form.' : 'No campaigns yet.')}</Card>
+            <Card>{table(live, canEdit ? 'No campaigns yet. Start one with the quick-create form.' : 'No campaigns yet.')}</Card>
           </section>
           <section aria-labelledby="t-h">
             <SectionHeader id="t-h" title="Templates" meta="Start a new campaign from one: settings and leads are copied" />
@@ -154,7 +154,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         <aside className="space-y-5">
           {canEdit ? (
           <section aria-labelledby="new-h">
-            <SectionHeader id="new-h" title="New campaign" />
+            <SectionHeader id="new-h" title="Quick create" />
             <Card className="p-3">
               <form action={createCampaignAction} className="space-y-3">
                 <label className={LABEL}>Name<input name="name" required maxLength={120} className={INPUT} placeholder="e.g. Maryland jewelers, fall" /></label>
