@@ -122,7 +122,16 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     <PageShell
       title="Campaigns"
       meta={`${live.length} campaign${live.length === 1 ? '' : 's'}${templates.length ? ` · ${templates.length} template${templates.length === 1 ? '' : 's'}` : ''} · built here; sending through Instantly is a separate step that needs your OK`}
-      actions={perfLink}
+      actions={
+        <>
+          {canEdit ? (
+            <Link className={BUTTON_PRIMARY} href="/campaigns/new" prefetch={false}>
+              New campaign
+            </Link>
+          ) : null}
+          {perfLink}
+        </>
+      }
     >
       {err ? <Notice tone="bad">{err}</Notice> : null}
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">

@@ -12,8 +12,12 @@ its configuration from the campaign's profile instead of being written per indus
 
 ## How it works for any new campaign
 
-1. **Create the campaign** (`lp.campaigns`, unchanged from before).
-2. **Open its Profile tab** (`/campaigns/:id/profile`). Step 1: type the industry and
+1. **Create the campaign** (`lp.campaigns`). The guided way is **New campaign** on
+   `/campaigns`, which opens `/campaigns/new`: name, pool, goal, optionally start from a
+   template or copy (same `createCampaignAction` and Editor gate as before; viewers see a
+   view-only note and no form).
+2. **Open its Profile tab** (`/campaigns/:id/profile`) — `/campaigns/new` lands you here
+   automatically (`?new=1` adds a one-line "campaign created" note). Step 1: type the industry and
    who you sell to (business types, geographies, roles, size, exclusions). Pick an
    existing pool or create a new one right there — pools are rows in `lp.pools`, not
    a fixed list, so a brand-new industry is never blocked.
@@ -80,10 +84,11 @@ campaign whose profile is `active`. The signed-in door is
 ## AI provider
 
 Free/OSS only: any OpenAI-compatible chat completions endpoint — a local Ollama on
-Yaakov's OVH server, Groq's free tier, OpenRouter's free models, etc. Configured for
-now via `AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars, behind one
-`getAiConfig()` function (`lib/campaign-profiles/suggest.ts`) with a `TODO` to switch
-to the settings store once that PR lands. With nothing configured, `suggest_campaign_profile`
+Yaakov's OVH server, Groq's free tier, OpenRouter's free models, etc. Configured on
+/settings (AI group: `ai.base_url`, `ai.api_key`, `ai.model`), with the
+`AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars as a fallback, read by
+`getAiConfig()` (`lib/campaign-profiles/suggest.ts`) through the settings store's
+`resolveConfig()`. With nothing configured, `suggest_campaign_profile`
 answers `{configured:false}` and the wizard says "AI suggestions need an AI provider —
 add one in Settings" — manual entry still works either way.
 

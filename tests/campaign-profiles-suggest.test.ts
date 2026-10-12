@@ -62,16 +62,16 @@ describe('campaign-profiles AI-assisted suggest', () => {
     await db.close()
   })
 
-  it('getAiConfig reads env, and is unset when AI_BASE_URL/AI_MODEL are missing', () => {
+  it('getAiConfig reads env, and is unset when AI_BASE_URL/AI_MODEL are missing', async () => {
     delete process.env.AI_BASE_URL
     delete process.env.AI_MODEL
     delete process.env.AI_API_KEY
-    expect(getAiConfig()).toBeNull()
+    expect(await getAiConfig()).toBeNull()
     process.env.AI_BASE_URL = 'http://localhost:11434/v1'
     process.env.AI_MODEL = 'llama3.1'
-    expect(getAiConfig()).toEqual({ baseUrl: 'http://localhost:11434/v1', apiKey: null, model: 'llama3.1' })
+    expect(await getAiConfig()).toEqual({ baseUrl: 'http://localhost:11434/v1', apiKey: null, model: 'llama3.1' })
     process.env.AI_API_KEY = 'sk-free'
-    expect(getAiConfig()?.apiKey).toBe('sk-free')
+    expect((await getAiConfig())?.apiKey).toBe('sk-free')
   })
 
   it('reports {configured:false} when no AI provider is set up, and never touches the DB', async () => {

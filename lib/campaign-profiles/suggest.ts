@@ -10,15 +10,15 @@
  * Provider: free/OSS only, any OpenAI-compatible chat completions endpoint
  * (a local Ollama on Yaakov's OVH server, Groq's free tier, OpenRouter's free
  * models, ...). Config comes from env for now (AI_BASE_URL, AI_API_KEY,
- * AI_MODEL) behind one getAiConfig() — TODO: once lib/settings exists (a
- * parallel PR), read AI provider config from there first, env as a fallback,
- * the same way lib/settings/registry.ts's resolveConfig() will do for other
- * keys.
+ * AI_MODEL) behind one getAiConfig(), which reads the /settings values
+ * (ai.base_url, ai.api_key, ai.model) through lib/settings/store.ts's
+ * resolveConfig() — DB first, env as a fallback.
  */
 import 'server-only'
 import type { Db } from '../db/types.ts'
 import { ProfileError, addItems, type ItemInput, type ItemKind, upsertProfile } from './store.ts'
 import { verifyItemsAndSave } from './verify.ts'
+import { resolveConfig } from '../settings/store.ts'
 
 export interface AiConfig {
   baseUrl: string
@@ -31,11 +31,15 @@ export interface AiConfig {
  * TODO(settings): switch to lib/settings's resolveConfig() once that PR lands
  * (DB first, then env) — this function is the one seam that call will replace.
  */
-export function getAiConfig(): AiConfig | null {
-  const baseUrl = process.env.AI_BASE_URL?.trim()
-  const model = process.env.AI_MODEL?.trim()
+export async function getAiConfig(env: Record<string, string | undefined> = process.env): Promise<AiConfig | null> {
+  // Sequential on purpose: one pooled connection may serve all three reads.
+  const b = await resolveConfig('ai.base_url', env)
+  const m = await resolveConfig('ai.model', env)
+  const k = await resolveConfig('ai.api_key', env)
+  const baseUrl = b.value?.trim()
+  const model = m.value?.trim()
   if (!baseUrl || !model) return null
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: process.env.AI_API_KEY?.trim() || null, model }
+  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: k.value?.trim() || null, model }
 }
 
 export interface SuggestInput {
@@ -247,7 +251,7 @@ export async function suggestCampaignProfile(db: Db, actor: string, input: Sugge
   if (!Number.isInteger(campaignId) || campaignId <= 0) throw new ProfileError('campaign_id must be a positive integer.')
   const industry = typeof input.industry === 'string' ? input.industry.trim() : ''
   if (!industry) throw new ProfileError('industry is required.')
-  const cfg = getAiConfig()
+  const cfg = await getAiConfig()
   if (!cfg) return { configured: false, reason: 'no AI provider is configured (AI_BASE_URL / AI_MODEL)' }
 
   const chat = deps.chat ?? callChat
