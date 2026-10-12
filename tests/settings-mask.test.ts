@@ -75,11 +75,12 @@ describe('parseModelList', () => {
 })
 
 describe('fetchModelList', () => {
+  const pub = async () => [{ address: '93.184.216.34' }]
   const res = (status: number, body: unknown) => async () => ({ ok: status >= 200 && status < 300, status, json: async () => body })
   it('sends the key as a Bearer header and returns ids', async () => {
     let seen: { url: string; auth?: string } | null = null
     const r = await fetchModelList('https://api.example.com/v1', 'sk-secret-123456', {
-      fetchImpl: async (url, init) => {
+      lookup: pub, fetchImpl: async (url, init) => {
         seen = { url, auth: init.headers.authorization }
         return { ok: true, status: 200, json: async () => ({ data: [{ id: 'm1' }] }) }
       },
@@ -87,10 +88,10 @@ describe('fetchModelList', () => {
     expect(r).toEqual({ ok: true, models: ['m1'] })
     expect(seen).toEqual({ url: 'https://api.example.com/v1/models', auth: 'Bearer sk-secret-123456' })
   })
-  it('no key: no auth header (local Ollama)', async () => {
+  it('no key: no auth header', async () => {
     let auth: string | undefined = 'x'
-    await fetchModelList('http://localhost:11434/v1', null, {
-      fetchImpl: async (_u, init) => {
+    await fetchModelList('https://api.example.com/v1', null, {
+      lookup: pub, fetchImpl: async (_u, init) => {
         auth = init.headers.authorization
         return { ok: true, status: 200, json: async () => ({ data: [{ id: 'm' }] }) }
       },
@@ -102,16 +103,16 @@ describe('fetchModelList', () => {
     const cases = [
       await fetchModelList(null, key),
       await fetchModelList('not a url', key),
-      await fetchModelList('https://x/v1', key, { fetchImpl: res(401, {}) }),
-      await fetchModelList('https://x/v1', key, { fetchImpl: res(500, {}) }),
-      await fetchModelList('https://x/v1', key, { fetchImpl: res(200, { data: [] }) }),
-      await fetchModelList('https://x/v1', key, {
-        fetchImpl: async () => {
+      await fetchModelList('https://x.example.com/v1', key, { lookup: pub, fetchImpl: res(401, {}) }),
+      await fetchModelList('https://x.example.com/v1', key, { lookup: pub, fetchImpl: res(500, {}) }),
+      await fetchModelList('https://x.example.com/v1', key, { lookup: pub, fetchImpl: res(200, { data: [] }) }),
+      await fetchModelList('https://x.example.com/v1', key, {
+        lookup: pub, fetchImpl: async () => {
           throw new Error(`boom ${key}`)
         },
       }),
-      await fetchModelList('https://x/v1', key, {
-        fetchImpl: async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json') } }),
+      await fetchModelList('https://x.example.com/v1', key, {
+        lookup: pub, fetchImpl: async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json') } }),
       }),
     ]
     for (const c of cases) {
@@ -121,9 +122,9 @@ describe('fetchModelList', () => {
     expect(cases[2]).toEqual({ ok: false, message: 'The provider rejected the API key. Check the AI provider API key.' })
   })
   it('times out', async () => {
-    const r = await fetchModelList('https://x/v1', null, {
+    const r = await fetchModelList('https://x.example.com/v1', null, {
       timeoutMs: 20,
-      fetchImpl: (_u, init) =>
+      lookup: pub, fetchImpl: (_u, init) =>
         new Promise((_res, rej) => {
           init.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' })))
         }),

@@ -124,7 +124,7 @@ export async function suggestProfileAction(campaignId: number, industry: string,
 }
 
 export async function aiConfiguredAction(): Promise<{ ok: true; configured: boolean }> {
-  return { ok: true, configured: getAiConfig() !== null }
+  return { ok: true, configured: (await getAiConfig()) !== null }
 }
 
 export async function verifyFeedAction(url: string): Promise<{ ok: true; result: Awaited<ReturnType<typeof verifyFeed>> } | Fail> {

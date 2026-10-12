@@ -8,17 +8,25 @@
  * approves/rejects it afterward (lib/campaign-profiles/store.ts addItems).
  *
  * Provider: free/OSS only, any OpenAI-compatible chat completions endpoint
- * (a local Ollama on Yaakov's OVH server, Groq's free tier, OpenRouter's free
- * models, ...). Config comes from env for now (AI_BASE_URL, AI_API_KEY,
- * AI_MODEL) behind one getAiConfig() — TODO: once lib/settings exists (a
- * parallel PR), read AI provider config from there first, env as a fallback,
- * the same way lib/settings/registry.ts's resolveConfig() will do for other
- * keys.
+ * (Groq's free tier, OpenRouter's free models, a hosted Ollama, ...). The base URL
+ * must be a public https host: localhost / private / link-local addresses and ports
+ * other than 443 are refused (lib/settings/safe-url.ts).
+ *
+ * Config is async: getAiConfig() / resolveAiConfig() read the Settings AI values
+ * (ai.base_url, ai.api_key, ai.model) through lib/settings/store.ts's resolveConfig() —
+ * DB first, the AI_BASE_URL / AI_API_KEY / AI_MODEL env vars as a fallback — so always
+ * `await` them. A base URL that fails the guard counts as "not configured" and
+ * resolveAiConfig() says why.
+ *
+ * Every provider call goes through providerFetch() (lib/settings/ai-provider.ts): the
+ * connection is pinned to the DNS answer that was checked, redirects are never followed,
+ * and only the HTTP status of a failure is shown or logged, never the provider's body.
  */
 import 'server-only'
 import type { Db } from '../db/types.ts'
 import { ProfileError, addItems, type ItemInput, type ItemKind, upsertProfile } from './store.ts'
 import { verifyItemsAndSave } from './verify.ts'
+import { AiProviderError, providerFetch, resolveAiProviderConfig, type Lookup } from '../settings/ai-provider.ts'
 
 export interface AiConfig {
   baseUrl: string
@@ -26,16 +34,13 @@ export interface AiConfig {
   model: string
 }
 
-/**
- * Reads AI_BASE_URL / AI_API_KEY / AI_MODEL from the environment.
- * TODO(settings): switch to lib/settings's resolveConfig() once that PR lands
- * (DB first, then env) — this function is the one seam that call will replace.
- */
-export function getAiConfig(): AiConfig | null {
-  const baseUrl = process.env.AI_BASE_URL?.trim()
-  const model = process.env.AI_MODEL?.trim()
-  if (!baseUrl || !model) return null
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), apiKey: process.env.AI_API_KEY?.trim() || null, model }
+/** The AI config, or why there is none (shared guard: lib/settings/ai-provider.ts). */
+export async function resolveAiConfig(env: Record<string, string | undefined> = process.env): Promise<{ cfg: AiConfig; reason?: undefined } | { cfg: null; reason: string }> {
+  return resolveAiProviderConfig(env)
+}
+
+export async function getAiConfig(env: Record<string, string | undefined> = process.env): Promise<AiConfig | null> {
+  return (await resolveAiConfig(env)).cfg
 }
 
 export interface SuggestInput {
@@ -204,11 +209,14 @@ export function validateSuggestions(parsed: unknown): ValidatedSuggestions {
   return { profile, items, dropped }
 }
 
-async function callChat(cfg: AiConfig, systemPrompt: string, userPrompt: string): Promise<string> {
+export async function callChat(
+  cfg: AiConfig, systemPrompt: string, userPrompt: string,
+  deps: { fetchImpl?: typeof fetch; lookup?: Lookup } = {},
+): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 60_000)
   try {
-    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    const res = await providerFetch(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -221,16 +229,16 @@ async function callChat(cfg: AiConfig, systemPrompt: string, userPrompt: string)
         response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
-    })
-    if (!res.ok) throw new ProfileError(`The AI provider answered ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    }, { fetchImpl: deps.fetchImpl, lookup: deps.lookup })
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
     const content = data.choices?.[0]?.message?.content
     if (!content) throw new ProfileError('The AI provider returned no message content.')
     return content
   } catch (e) {
     if (e instanceof ProfileError) throw e
+    if (e instanceof AiProviderError) throw new ProfileError(e.message)
     if (e instanceof Error && e.name === 'AbortError') throw new ProfileError('The AI provider did not answer within 60s.')
-    throw new ProfileError(`Could not reach the AI provider: ${e instanceof Error ? e.message : String(e)}`)
+    throw new ProfileError('Could not read the AI provider reply.')
   } finally {
     clearTimeout(timer)
   }
@@ -247,8 +255,8 @@ export async function suggestCampaignProfile(db: Db, actor: string, input: Sugge
   if (!Number.isInteger(campaignId) || campaignId <= 0) throw new ProfileError('campaign_id must be a positive integer.')
   const industry = typeof input.industry === 'string' ? input.industry.trim() : ''
   if (!industry) throw new ProfileError('industry is required.')
-  const cfg = getAiConfig()
-  if (!cfg) return { configured: false, reason: 'no AI provider is configured (AI_BASE_URL / AI_MODEL)' }
+  const { cfg, reason } = await resolveAiConfig()
+  if (!cfg) return { configured: false, reason }
 
   const chat = deps.chat ?? callChat
   const content = await chat(cfg, SYSTEM_PROMPT, buildUserPrompt({ campaign_id: campaignId, industry, notes: input.notes, example_sites: input.example_sites }))

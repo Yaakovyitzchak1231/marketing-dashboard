@@ -90,6 +90,12 @@ create table if not exists lp.journey_runs (
 -- up to three times (lib/journeys/runner.ts), then the run goes to 'error'.
 alter table lp.journey_runs add column if not exists attempts integer not null default 0 check (attempts >= 0);
 
+-- Which visit of the run to its current node this is: 1 on entry, +1 each time the run
+-- commits a move to a node (a loop back to the same node is a new visit). The runner builds
+-- NodeContext.idempotencyKey from it, so the key is stable across retries of one visit and
+-- different on every new one. Runner-owned: not part of `context`, which nodes can patch.
+alter table lp.journey_runs add column if not exists visit integer not null default 1 check (visit >= 1);
+
 -- The runner's queue: open runs by due time.
 create index if not exists journey_runs_due_idx on lp.journey_runs (next_run_at)
   where status in ('active', 'waiting');
