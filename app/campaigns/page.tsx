@@ -9,6 +9,9 @@ import { listPools } from '@/lib/pools/store'
 import { POOL_SLUG_RE } from '@/lib/campaigns/types'
 import { INPUT, LABEL, Notice } from '@/components/campaigns/ui'
 import { addStatusAction, archiveCampaignAction, createCampaignAction, toggleStatusAction } from '@/app/actions/campaigns'
+import { GoalPicker } from '@/components/campaigns/GoalPicker'
+import { listRecipes } from '@/lib/journeys/recipes'
+import { GOALS } from '@/lib/journeys/goals'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +49,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     listStatuses(db, { includeInactive: true }),
   ])
   const sources = await listCampaigns(db, { includeArchived: false })
+  const recipes = await listRecipes(db).catch(() => [])
   const live = campaigns.filter((c) => !c.is_template)
   const templates = campaigns.filter((c) => c.is_template)
   const err = one(sp.error)
@@ -144,10 +148,11 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                     {pools.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select>
                 </label>
-                <label className={LABEL}>Goal<input name="goal" maxLength={500} className={INPUT} placeholder="optional" /></label>
+                <GoalPicker />
                 <label className={LABEL}>Start from
                   <select name="from_id" className={INPUT} defaultValue="">
                     <option value="">Blank</option>
+                    {recipes.map((r) => <option key={r.key} value={`recipe:${r.key}`}>Recipe: {r.name} ({GOALS.find((g) => g.key === r.goal_key)?.label ?? r.goal_key})</option>)}
                     {sources.map((c) => <option key={c.id} value={c.id}>{c.is_template ? 'Template: ' : 'Copy of: '}{c.name}</option>)}
                   </select>
                 </label>
