@@ -7,12 +7,13 @@
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
 import { emitLeadEvent, emitLeadEvents, EventError, type EmitLeadEventInput } from './emit.ts'
+import { EVENT_TYPE_KEY_RE } from './type-key.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
 
 export const TRACK_EVENTS_MAX = 500
-const SLUG = /^[a-z][a-z0-9_.]{0,63}$/
+const SLUG = EVENT_TYPE_KEY_RE
 const CATEGORIES = ['email', 'lifecycle', 'verification', 'web', 'social', 'meeting', 'deal', 'signal', 'custom']
 
 function id(v: unknown, field: string): number {

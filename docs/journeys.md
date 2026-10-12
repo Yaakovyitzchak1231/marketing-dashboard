@@ -57,9 +57,44 @@ Testing and live need a published version. Back to draft only when no run is ope
 checks shape, unique ids, known kinds, each kind's own config, that every edge
 points at a node, and that every node is reachable. Loops are allowed.
 
-Built-in kinds (`lib/journeys/nodes.ts`): `wait` ({minutes, hours, days},
-measured from `node_entered_at`), `exit` ({reason}; ends as `exited`), and
-`note` (does nothing; moves on). `branch` above is an example of a kind 3.5 adds.
+Built-in kinds (`lib/journeys/nodes.ts`): `wait` (below), `exit` ({reason};
+ends as `exited`), and `note` (does nothing; moves on). `branch` above is an
+example of a kind 3.5 adds.
+
+### `wait` (3.4)
+
+Config, all optional but at least one of a duration or `until`:
+
+- `minutes`, `hours`, `days` — a duration measured from `node_entered_at`
+  (at most 366 days).
+- `until` — an absolute ISO date-time (a slot). When set it wins over the duration.
+- `drop_if_replied` (boolean) — exit the run if a `reply_received` event lands.
+- `drop_if` (an event type or a list of them, e.g. `["review.posted"]`) — exit the
+  run if any of these lands. Each entry must match the event type key shape
+  (`^[a-z][a-z0-9_.]{0,63}$`, dots allowed, same as `lp.event_types.key`);
+  publish rejects a bad entry, it never filters one out.
+- The run's `context.cancel_on` (a list of event types, e.g. set by a 3.3
+  delayed trigger) is honoured the same way.
+
+A dropped run ends as `exited` with `result.dropped` set to the event type.
+`validate` and publish never change the node's config; `drop_if_replied` adds
+`reply_received` to a copy of the list at run time only, so switching it off in
+a later version stops dropping on replies.
+
+Drop window: a drop looks for an event of that type for this lead (company or
+contact) whose `occurred_at` is at or after the run's journey entry time
+(`run.entered_at`), not the time it reached the wait node. So "drop if they
+replied at any point since entering the journey": a reply that arrives after
+entry but before the wait node still drops them, and nobody who replied gets
+mailed. The window uses `occurred_at`, not `recorded_at`, so an event backfilled
+by a reconcile is placed when it actually happened: an old reply that predates
+entry does not drop the run, one that happened after entry does.
+
+While any drop is configured the wait rechecks at least every minute (it does
+not sleep to the end), so a reply is seen within about a minute. At run time an
+event type that is not in `lp.event_types` (or a malformed `context.cancel_on`
+entry) fails the run with a clear error instead of silently never matching;
+publish can only check the key's format, since validation has no database access.
 
 ## Adding a node kind (3.4, 3.5, 3.7, 3.8, 3.9)
 
@@ -81,7 +116,7 @@ A handler returns one outcome and the runner does the bookkeeping:
   labelled path, or a node id; `to` is how 3.7's go-to works).
 - `{ type: 'wait', until, result?, context? }` — stay here; the handler runs
   again at `until`. 3.4's "wait, but drop if they replied" is a wait handler
-  that checks `lp.lead_events` since `run.node_entered_at` and returns
+  that checks `lp.lead_events` since `run.entered_at` (by `occurred_at`) and returns
   `{ type: 'finish', status: 'exited' }` when a drop event is there. 3.12's
   over-cap send can return a `wait` until the next allowed slot.
 - `{ type: 'finish', status: 'done' | 'exited' | 'goal', result? }` — end the run.
