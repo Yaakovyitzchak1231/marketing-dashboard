@@ -18,10 +18,17 @@ function noDb() {
 }
 
 export async function GET(req: Request, ctx: Ctx) {
-  const db = getDb()
-  if (!db) return noDb()
-  const { id } = await ctx.params
-  return handleCampaignProfile(req, db, 'owner', id)
+  try {
+    // Any signed-in role may read; the check comes first and names the real person.
+    const actor = await actorFor('viewer')
+    const db = getDb()
+    if (!db) return noDb()
+    const { id } = await ctx.params
+    return handleCampaignProfile(req, db, actor, id)
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ ok: false, error: e.message }, { status: 403 })
+    throw e
+  }
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {

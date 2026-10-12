@@ -5,6 +5,8 @@ import { ActionNote } from '@/components/reports/Note'
 import { LevelPill, SampleBanner } from '@/components/reports/bits'
 import { ConfirmAction } from '@/components/reports/ConfirmAction'
 import { runSheetExportAction } from '@/app/actions/reports'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { loadReportInputs, rangeDays } from '@/lib/reports/load'
 import { campaignRunway, formatDays, segmentRunway } from '@/lib/reports/runway'
 import { SEGMENT_LABEL } from '@/lib/reports/meta'
@@ -30,6 +32,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   let exportsList: ExportRun[] = []
   if (inp.db && !inp.dbError) exportsList = await recentExports(inp.db).catch(() => [])
   const sheetReady = sheetExportConfigured()
+  // Both exports need editor access (the route and the action refuse a viewer), so a viewer gets a plain line, not a dead link.
+  const canExport = canAtLeast(await currentRole(), 'editor')
 
   return (
     <PageShell title="Reports" meta="The numbers that decide what to do next, each with the button to do it.">
@@ -65,7 +69,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <SectionHeader id="lm-h" title="Lead Master copy (read-only)" meta="The lead database written back out. The Lead Master Leads tab is never changed." />
         <Card className="px-4 py-4 text-[13px]">
           <div className="flex flex-wrap items-center gap-2">
-            {inp.db ? (
+            {!canExport ? (
+              <p className="text-[13px] text-ink-muted">CSV export needs editor access.</p>
+            ) : inp.db ? (
               <a href="/api/reports/lead-master" className={BUTTON}>Download CSV</a>
             ) : (
               <span className={`${BUTTON} cursor-not-allowed opacity-50`}>Download CSV</span>
@@ -76,8 +82,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               label={`Write to “${DEFAULT_EXPORT_TAB}” tab`}
               confirmText={`Overwrite the “${DEFAULT_EXPORT_TAB}” tab of the Lead Master Sheet with the database copy? No other tab is touched.`}
               confirmLabel="Write the copy"
-              disabled={!inp.db || !sheetReady}
-              disabledReason="Needs DATABASE_URL, LEAD_MASTER_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON"
+              disabled={!canExport || !inp.db || !sheetReady}
+              disabledReason={canExport ? 'Needs DATABASE_URL, LEAD_MASTER_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON' : 'Needs editor access'}
             />
           </div>
           {!sheetReady ? (

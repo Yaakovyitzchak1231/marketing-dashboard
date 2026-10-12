@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { RunRow } from '@/lib/verify/runs'
 import type { LeadFilter } from '@/lib/verify/select'
-import { parseCeiling, suggestCeiling } from '@/lib/verify/pricing'
+import { HIGH_SPEND_CONFIRM_USD, parseCeiling, suggestCeiling } from '@/lib/verify/pricing'
 import { Card, Pill, SectionHeader } from '@/components/dashboard/primitives'
 
 type Phase = 'idle' | 'previewing' | 'preview' | 'approving' | 'running' | 'paused' | 'finished'
@@ -55,6 +55,8 @@ export function VerifyFlow({
   )
   const [phase, setPhase] = useState<Phase>(() => phaseOf(initialRun))
   const [error, setError] = useState<string | null>(null)
+  // A ceiling above HIGH_SPEND_CONFIRM_USD needs a second, explicit click before anything is sent.
+  const [askHighSpend, setAskHighSpend] = useState(false)
   const [note, setNote] = useState<string | null>(initialRun?.summary?.paused ?? null)
   const stopRef = useRef(false)
 
@@ -116,17 +118,26 @@ export function VerifyFlow({
     }
   }
 
-  async function approve() {
+  async function approve(confirmed = false) {
     if (!run) return
     const max = parseCeiling(ceiling)
     if (max == null) {
       setError('Enter a dollar ceiling (0 or more).')
       return
     }
+    if (max > HIGH_SPEND_CONFIRM_USD && !confirmed) {
+      setError(null)
+      setAskHighSpend(true)
+      return
+    }
+    setAskHighSpend(false)
     setError(null)
     setPhase('approving')
     try {
-      const r = await post<{ run: RunRow }>(`/api/verify/runs/${run.id}/approve`, { max_cost_usd: max })
+      const r = await post<{ run: RunRow }>(
+        `/api/verify/runs/${run.id}/approve`,
+        max > HIGH_SPEND_CONFIRM_USD ? { max_cost_usd: max, confirm_high_spend: true } : { max_cost_usd: max },
+      )
       setRun(r.run)
       await runSteps(run.id)
     } catch (e) {
@@ -159,6 +170,10 @@ export function VerifyFlow({
   const est = run?.summary?.estimate
   const pre = run?.summary?.precheck
   const skipped = run?.summary?.selection?.skipped
+  const highCeiling = (() => {
+    const m = parseCeiling(ceiling)
+    return m != null && m > HIGH_SPEND_CONFIRM_USD ? m : null
+  })()
   const busy = phase === 'previewing' || phase === 'approving' || phase === 'running'
 
   return (
@@ -307,12 +322,15 @@ export function VerifyFlow({
                     inputMode="decimal"
                     className="mt-1 block w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] tabular-nums text-ink"
                     value={ceiling}
-                    onChange={(e) => setCeiling(e.target.value)}
+                    onChange={(e) => {
+                      setCeiling(e.target.value)
+                      setAskHighSpend(false)
+                    }}
                   />
                 </label>
                 <button
                   type="button"
-                  onClick={approve}
+                  onClick={() => void approve()}
                   disabled={busy || run.contact_count === 0 || parseCeiling(ceiling) == null}
                   className="rounded-card border border-accent bg-accent px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-60"
                 >
@@ -333,6 +351,36 @@ export function VerifyFlow({
               </button>
             )}
           </div>
+          {askHighSpend && highCeiling != null ? (
+            <div role="alert" data-testid="high-spend-confirm" className="mt-3 rounded-card border border-warn p-3 text-[13px] text-ink">
+              <p>
+                This lets the run spend up to <span className="tabular-nums font-medium">{money(highCeiling)}</span>
+                {est ? (
+                  <>
+                    {' '}
+                    (the estimate is <span className="tabular-nums">{money(est.total_usd)}</span>)
+                  </>
+                ) : null}
+                . Anything over {money(HIGH_SPEND_CONFIRM_USD)} needs a second click. Is that the amount you mean?
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void approve(true)}
+                  className="rounded-card border border-accent bg-accent px-3 py-1.5 text-[13px] font-medium text-white"
+                >
+                  Yes, allow up to {money(highCeiling)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAskHighSpend(false)}
+                  className="rounded-card border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-muted hover:text-ink"
+                >
+                  Change the ceiling
+                </button>
+              </div>
+            </div>
+          ) : null}
           {!keys.millionverifier && phase === 'preview' ? (
             <p className="mt-2 text-[11px] text-ink-faint">With no MillionVerifier key, approving applies the free-check results only ($0).</p>
           ) : null}
