@@ -5,6 +5,7 @@ import { NewCampaignForm } from '@/components/campaigns/NewCampaignForm'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { listPools } from '@/lib/pools/store'
 import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { createCampaignAction } from '@/app/actions/campaigns'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,8 @@ export default async function NewCampaignPage({ searchParams }: { searchParams: 
       </PageShell>
     )
   }
-  const canEdit = (await currentRole()) !== 'viewer'
+  // Fail closed: a missing or unknown role gets no edit access (Kilo review).
+  const canEdit = canAtLeast(await currentRole(), 'editor')
   const [pools, sources] = canEdit ? await Promise.all([listPools(db), listCampaigns(db, { includeArchived: false })]) : [[], []]
   return (
     <PageShell title="New campaign" meta={meta}>
