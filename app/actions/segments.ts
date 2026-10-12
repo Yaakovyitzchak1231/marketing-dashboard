@@ -16,7 +16,7 @@ import { readback } from '@/lib/segments/readback'
 import {
   archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment, type Segment,
 } from '@/lib/segments/store'
-import { getSegmentAiConfig, isSegmentAiConfigured, segmentFromText, SegmentAiError, type SegmentFromTextOutcome } from '@/lib/segments/ai'
+import { isSegmentAiConfigured, segmentFromText, SegmentAiError, type SegmentFromTextOutcome } from '@/lib/segments/ai'
 import { listPresets, getPreset, presetSegmentInput, type SegmentPreset } from '@/lib/segments/presets'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { emitLeadEvents } from '@/lib/events/emit'
@@ -78,8 +78,9 @@ export async function segmentFromTextAction(text: string): Promise<{ ok: true; r
   try {
     // Spends AI credits, so it is a write for role purposes even though it saves nothing.
     await actorFor('editor')
-    const cfg = await getSegmentAiConfig()
-    const result = await segmentFromText(text, { config: cfg })
+    // No pre-resolved config: segmentFromText resolves it itself so a disallowed base URL
+    // reaches the person as its real reason ("the AI provider base URL is not allowed: ...").
+    const result = await segmentFromText(text)
     return { ok: true, result }
   } catch (e) {
     return fail(e)

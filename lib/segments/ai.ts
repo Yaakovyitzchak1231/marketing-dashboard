@@ -11,7 +11,7 @@
  * error, never a silently-wrong segment.
  */
 import 'server-only'
-import { resolveConfig } from '../settings/store.ts'
+import { AiProviderError, providerFetch, resolveAiProviderConfig, type Lookup } from '../settings/ai-provider.ts'
 import { DefinitionError, validateDefinition, type SegmentDefinition } from './definition.ts'
 import { allFields } from './fields.ts'
 import { readback } from './readback.ts'
@@ -29,16 +29,14 @@ export interface SegmentAiConfig {
   model: string
 }
 
-/** DB first (Settings -> AI group), env fallback (AI_BASE_URL / AI_API_KEY / AI_MODEL) --
- *  the same three keys lib/campaign-profiles/suggest.ts uses, read the modern way. */
-export async function getSegmentAiConfig(): Promise<SegmentAiConfig | null> {
-  const [baseUrl, apiKey, model] = await Promise.all([
-    resolveConfig('ai.base_url'),
-    resolveConfig('ai.api_key'),
-    resolveConfig('ai.model'),
-  ])
-  if (!baseUrl.value || !model.value) return null
-  return { baseUrl: baseUrl.value.replace(/\/+$/, ''), apiKey: apiKey.value, model: model.value }
+/** DB first (Settings -> AI group), env fallback (AI_BASE_URL / AI_API_KEY / AI_MODEL), through the
+ *  shared SSRF guard (lib/settings/ai-provider.ts): a disallowed base URL counts as not configured. */
+export async function resolveSegmentAiConfig(env: Record<string, string | undefined> = process.env) {
+  return resolveAiProviderConfig(env)
+}
+
+export async function getSegmentAiConfig(env: Record<string, string | undefined> = process.env): Promise<SegmentAiConfig | null> {
+  return (await resolveAiProviderConfig(env)).cfg
 }
 
 export async function isSegmentAiConfigured(): Promise<boolean> {
@@ -88,11 +86,14 @@ export function extractJson(raw: string): unknown {
   }
 }
 
-async function callChat(cfg: SegmentAiConfig, system: string, user: string): Promise<string> {
+export async function callChat(
+  cfg: SegmentAiConfig, system: string, user: string,
+  deps: { fetchImpl?: typeof fetch; lookup?: Lookup } = {},
+): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 60_000)
   try {
-    const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    const res = await providerFetch(`${cfg.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(cfg.apiKey ? { authorization: `Bearer ${cfg.apiKey}` } : {}) },
       body: JSON.stringify({
@@ -102,16 +103,16 @@ async function callChat(cfg: SegmentAiConfig, system: string, user: string): Pro
         response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
-    })
-    if (!res.ok) throw new SegmentAiError(`The AI provider answered ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    }, { fetchImpl: deps.fetchImpl, lookup: deps.lookup })
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
     const content = data.choices?.[0]?.message?.content
     if (!content) throw new SegmentAiError('The AI provider returned no message content.')
     return content
   } catch (e) {
     if (e instanceof SegmentAiError) throw e
+    if (e instanceof AiProviderError) throw new SegmentAiError(e.message)
     if (e instanceof Error && e.name === 'AbortError') throw new SegmentAiError('The AI provider did not answer within 60s.')
-    throw new SegmentAiError(`Could not reach the AI provider: ${e instanceof Error ? e.message : String(e)}`)
+    throw new SegmentAiError('Could not read the AI provider reply.')
   } finally {
     clearTimeout(timer)
   }
@@ -134,8 +135,15 @@ export async function segmentFromText(
 ): Promise<SegmentFromTextOutcome> {
   const input = typeof text === 'string' ? text.trim() : ''
   if (!input) throw new SegmentAiError('Describe who you want in plain English first.')
-  const cfg = deps.config !== undefined ? deps.config : await getSegmentAiConfig()
-  if (!cfg) return { configured: false, reason: 'no AI provider is configured' }
+  let cfg: SegmentAiConfig | null
+  let reason = 'no AI provider is configured'
+  if (deps.config !== undefined) cfg = deps.config
+  else {
+    const r = await resolveAiProviderConfig()
+    cfg = r.cfg
+    if (r.reason) reason = r.reason
+  }
+  if (!cfg) return { configured: false, reason }
   const chat = deps.chat ?? callChat
   const content = await chat(cfg, systemPrompt(), input)
   const parsed = extractJson(content)

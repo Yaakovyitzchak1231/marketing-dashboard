@@ -113,9 +113,12 @@ handler sends an email or calls Instantly and then throws, the effect has happen
 the run stays on the node, and the retry repeats it. So an external effect must be
 idempotent:
 
-- pass `ctx.idempotencyKey` (`journey-run:<run_id>:<node_id>:<time the run reached the node>`)
-  to the outside service as its idempotency key. It is the same on every retry of
-  one visit, and new when a loop brings the run back to the node;
+- pass `ctx.idempotencyKey` (`journey-run:<run_id>:<node_id>:<visit>`) to the outside
+  service as its idempotency key. `visit` is `lp.journey_runs.visit`: 1 on entry, plus 1
+  each time the run commits a move to a node. It is the same on every retry of one
+  visit (a failed node commits nothing, so it does not move), and new on every later
+  visit, even a loop that returns to the node within one tick. It is a runner-owned
+  column, not part of `context`, so a node cannot overwrite it;
 - make the call the last thing the handler does.
 
 If the service has no idempotency key, the node is at-least-once: say so in the

@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic'
 
 /** The Profile tab of a campaign: /campaigns/:id/profile. Industry, ICP, keywords, competitors, feeds,
  *  directories, signal rules, fingerprints, UTM and KPIs — the AI-assisted setup wizard. */
-export default async function CampaignProfilePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CampaignProfilePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { id: raw } = await params
+  const isNew = (await searchParams).new === '1'
   const db = getDb()
   if (!db) {
     return (
@@ -41,12 +42,17 @@ export default async function CampaignProfilePage({ params }: { params: Promise<
       }
     >
       <CampaignTabs campaignId={id} active="profile" />
+      {isNew ? (
+        <p className="mb-3 rounded-md border border-line bg-surface px-3 py-2 text-[12.5px] text-ink-muted">
+          Campaign created. Step 2: set up its profile below. You can leave and come back; nothing here is required to save the campaign.
+        </p>
+      ) : null}
       <p className="mb-4 text-[12.5px] text-ink-faint">
         Every monitor, trend chart, lead source and signal this campaign uses reads its setup from here &mdash; nothing is
         hard-coded to one industry. Type the industry below, optionally let AI suggest a starting set, then approve
         what&rsquo;s right.
       </p>
-      <ProfileWizard campaignId={id} campaignName={campaign.name} initial={data} pools={pools} aiConfigured={getAiConfig() !== null} />
+      <ProfileWizard campaignId={id} campaignName={campaign.name} initial={data} pools={pools} aiConfigured={(await getAiConfig()) !== null} />
     </PageShell>
   )
 }

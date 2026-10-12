@@ -4,6 +4,7 @@
  * has no row (so a Vercel-env-only deploy keeps working exactly as it does
  * today). Adding a new setting is adding one entry here.
  */
+import { validatePublicHttpsUrl } from './safe-url.ts'
 
 export type SettingGroup = 'Workspace' | 'Email sending' | 'Sending' | 'Verification' | 'AI' | 'Google' | 'Webhooks' | 'Integrations'
 
@@ -208,8 +209,8 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     secret: false,
     envFallback: 'AI_BASE_URL',
     placeholder: 'https://api.groq.com/openai/v1',
-    help: 'Any OpenAI-compatible chat endpoint: a local Ollama, Groq’s free tier, OpenRouter’s free models, etc. Used for AI-assisted campaign-profile setup.',
-    validate: isUrl,
+    help: 'Any OpenAI-compatible chat endpoint over https on a public host: Groq’s free tier, OpenRouter’s free models, etc. Local and private addresses are refused. Used for AI-assisted campaign-profile setup.',
+    validate: validatePublicHttpsUrl,
   },
   {
     key: 'ai.api_key',
