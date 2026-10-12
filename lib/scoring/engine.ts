@@ -450,6 +450,13 @@ export interface AdjustScoreInput {
   points: number
   /** Why the adjustment was made -- stored in the audit trail. Required. */
   reason: string
+  /**
+   * Optional idempotency key: a retried call with the same key returns the
+   * original adjustment instead of inserting duplicate points. Scoped to the
+   * model + lead — the same key under a different model/lead is a new
+   * adjustment. Stored in the score_adjusted audit event props.
+   */
+  idempotency_key?: string
   /** Where the adjustment came from; recorded on the audit event. */
   source?: 'dashboard' | 'ops_api'
 }
@@ -468,6 +475,10 @@ export interface AdjustScoreResult extends RecomputeOneResult {
  * 'score_adjusted' lead event records who/when/how much/why plus the
  * before/after scores, so the adjustment is visible in the lead's timeline
  * and queryable by segments like any other event.
+ *
+ * Pass idempotency_key to make retried calls safe: a repeat with the same key
+ * (same model + lead) returns the original adjustment_id and the current
+ * scores without inserting new points.
  */
 export async function adjustScore(db: Db, actor: string, input: AdjustScoreInput): Promise<AdjustScoreResult> {
   const model = await getScoreModel(db, input.model_id)
@@ -488,6 +499,29 @@ export async function adjustScore(db: Db, actor: string, input: AdjustScoreInput
   const now = new Date()
 
   return db.tx(async (q) => {
+    const idemKey = (input.idempotency_key ?? '').trim()
+    if (idemKey) {
+      // Idempotency: a retry of the same key (model + lead + key) replays the
+      // original adjustment instead of inserting the points twice. The score
+      // is re-summed so the caller sees the current state; recomputeBatch
+      // never rebuilds manual rows, so the replay adds nothing new.
+      const { rows: prior } = await q.query<{ adjustment_id: number | null }>(
+        `select (props->>'adjustment_id')::bigint as adjustment_id
+           from lp.lead_events
+          where type = 'score_adjusted'
+            and ${col} = $1
+            and (props->>'model_id')::bigint = $2
+            and props->>'idempotency_key' = $3
+          order by id desc
+          limit 1`,
+        [leadId, model.id, idemKey],
+      )
+      const hit = prior[0]?.adjustment_id
+      if (hit != null) {
+        const [replayed] = await recomputeBatch(q, model, [leadId], actor, now)
+        return { ...replayed, adjustment_id: hit }
+      }
+    }
     const { rows } = await q.query<{ id: number }>(
       `insert into lp.score_points (model_id, ${col}, rule_key, points, source_event_id, awarded_at, expires_at)
        values ($1, $2, '${MANUAL_ADJUSTMENT_RULE_KEY}', $3, null, $4, null) returning id`,
@@ -510,6 +544,8 @@ export async function adjustScore(db: Db, actor: string, input: AdjustScoreInput
           previous_score: recomputed.previous_score,
           new_score: recomputed.score,
           adjustment_id: rows[0].id,
+          // Stored so a retried call can find the original adjustment.
+          ...(idemKey ? { idempotency_key: idemKey } : {}),
         },
       })
     } catch (e) {
