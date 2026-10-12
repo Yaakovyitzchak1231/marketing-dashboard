@@ -111,7 +111,80 @@ const noteHandler: NodeHandler = {
   },
 }
 
-const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler]
+const OPENED = 'email_opened'
+const CLICKED = 'email_link_clicked'
+const COMPANY_FIELDS = ['stage', 'city', 'state', 'country'] as const
+const CONTACT_FIELDS = ['status', 'verification_status'] as const
+
+function pathLabel(node: GraphNode, preferred: string[]): string {
+  for (const label of preferred) {
+    if (node.paths.some((p) => p.label === label)) return label
+  }
+  return node.paths[node.paths.length - 1].label
+}
+
+const branchHandler: NodeHandler = {
+  kind: 'branch',
+  validate(node) {
+    const errs: string[] = []
+    if (!node.paths.length) errs.push('add at least one path')
+    const labels = new Set(node.paths.map((p) => p.label))
+    if (labels.size !== node.paths.length) errs.push('path labels must be unique')
+    const iff = node.config.if
+    if (iff != null && (typeof iff !== 'object' || Array.isArray(iff))) errs.push('if must be {event} or {entity, field, equals}')
+    return errs
+  },
+  async run({ q, run, node }) {
+    const iff = node.config.if
+    const since = node.config.since === 'node' ? run.node_entered_at : run.entered_at
+    if (iff && typeof iff === 'object' && !Array.isArray(iff)) {
+      const spec = iff as Record<string, unknown>
+      const yes = await branchIf(q, run, spec, since)
+      return { type: 'next', path: pathLabel(node, yes ? ['yes', 'true'] : ['no', 'else', 'no-open']), result: { yes } }
+    }
+    const types = await seenTypes(q, run, [OPENED, CLICKED], since)
+    const label = types.has(CLICKED)
+      ? pathLabel(node, ['clicked', 'opened', 'else'])
+      : types.has(OPENED)
+        ? pathLabel(node, ['opened', 'else', 'no-open'])
+        : pathLabel(node, ['no-open', 'no open', 'else', 'no'])
+    return { type: 'next', path: label, result: { opened: types.has(OPENED), clicked: types.has(CLICKED) } }
+  },
+}
+
+async function seenTypes(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
+  if (run.company_id == null && run.contact_id == null) return new Set()
+  const { rows } = await q.query<{ type: string }>(
+    `select distinct type from lp.lead_events
+      where type = any($1::text[])
+        and recorded_at >= $2
+        and (
+          ($3::bigint is not null and company_id = $3)
+          or ($4::bigint is not null and contact_id = $4)
+        )`,
+    [types, since.toISOString(), run.company_id, run.contact_id],
+  )
+  return new Set(rows.map((r) => r.type))
+}
+
+async function branchIf(q: Queryable, run: RunState, spec: Record<string, unknown>, since: Date): Promise<boolean> {
+  const event = typeof spec.event === 'string' ? spec.event.trim() : ''
+  if (event) return (await seenTypes(q, run, [event], since)).has(event)
+  const entity = spec.entity === 'contact' ? 'contact' : spec.entity === 'company' ? 'company' : ''
+  const field = typeof spec.field === 'string' ? spec.field : ''
+  const allowed = entity === 'contact' ? CONTACT_FIELDS : entity === 'company' ? COMPANY_FIELDS : []
+  if (!entity || !(allowed as readonly string[]).includes(field)) return false
+  const id = entity === 'contact' ? run.contact_id : run.company_id
+  if (id == null) return false
+  const table = entity === 'contact' ? 'lp.contacts' : 'lp.companies'
+  const { rows } = await q.query<Record<string, unknown>>(
+    `select ${field} from ${table} where id = $1`,
+    [id],
+  )
+  return String(rows[0]?.[field] ?? '') === String(spec.equals ?? '')
+}
+
+const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, branchHandler]
 const REGISTRY = new Map<string, NodeHandler>(BUILT_IN.map((h) => [h.kind, h]))
 
 export function registerNodeHandler(handler: NodeHandler): void {
