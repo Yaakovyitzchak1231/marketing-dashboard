@@ -91,8 +91,10 @@ list). One advance takes at most 50 steps, then resumes next tick.
 
 ### When a handler throws
 
-The advance rolls back, so the run is still on the node that failed. The runner
-counts the failure (`attempts`) and retries after 1, then 5, then 30 minutes.
+Each node commits on its own (`advanceOnce`): a node that moves the run on commits
+the move before the next node starts. A handler that throws rolls back only its
+own node, so the run is still on the node that failed and earlier nodes of the
+same tick stay done. The runner counts the failure (`attempts`) and retries after 1, then 5 minutes.
 After three failures in a row the run goes to `error` with `last_error`. The
 count goes back to zero whenever the run commits progress (a wait, a move past a
 node, a finish), so failures far apart never add up. Each attempt is a `retry` or
@@ -103,17 +105,19 @@ next tick. Other runs in the same tick are not affected.
 
 ### Side effects (read before writing a send, push or HTTP node)
 
-A handler's writes through `q` roll back with the run. Anything outside the
-database does not. If a handler sends an email or calls Instantly and then the
-run's transaction rolls back, the effect has happened but the run goes back to
-the node, and the retry repeats it. So an external effect must be idempotent:
+A handler's writes through `q` roll back with its own node. Nodes the run already
+passed stay committed. Anything outside the database does not roll back at all: if a
+handler sends an email or calls Instantly and then throws, the effect has happened,
+the run stays on the node, and the retry repeats it. So an external effect must be
+idempotent:
 
-- key it by `(run_id, node_id)`;
-- record it through `q` in `lp.journey_steps_log` before or as part of the step;
-- on retry, check for that record and skip the effect if it exists.
+- pass `ctx.idempotencyKey` (`journey-run:<run_id>:<node_id>:<time the run reached the node>`)
+  to the outside service as its idempotency key. It is the same on every retry of
+  one visit, and new when a loop brings the run back to the node;
+- make the call the last thing the handler does.
 
-If you cannot make a call idempotent, say so in the node's docs: it is
-at-least-once. Set `sends: true` on the handler (see the `NodeHandler` comment in
+If the service has no idempotency key, the node is at-least-once: say so in the
+node's docs. Set `sends: true` on the handler (see the `NodeHandler` comment in
 `lib/journeys/nodes.ts`) for any kind that sends or pushes.
 
 ### Suppression and approval
@@ -123,8 +127,11 @@ at-least-once. Set `sends: true` on the handler (see the `NodeHandler` comment i
   suppression on its email (`lp.is_suppressed`, for the journey's campaign). A
   blocked lead is not enrolled (`reason: do_not_contact | suppressed`), and a run
   that is blocked mid-wait exits with `exited_suppressed` on its next tick.
-  Company-level domain suppression is not checked yet; send nodes must still
-  check suppression at send time.
+  A live domain suppression (`lp.suppressions.domain`, global or for the journey's
+  campaign, not lifted or expired) also blocks a company when the domain is its
+  website domain or the domain of any email on it, whether the run is for the
+  company or one of its contacts. Send nodes must still check suppression at send
+  time.
 - A `sends: true` node does not run on a version nobody approved. The run waits
   and is checked again in an hour (`awaiting_approval`). Approval is per version
   (`lp.journey_versions.approved_by/approved_at`), set with `journey_approve`
@@ -135,20 +142,37 @@ at-least-once. Set `sends: true` on the handler (see the `NodeHandler` comment i
 
 ### Pause, resume and trigger fires
 
-- Pausing records `paused_at`. Resuming moves every open run's due time forward
+- Pausing records `paused_at` (pausing a paused journey again keeps the first time). Resuming moves every open run's due time forward
   by the length of the pause, so a wait carries on where it was instead of every
   elapsed wait firing at once.
 - Going live (from draft, testing, paused or sunset) moves the trigger cursor to
   the newest fire. Fires from before that are not replayed, so a journey does not
   enrol leads from weeks ago. A fire from testing is not consumed on going live.
+- A fire whose trigger is disabled when the runner reads it enrols nobody. It is
+  reported as skipped and the cursor still moves past it, so enabling the trigger
+  again does not replay it.
+- One bad fire does not hold the cursor. A lead that is gone or does not match
+  (`JourneyError`), or a row Postgres rejects as bad data (error class 22 or 23), is
+  skipped and reported, and its writes roll back to a savepoint. Any other error
+  (a lock timeout, a dropped connection) fails only that journey's read: the cursor
+  stays, the next tick retries the same fires, and other journeys and the due runs
+  in the same tick carry on (`trigger_failures`).
 
 ### Entry once vs multiple
 
-`entry_mode: once` is per (company, contact) pair, the same key as the one-open-run
-rule. A company enrolled directly and one of its contacts enrolled separately are
-two leads, so the company can enter the journey twice. That is intended: a
-company-level journey and a contact-level journey address different people. To
-enter a company only once, enrol companies and not their contacts.
+`entry_mode: once`: a lead enters at most once, ever. `multiple`: again after its last
+run ends, never while one is open.
+
+"Lead" is judged at the grain of the run, and a broader run covers a narrower lead:
+
+- a contact is covered by a run for that contact, or by a company-level run for its company;
+- a company (enrolled without a contact) is covered by any run of that company, whoever it was for.
+
+So a company never gets the journey twice by being enrolled both ways, and a
+company-level run is not followed by a message to each of its contacts. Two
+contacts of one company can both be in a contact-level journey. Both modes give
+`already_entered` (once) or `already_in` (multiple) in the enrol result. The
+one-open-run unique index (`journey_runs_open_lead_uq`) stays as a backstop.
 
 ## The runner (`lib/journeys/runner.ts`)
 
@@ -156,7 +180,7 @@ enter a company only once, enrol companies and not their contacts.
   — inside a transaction. Honours `entry_mode` and the one-open-run rule.
 - `exitRuns(db, actor, { run_id } | { journey_id, company_id | contact_id })`.
 - `advanceRun(db, runId, now)` — locks the run with `FOR UPDATE SKIP LOCKED`,
-  so two ticks never move the same run.
+  so two ticks never move the same run. Each node is its own transaction.
 - `runDueJourneys(db, { budgetMs? })` — one tick: enrol from new trigger fires of
   live journeys (a new journey starts from the newest fire, it does not replay old
   ones), then advance due runs of live, testing and sunset journeys, oldest due
@@ -181,16 +205,25 @@ enter a company only once, enrol companies and not their contacts.
 | `journey_set_status` | {journey_id, status} (`live` is Owner only) | Editor+; Owner for `live` |
 | `journey_approve` | {journey_id, version?} (default: the current version) | Owner |
 | `journey_retry` | {run_id} (an errored run only) | Editor+ |
-| `journey_enroll` | {journey_id, company_id? / contact_id? / company_ids? / segment_id?, after_company_id?, context?} | Editor+ |
+| `journey_enroll` | {journey_id, company_id? / contact_id? / company_ids? / segment_id?, after_company_id?, page_size?, context?, source?: manual or api} | Editor+ |
 | `journey_exit` | {run_id} or {journey_id, company_id? / contact_id?}, reason? | Editor+ |
 | `run_journeys` | {limit?} | Owner or the runner (`system`) |
 
-`journey_enroll` commits in chunks of 200 leads. A lead that fails its own checks
-(a company that does not exist, a contact in another company) comes back as
-`reason: invalid` with an `error`, and the other leads still enrol. A problem with
-the journey itself (not live or testing, no version) fails the whole call. A
-segment is read up to 2000 companies per call, sorted by company id: pass
-`next_after_company_id` back as `after_company_id` while `more` is true.
+`journey_enroll` commits in chunks of 200 leads, with a savepoint per lead. A lead
+that fails its own checks (a company that does not exist, a contact in another
+company) comes back as `reason: invalid` with an `error`; any other failure for one
+lead (the database rejecting its row) comes back as `reason: error`. The other leads
+still enrol, and `failed` counts both. A problem with the journey itself (not live
+or testing, no version) fails the whole call. `results` lists the first 200 leads and
+`results_truncated` says when there are more. `source` is `manual` (default) or
+`api`; any other value is refused (`segment` is set by the runner when you pass a
+`segment_id`, `trigger` for trigger fires).
+
+A segment is read by keyset pages in SQL: companies with an id above
+`after_company_id`, ascending, at most 2000 per call (`page_size` lowers it). Pass
+`next_after_company_id` back as `after_company_id` while `more` is true. A lead added
+or removed between calls cannot make a page skip or repeat a company. A contact
+segment maps to each of its companies once.
 
 Roles apply to keys minted for a person (`lib/ops/actor-role.ts`). Owner-only
 checks inside an op (`journey_approve`, `live`) apply to every key, agents too.

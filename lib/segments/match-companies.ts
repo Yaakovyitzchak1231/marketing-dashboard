@@ -52,6 +52,25 @@ function companyIdSubquery(compiled: CompiledSegment): string {
 }
 
 /**
+ * One keyset page of a stored segment's company ids: ids greater than `afterId`, ascending,
+ * at most `limit` of them, decided in SQL (distinct company id is the stable unique key).
+ * Nothing is read into memory beyond the page, and a lead added or removed between two
+ * pages can neither make a later page skip an id nor repeat one. Ask for `limit + 1` to
+ * learn whether another page follows.
+ */
+export async function companyIdsForSegmentPage(q: Queryable, seg: StoredSegmentLike, afterId: number, limit: number): Promise<number[]> {
+  const compiled = await compileStoredSegment(q, seg)
+  const n = compiled.params.length
+  const after = Math.max(Math.trunc(Number(afterId)) || 0, 0)
+  const cap = Math.min(Math.max(Math.trunc(Number(limit)) || 1, 1), 10_001)
+  const { rows } = await q.query<{ id: string | number }>(
+    `select distinct x.id from (${companyIdSubquery(compiled)}) x where x.id > $${n + 1}::bigint order by x.id limit $${n + 2}::int`,
+    [...compiled.params, after, cap],
+  )
+  return rows.map((r) => Number(r.id))
+}
+
+/**
  * Of `candidateIds`, the ones a stored segment matches -- decided set-based in SQL, with
  * NO row cap (an exclusion list of any size excludes every one of its leads).
  */

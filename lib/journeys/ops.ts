@@ -10,24 +10,24 @@ import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
 import { requireOwnerActor, requireOwnerOrSystem } from '../ops/actor-role.ts'
 import { getSegment } from '../segments/store.ts'
-import { companyIdsForSegment } from '../segments/match-companies.ts'
+import { companyIdsForSegmentPage } from '../segments/match-companies.ts'
 import { GraphError, validateGraph } from './graph.ts'
 import { nodeKinds } from './nodes.ts'
 import {
   JourneyError, approveVersion, getJourney, getVersionGraph, listJourneys, listVersions, publishVersion, setJourneyStatus,
   upsertJourney, type EntryMode,
 } from './store.ts'
-import { enrollLead, exitRuns, retryRun, runDueJourneys, type EnrollResult } from './runner.ts'
+import { enrollLead, exitRuns, retryRun, runDueJourneys, withSavepoint, type EnrollResult } from './runner.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
 
-/** Most leads one journey_enroll call takes. A bigger segment continues with next_after_company_id. */
+/** Most leads one journey_enroll call takes (page_size may lower it). A bigger segment continues with next_after_company_id. */
 export const MAX_ENROLL_PER_CALL = 2000
 /** Leads per transaction in journey_enroll, so one call never holds a long lock. */
 export const ENROLL_CHUNK = 200
 
-/** One lead's result in journey_enroll. `invalid` means its own checks failed; the others still went on. */
+/** One lead's result in journey_enroll. `invalid` (its own checks failed) and `error` (anything else went wrong for it) leave the other leads going. */
 type LeadResult = Omit<EnrollResult, 'reason'> & {
   company_id: number | null; contact_id: number | null; reason?: string; error?: string
 }
@@ -165,11 +165,18 @@ export const JOURNEY_OPS: Record<string, Op> = {
     run: (db, actor, a) => wrap(() => retryRun(db, actor, id(a.run_id, 'run_id'))),
   },
   journey_enroll: {
-    args: '{journey_id, company_id? | contact_id? | company_ids?: [] | segment_id?, after_company_id?, context?, source?: manual|api}  -- live or testing journeys. A segment is read up to 2000 companies per call: pass next_after_company_id back as after_company_id until more is false.',
+    args: '{journey_id, company_id? | contact_id? | company_ids?: [] | segment_id?, after_company_id?, page_size?, context?, source?: manual|api}  -- live or testing journeys. A segment is read in keyset pages of up to 2000 companies (page_size lowers it): pass next_after_company_id back as after_company_id until more is false. Each lead is reported (enrolled, or skipped with a reason); results lists the first 200 and results_truncated says when there are more.',
     run: (db, actor, a) => wrap(async () => {
       const jid = id(a.journey_id, 'journey_id')
       const context = obj(a.context, 'context')
-      const source = a.source === 'api' ? 'api' : 'manual'
+      // Only manual and api are caller choices ('segment' and 'trigger' are set by the runner). An
+      // unknown value is refused, never quietly turned into 'manual'.
+      if (a.source != null && a.source !== 'manual' && a.source !== 'api') {
+        throw new OpsError("source must be 'manual' or 'api' ('segment' is set when you enrol from a segment_id)")
+      }
+      const source: 'manual' | 'api' = a.source === 'api' ? 'api' : 'manual'
+      const pageSize = a.page_size == null ? MAX_ENROLL_PER_CALL : id(a.page_size, 'page_size')
+      if (pageSize > MAX_ENROLL_PER_CALL) throw new OpsError(`page_size is at most ${MAX_ENROLL_PER_CALL}`)
       const leads: { company_id: number | null; contact_id: number | null }[] = []
       let fromSegment = false
       let more = false
@@ -178,10 +185,11 @@ export const JOURNEY_OPS: Record<string, Op> = {
         const seg = await getSegment(db, id(a.segment_id, 'segment_id'))
         if (!seg) throw new OpsError('no segment with that id', 404)
         const after = optId(a.after_company_id, 'after_company_id') ?? 0
-        // Keyset paging: sorted here, so the page boundary does not depend on the query's
-        // row order, and an enrolment in between cannot make a later page skip or repeat leads.
-        const rest = (await companyIdsForSegment(db, seg, null)).filter((c) => c > after).sort((x, y) => x - y)
-        const page = rest.slice(0, MAX_ENROLL_PER_CALL)
+        // Keyset paging in SQL: ascending company id after the cursor, one page plus one row to
+        // learn whether more follows. Nothing beyond the page is read into memory, and a lead
+        // added, removed or enrolled between two calls cannot make a later page skip or repeat one.
+        const rest = await companyIdsForSegmentPage(db, seg, after, pageSize + 1)
+        const page = rest.slice(0, pageSize)
         for (const c of page) leads.push({ company_id: c, contact_id: null })
         fromSegment = true
         more = rest.length > page.length
@@ -209,14 +217,14 @@ export const JOURNEY_OPS: Record<string, Op> = {
           const out: LeadResult[] = []
           for (const l of chunk) {
             try {
-              const r = await enrollLead(q, actor, jid, {
+              // A savepoint per lead: whatever goes wrong for one lead undoes only that lead's writes.
+              const r = await withSavepoint(q, 'lead_sp', () => enrollLead(q, actor, jid, {
                 ...l, context, source: fromSegment ? 'segment' : source, allow_testing: true,
-              })
+              }))
               out.push({ ...l, ...r })
             } catch (e) {
-              // A JourneyError is raised before enrollLead writes anything, so the transaction stays usable.
-              if (!(e instanceof JourneyError)) throw e
-              out.push({ ...l, enrolled: false, run_id: null, reason: 'invalid', error: e.message })
+              if (e instanceof JourneyError) out.push({ ...l, enrolled: false, run_id: null, reason: 'invalid', error: e.message })
+              else out.push({ ...l, enrolled: false, run_id: null, reason: 'error', error: (e instanceof Error ? e.message : String(e)).slice(0, 300) })
             }
           }
           return out
@@ -226,8 +234,9 @@ export const JOURNEY_OPS: Record<string, Op> = {
       return {
         enrolled: results.filter((r) => r.enrolled).length,
         skipped: results.filter((r) => !r.enrolled).length,
-        failed: results.filter((r) => r.reason === 'invalid').length,
+        failed: results.filter((r) => r.reason === 'invalid' || r.reason === 'error').length,
         results: results.slice(0, 200),
+        results_truncated: results.length > 200,
         more,
         next_after_company_id: more ? nextAfter : null,
       }

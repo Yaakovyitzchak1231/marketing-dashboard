@@ -36,6 +36,11 @@ export interface NodeContext {
   node: GraphNode
   graph: JourneyGraph
   now: Date
+  /**
+   * Stable for one visit of this run to this node: the same on every retry, new when a loop
+   * brings the run back. Hand it to an outside service as its idempotency key.
+   */
+  idempotencyKey: string
 }
 
 export type NodeOutcome =
@@ -47,16 +52,15 @@ export type NodeOutcome =
   | { type: 'finish'; status: 'done' | 'exited' | 'goal'; result?: Record<string, unknown> }
 
 /**
- * Side effects. A handler runs inside the run's transaction, and if it throws the
- * whole advance rolls back (the run returns to the node it was on, and is retried).
- * So:
- *  - Database writes through `q` roll back with the run. Safe.
+ * Side effects. The runner commits each node on its own. A handler runs inside its node's
+ * transaction, and if it throws that transaction rolls back (the run stays on the node and
+ * is retried), but nodes the run already passed stay committed. So:
+ *  - Database writes through `q` roll back with the node that threw. Safe.
  *  - Anything outside the database (an email, an HTTP call, an Instantly push) is NOT
- *    rolled back. The retry will repeat it unless the handler makes it idempotent:
- *    key the external effect by (run_id, node_id), record that it happened through
- *    `q` (lp.journey_steps_log), and skip it if the record already exists. Do the
- *    external call only after that record is durable (a separate committed step) or
- *    accept at-least-once and say so in the node's docs.
+ *    rolled back. If the node throws after making the call, the retry makes it again.
+ *    Pass `ctx.idempotencyKey` to the outside service so a repeat is a no-op there, and
+ *    call it as the LAST thing the handler does. A service with no idempotency key is
+ *    at-least-once: say so in the node's docs.
  */
 export interface NodeHandler {
   kind: string
