@@ -8,6 +8,7 @@ import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { VerifyButton } from '@/components/verify/VerifyButton'
 import Link from 'next/link'
 import { fetchRole, useRole } from '@/components/auth/useRole'
+import { BULK_FIELD_CHOICES } from '@/lib/edit/bulk-fields'
 import { VIEW_ONLY_DIM, VIEW_ONLY_PROPS, announceViewOnly, failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 export interface Selected {
@@ -25,6 +26,8 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   const [lists, setLists] = useState<{ id: number; name: string }[]>([])
   const [listChoice, setListChoice] = useState('')
   const [newListName, setNewListName] = useState('')
+  const [editField, setEditField] = useState('')
+  const [editValue, setEditValue] = useState('')
   const viewer = useRole() === 'viewer'
 
   useEffect(() => {
@@ -90,6 +93,33 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
       if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, body?.error, `Couldn’t change the stage (${res.status}).`, await fetchRole()) })
       else {
         setNote({ tone: 'good', text: typeof body?.updated === 'number' ? `${body.updated} moved to ${STAGE_LABELS[stage]}.` : `Moved to ${STAGE_LABELS[stage]}.` })
+        onDone()
+        router.refresh?.()
+      }
+    } catch (err) {
+      setNote({ tone: 'bad', text: thrownWriteText(err, await fetchRole()) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** One field, one value, every selected lead; each change goes through the inline-edit path and is logged. */
+  async function applyField() {
+    if (viewOnly() || !editField) return
+    setBusy(true)
+    setNote(null)
+    try {
+      const res = await fetch('/api/leads/bulk-edit', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ company_ids: selected.companyIds, field: editField, value: editValue.trim() === '' ? null : editValue }),
+      })
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+      if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, body?.error, `Couldn\u2019t edit the leads (${res.status}).`, await fetchRole()) })
+      else {
+        const failed = Array.isArray(body?.failed) ? body.failed.length : 0
+        setNote({ tone: failed ? 'bad' : 'good', text: typeof body?.message === 'string' ? body.message : 'Saved.' })
+        setEditValue('')
         onDone()
         router.refresh?.()
       }
@@ -208,6 +238,41 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
         </select>
         <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || !stage)} onClick={applyStage} {...(viewer ? VIEW_ONLY_PROPS : {})}>
           Apply
+        </button>
+      </span>
+      <span className="flex items-center gap-1">
+        <label className="sr-only" htmlFor="bulk-field">
+          Edit field
+        </label>
+        <select
+          id="bulk-field"
+          value={editField}
+          onChange={(e) => setEditField(e.target.value)}
+          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+        >
+          <option value="">Edit field…</option>
+          {BULK_FIELD_CHOICES.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        {editField ? (
+          <>
+            <label className="sr-only" htmlFor="bulk-value">
+              New value
+            </label>
+            <input
+              id="bulk-value"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              placeholder="Empty clears it"
+              className="w-32 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+            />
+          </>
+        ) : null}
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || !editField)} onClick={applyField} {...(viewer ? VIEW_ONLY_PROPS : {})}>
+          Apply to {n}
         </button>
       </span>
       <button type="button" className="ml-auto text-[12px] text-ink-faint hover:text-ink" onClick={onDone}>
