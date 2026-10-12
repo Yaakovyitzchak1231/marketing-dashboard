@@ -10,7 +10,7 @@ actions, 3.9 sends, 3.12 frequency caps). Nothing in 3.1 sends email.
 - `lp.journeys` — id, name, `status` (draft | testing | live | paused | sunset),
   `campaign_id`, `trigger_id` (a 3.2 trigger that enrols leads), `trigger_cursor`
   (last `lp.trigger_fires.id` consumed), `entry_mode` (once | multiple),
-  `goal` jsonb (3.7 fills it), `settings` jsonb, `current_version`.
+  `goal` jsonb (`{exit_event?}`, see Goals and exits), `settings` jsonb (`{entry_cap?}`), `current_version`.
 - `lp.journey_versions` — (journey_id, version) → `graph` jsonb, note,
   published_by, published_at. Publishing never edits a version; it adds one.
 - `lp.journey_runs` — one row per lead per pass through a journey: journey_id,
@@ -59,7 +59,7 @@ points at a node, and that every node is reachable. Loops are allowed.
 
 Built-in kinds (`lib/journeys/nodes.ts`): `wait` ({minutes, hours, days},
 measured from `node_entered_at`), `exit` ({reason}; ends as `exited`),
-`note` (does nothing; moves on), and `branch` (3.5, below).
+`note` (does nothing; moves on), `branch` (3.5, below), and `goal` and `goto` (3.7, below).
 
 ## Branch nodes (plan 3.5)
 
@@ -73,6 +73,11 @@ missing. A branch never falls through to "some other path".
 rejected. Events are measured on `occurred_at` (when it happened), not
 `recorded_at` (when we stored it), so an open from before entry that a backfill
 stores later does not count.
+
+Whose events count follows the 3.7 rule: a branch on a contact's run counts only
+that contact's events, and a branch on a company's run counts that company's. A
+colleague at the same company opening, clicking or replying does not move a
+contact's run.
 
 **Open/click** (no `if`): paths `clicked` and/or `opened`, plus a fallback
 `no-open` (or `no open`, `else`, `no`). A lead with an `email_link_clicked` takes
@@ -98,6 +103,34 @@ keys, an unknown entity, a non-whitelisted field, or an empty `if` are rejected.
 
 Graphs are validated by `publishVersion` before anything is stored (the only
 writer of `lp.journey_versions`); `journey_upsert` stores no graph.
+
+## Goals, go-to, exits and the entry cap (3.7)
+
+- **`goal` node** `{event?}` — ends the run with status `goal`. With no `event` it
+  finishes as soon as the run reaches it. With an `event` (a lead event type, like
+  `meeting_booked`) it waits, re-checking every minute, until that event has
+  happened for the lead since the run entered, then finishes as `goal`.
+- **`goto` node** `{to}` — jumps to the node id in `to` (surrounding spaces are
+  trimmed when the graph is validated). The graph counts it as an edge, so the
+  target must exist (`node 'x' points at unknown node 'y'` otherwise) and is
+  reachable. Loops through a `goto` are allowed; the 50-steps-per-advance cap applies.
+- **Journey `goal.exit_event`** (set with `journey_upsert` `goal: {exit_event: 'lead_unsubscribed'}`)
+  — on the next tick, every open run of a live, testing or sunset journey whose
+  lead has had that event since the run entered is exited (status `exited`, step
+  log `exit_criteria`), even in the middle of a wait that is not due. One bounded
+  query per tick (at most the tick's `limit` runs; the rest go on the next tick).
+- **Matching** — events are matched by `occurred_at` (not the time they were
+  recorded). A contact run matches events for that contact; a company run
+  matches events for that company. A company-level event does not exit a run
+  that belongs to a contact.
+- **`settings.entry_cap`** (integer >= 1) — the most times one lead may enter this
+  journey, counted over all runs that cover the lead (open or finished, not just
+  open ones), at the same grain as `entry_mode`: a company-level run counts for
+  that company's contacts and the other way round. Past the cap, enrol returns `enrolled: false` with reason
+  `already_entered`. `entry_mode: once` is the same as a cap of 1 and is checked
+  first. Entries for one journey are serialised with a transaction-scoped
+  advisory lock (`pg_advisory_xact_lock`) so two parallel enrols cannot both pass
+  the check at cap - 1.
 
 ## Adding a node kind (3.4, 3.5, 3.7, 3.8, 3.9)
 
@@ -218,7 +251,7 @@ one-open-run unique index (`journey_runs_open_lead_uq`) stays as a backstop.
 ## The runner (`lib/journeys/runner.ts`)
 
 - `enrollLead(q, actor, journeyId, { company_id?, contact_id?, source, context, trigger_fire_id })`
-  — inside a transaction. Honours `entry_mode` and the one-open-run rule.
+  — inside a transaction. Honours `entry_mode`, `settings.entry_cap` and the one-open-run rule.
 - `exitRuns(db, actor, { run_id } | { journey_id, company_id | contact_id })`.
 - `advanceRun(db, runId, now)` — locks the run with `FOR UPDATE SKIP LOCKED`,
   so two ticks never move the same run. Each node is its own transaction.
@@ -227,7 +260,11 @@ one-open-run unique index (`journey_runs_open_lead_uq`) stays as a backstop.
   ones), then advance due runs of live, testing and sunset journeys, oldest due
   first. A tick stops taking new runs after `TICK_BUDGET_MS` (90 s; the job times
   out at 120 s). Each run commits on its own, so the rest wait for the next tick,
-  and the result says `deadline_reached: true`.
+  and the result says `deadline_reached: true`. Before the due runs are picked, the
+  tick exits open runs whose journey `goal.exit_event` has happened (at most `limit`
+  per tick; `exited_by_criteria` counts them, `exit_criteria_error` is set if that
+  step failed, and the due runs still go ahead). `advanceRun` makes the same check
+  before each node, so a run also leaves between two nodes.
 - Keys the runner sets itself (`journey_entered:<run_id>`, `journey_finished:<run_id>`)
   are reserved: `track_event` refuses a `dedupe_key` with either prefix, so a caller
   cannot pre-claim one and hide the event.
@@ -272,6 +309,6 @@ Agent keys are otherwise not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
-- Node kinds beyond wait/exit/note/branch: split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
+- Node kinds beyond wait/exit/note/branch/goal/goto: split (3.6), actions (3.8), send (3.9).
 - Journey-level approval UI (the builder, 3.13). The approval gate itself is in place now.
 - A journeys page and the builder (3.13). There is no UI in 3.1.

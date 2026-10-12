@@ -7,6 +7,14 @@
  *              3.4 extends it (wait until a date/slot or a condition, drop-if-replied).
  *  - `exit`  — end the run now with status `exited`: config {reason?}.
  *  - `note`  — do nothing and move on (a label in the graph; handy in tests).
+ *  - `goal`  — end the run as `goal` (3.7): config {event?}. With an event, the run waits
+ *              (re-checking each minute) until that event happened for the lead since the
+ *              run entered, then finishes as `goal`; without one it finishes at once.
+ *  - `goto`  — jump to another node (3.7): config {to}, the target node id (trimmed when the
+ *              graph is validated). The graph counts it as an edge, so the target is reachable.
+ *
+ * The journey's own `goal.exit_event` and `settings.entry_cap` (3.7) are not nodes; they live
+ * in the runner (applyExitCriteria, enrollLead). See docs/journeys.md.
  *
  * Adding a kind (3.5 branch, 3.7 goal/go-to, 3.8 action, 3.9 send): write a
  * handler and call registerNodeHandler (or add it to BUILT_IN). The handler
@@ -73,6 +81,8 @@ export interface NodeHandler {
   sends?: boolean
   /** Problems with this node's config/paths, as plain sentences. Empty when fine. */
   validate(node: GraphNode): string[]
+  /** Optional: return the node with its config in canonical form (e.g. trimmed ids). Called before validate. */
+  normalize?(node: GraphNode): GraphNode
   run(ctx: NodeContext): Promise<NodeOutcome>
 }
 
@@ -239,7 +249,7 @@ const branchHandler: NodeHandler = {
       const yes = await branchIf(q, run, iff, sinceAt)
       return { type: 'next', path: pathLabel(node, yes ? YES_LABELS : NO_LABELS), result: { yes } }
     }
-    const types = await seenTypes(q, run, [OPENED, CLICKED], sinceAt)
+    const types = await seenSince(q, run, [OPENED, CLICKED], sinceAt)
     const clicked = types.has(CLICKED)
     const opened = types.has(OPENED)
     let label: string
@@ -250,20 +260,58 @@ const branchHandler: NodeHandler = {
   },
 }
 
+const goalHandler: NodeHandler = {
+  kind: 'goal',
+  validate(node) {
+    const event = node.config.event
+    if (event != null && (typeof event !== 'string' || !EVENT_RE.test(event))) return ['event must be an event type, like meeting_booked']
+    return []
+  },
+  async run({ q, run, node, now }) {
+    const event = typeof node.config.event === 'string' ? node.config.event : ''
+    if (event) {
+      const hit = await seenSince(q, run, [event], run.entered_at)
+      if (!hit.has(event)) {
+        return { type: 'wait', until: new Date(now.getTime() + 60_000), result: { waiting_for: event } }
+      }
+    }
+    return { type: 'finish', status: 'goal', result: event ? { event } : {} }
+  },
+}
+
+const gotoHandler: NodeHandler = {
+  kind: 'goto',
+  validate(node) {
+    const to = typeof node.config.to === 'string' ? node.config.to.trim() : ''
+    if (!to) return ['goto needs config.to, the node id to jump to']
+    return []
+  },
+  normalize(node) {
+    return typeof node.config.to === 'string' ? { ...node, config: { ...node.config, to: node.config.to.trim() } } : node
+  },
+  async run({ node }) {
+    // Trim here too: versions published before normalisation may hold a padded id.
+    const to = String(node.config.to).trim()
+    return { type: 'next', to, result: { to } }
+  },
+}
+
 /**
- * Event types this lead has had since `since`. Measured on `occurred_at` (when it
- * happened), not `recorded_at` (when we stored it): a backfill writes an old open
+ * Which of `types` happened for this run's lead since `since`. Measured on `occurred_at`
+ * (when it happened), not `recorded_at` (when we stored it): a backfill writes an old open
  * with recorded_at = now, and that must not count for a lead who entered later.
+ * Identity is scoped to the run, one rule for every node (branch, goal, exit): a contact run
+ * matches events for that contact only, a company run matches events for that company.
+ * resolveLead fills company_id on contact runs too, so a colleague's event must not count.
  */
-async function seenTypes(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
-  if (run.company_id == null && run.contact_id == null) return new Set()
+async function seenSince(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
+  if (!types.length || (run.company_id == null && run.contact_id == null)) return new Set()
   const { rows } = await q.query<{ type: string }>(
     `select distinct type from lp.lead_events
       where type = any($1::text[])
         and occurred_at >= $2
         and (
-          ($3::bigint is not null and company_id = $3)
-          or ($4::bigint is not null and contact_id = $4)
+          case when $4::bigint is not null then contact_id = $4 else company_id = $3 end
         )`,
     [types, since.toISOString(), run.company_id, run.contact_id],
   )
@@ -277,7 +325,7 @@ async function seenTypes(q: Queryable, run: RunState, types: string[], since: Da
  */
 async function branchIf(q: Queryable, run: RunState, spec: Record<string, unknown>, since: Date): Promise<boolean> {
   const event = typeof spec.event === 'string' ? spec.event.trim() : ''
-  if (event) return (await seenTypes(q, run, [event], since)).has(event)
+  if (event) return (await seenSince(q, run, [event], since)).has(event)
   const entity = spec.entity === 'contact' ? 'contact' : spec.entity === 'company' ? 'company' : ''
   const field = typeof spec.field === 'string' ? spec.field : ''
   const allowed: readonly string[] = entity === 'contact' ? CONTACT_FIELDS : entity === 'company' ? COMPANY_FIELDS : []
@@ -293,7 +341,9 @@ async function branchIf(q: Queryable, run: RunState, spec: Record<string, unknow
   return String(value) === String(spec.equals)
 }
 
-const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, branchHandler]
+export { seenSince }
+
+const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, branchHandler, goalHandler, gotoHandler]
 const REGISTRY = new Map<string, NodeHandler>(BUILT_IN.map((h) => [h.kind, h]))
 
 export function registerNodeHandler(handler: NodeHandler): void {

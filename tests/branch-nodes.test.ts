@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { createTestDb } from './helpers/pglite-db'
-import { addCompany } from './helpers/lead-fixtures'
+import { addCompany, addContact } from './helpers/lead-fixtures'
 import { emitLeadEvent } from '@/lib/events/emit'
 import { runOp } from '@/lib/ops/dispatch'
 import { runDueJourneys } from '@/lib/journeys/runner'
@@ -33,11 +33,12 @@ describe('branch nodes (plan 3.5)', () => {
   })
   afterAll(async () => db.close())
 
-  async function enroll(name: string, graph: unknown, company = co) {
+  async function enroll(name: string, graph: unknown, company = co, contact?: number) {
     const j = await runOp(db, 'owner', 'journey_upsert', { name }) as { id: number }
     await runOp(db, 'owner', 'journey_publish', { journey_id: j.id, graph })
     await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
-    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: company }) as { results: { run_id: number }[] }
+    const target = contact != null ? { contact_id: contact } : { company_id: company }
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, ...target }) as { results: { run_id: number }[] }
     return en.results[0].run_id
   }
 
@@ -127,6 +128,62 @@ describe('branch nodes (plan 3.5)', () => {
       await runDueJourneys(db)
       expect(await nodeOf(runId), `since=${since}`).toMatchObject({ node_id: expected })
     }
+  })
+
+  describe('whose events count (same rule as 3.7)', () => {
+    const IF_REPLY = {
+      start: 'gate',
+      nodes: [
+        { id: 'gate', kind: 'branch', config: { if: { event: 'reply_received' } }, paths: [{ label: 'yes', to: 'y' }, { label: 'no', to: 'n' }] },
+        { id: 'y', kind: 'note' }, { id: 'n', kind: 'note' },
+      ],
+    }
+
+    // Events carry company_id as well as contact_id, like the email path (emit's resolve) fills both.
+    async function pair(tag: string) {
+      const company = await addCompany(db, { name: `Pair ${tag}`, domain: `pair-${tag}.example`, city: 'Towson' })
+      const mine = await addContact(db, company, `me@pair-${tag}.example`)
+      const colleague = await addContact(db, company, `colleague@pair-${tag}.example`)
+      return { company, mine, colleague }
+    }
+
+    it("a contact run ignores a colleague's click, and takes clicked on its own click", async () => {
+      const a = await pair('click-a')
+      const runA = await enroll('Colleague click', INTERACTION, a.company, a.mine)
+      await emitLeadEvent(db, { type: 'email_link_clicked', company_id: a.company, contact_id: a.colleague, source: 'test' })
+      await emitLeadEvent(db, { type: 'email_opened', company_id: a.company, contact_id: a.colleague, source: 'test' })
+      await runDueJourneys(db)
+      expect(await nodeOf(runA)).toMatchObject({ node_id: 'cold', status: 'done' })
+
+      const b = await pair('click-b')
+      const runB = await enroll('Own click', INTERACTION, b.company, b.mine)
+      await emitLeadEvent(db, { type: 'email_link_clicked', company_id: b.company, contact_id: b.colleague, source: 'test' })
+      await emitLeadEvent(db, { type: 'email_link_clicked', company_id: b.company, contact_id: b.mine, source: 'test' })
+      await runDueJourneys(db)
+      expect(await nodeOf(runB)).toMatchObject({ node_id: 'hot', status: 'done' })
+    })
+
+    it("an if.event branch on a contact run ignores a colleague's reply, and counts its own", async () => {
+      const a = await pair('reply-a')
+      const runA = await enroll('Colleague reply', IF_REPLY, a.company, a.mine)
+      await emitLeadEvent(db, { type: 'reply_received', company_id: a.company, contact_id: a.colleague, source: 'test' })
+      await runDueJourneys(db)
+      expect(await nodeOf(runA)).toMatchObject({ node_id: 'n', status: 'done' })
+
+      const b = await pair('reply-b')
+      const runB = await enroll('Own reply', IF_REPLY, b.company, b.mine)
+      await emitLeadEvent(db, { type: 'reply_received', company_id: b.company, contact_id: b.mine, source: 'test' })
+      await runDueJourneys(db)
+      expect(await nodeOf(runB)).toMatchObject({ node_id: 'y', status: 'done' })
+    })
+
+    it("a company run still counts the company's events, including a contact's", async () => {
+      const a = await pair('company-run')
+      const run = await enroll('Company run', IF_REPLY, a.company)
+      await emitLeadEvent(db, { type: 'reply_received', company_id: a.company, contact_id: a.colleague, source: 'test' })
+      await runDueJourneys(db)
+      expect(await nodeOf(run)).toMatchObject({ node_id: 'y', status: 'done' })
+    })
   })
 
   it('if/else never treats NULL or a missing value as equal to an empty string', async () => {
