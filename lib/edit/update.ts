@@ -17,6 +17,7 @@ import { editCompany, editContact, LeadEditError } from '../leads/edit'
 import { guardCampaignEdit } from '../campaigns/store'
 import { CampaignError, type CampaignPatch } from '../campaigns/types'
 import { writeCustomFieldValue } from '../fields/store'
+import { safeOnFieldChanged } from '../triggers/match'
 
 /** The registry's normalized text value -> the typed value updateCampaign's own checks expect. */
 function campaignPatchFor(field: string, next: string | null): CampaignPatch {
@@ -115,6 +116,20 @@ async function directUpdate(
     throw e
   }
   if (!trigger) await writeHistoryRow(q, entityType, historyEntityId, field, curText, nextValue, actor, via, note)
+  if (entityType === 'company' || entityType === 'contact') {
+    const companyId = entityType === 'company'
+      ? historyEntityId
+      : (await q.query<{ company_id: number | null }>('select company_id from lp.contacts where id = $1', [historyEntityId])).rows[0]?.company_id ?? null
+    await safeOnFieldChanged(q, {
+      entity: entityType,
+      id: historyEntityId,
+      field,
+      from: curText,
+      to: nextValue,
+      company_id: companyId,
+      contact_id: entityType === 'contact' ? historyEntityId : null,
+    })
+  }
   return { changed: true, field, from: curText, to: nextValue }
 }
 
