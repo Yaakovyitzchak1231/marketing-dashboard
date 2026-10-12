@@ -1,9 +1,9 @@
 /**
  * One handler, two doors (same contract):
  *   people:  /api/campaign-steps/:campaignId/...      (behind the login gate, signed-in actor, editor or above;
- *                                                      /outcome needs the owner)
+ *                                                      experiment status changes, /evaluate and /outcome need the owner)
  *   agents:  /api/ops/campaign-steps/:campaignId/...  (ops Bearer <redacted> via opsGate, actor = the agent;
- *                                                      status changes and /outcome need owner-or-system)
+ *                                                      experiment status changes, /evaluate and /outcome need owner-or-system)
  *
  *   GET    /                         -> {campaign, steps (each with copy warnings), fields, push_requests}
  *   POST   /            {subject, body, delay_days?, variant?, step_number?}  -> {step}
@@ -18,10 +18,15 @@
  *   GET    /experiments                                              -> A/B experiments on this campaign's steps
  *   POST   /experiments {step_number, name, config?}                 -> {experiment}
  *   GET    /experiments/:id                                          -> {experiment, outcomes, assignments}
- *   PATCH  /experiments/:id {name?, status?, config?}                -> {experiment}
- *   POST   /experiments/:id/evaluate                                 -> auto-winner evaluation
- *   POST   /experiments/:id/assign {company_id, contact_id?}         -> the lead's variant (idempotent)
- *   POST   /experiments/:id/outcome {variant, sends?, replies?, idempotency_key?}  -> updated counters (owner-only; replies = positive replies only)
+ *   PATCH  /experiments/:id {name?, status?, winner_variant?, config?} -> {experiment}
+ *            status moves: draft->running, running<->paused, running|paused->decided (needs winner_variant); owner only.
+ *            config (variants, weights) only while status is draft; name any time (editor).
+ *   POST   /experiments/:id/evaluate                                 -> auto-winner evaluation (owner or system)
+ *   POST   /experiments/:id/assign {company_id, contact_id?}         -> {assignment: {assigned, variant | reason}} (one per company; idempotent)
+ *   POST   /experiments/:id/outcome {variant, sends?, positive_replies?, idempotency_key?}
+ *                                                                    -> updated counters (owner only). positive_replies = POSITIVE
+ *                                                                       replies only (never auto-replies, unsubscribes or negative replies).
+ *                                                                       Variant must be configured, experiment running, counts whole numbers >= 0.
  * Every write is in the activity log with the actor and old -> new.
  */
 import { NextResponse } from 'next/server'
@@ -43,6 +48,7 @@ import {
   recordOutcome,
   updateExperiment,
 } from '../experiments/store.ts'
+import type { ExperimentStatus } from '../experiments/types.ts'
 import { evaluateExperiment } from '../experiments/winner.ts'
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
@@ -102,12 +108,17 @@ async function handleExperiments(
       // Campaign check BEFORE any mutation: a mismatched id must not write.
       const detail = await getExperimentDetail(db, expId)
       if (!detail || detail.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
-      if (door === 'ops' && bd.status !== undefined) {
-        await requireOwnerOrSystem(db, actor, 'Changing an experiment status needs the owner (or the system runner).')
+      // A status change (start / pause / decide) is an owner action on both doors; name and
+      // config edits stay editor-level. The audit log names the real actor.
+      let patchActor = actor
+      if (bd.status !== undefined) {
+        if (door === 'human') patchActor = await actorFor('owner')
+        else await requireOwnerOrSystem(db, actor, 'Changing an experiment status needs the owner (or the system runner).')
       }
-      const exp = await updateExperiment(db, actor, expId, {
+      const exp = await updateExperiment(db, patchActor, expId, {
         name: bd.name as string | undefined,
-        status: bd.status as 'draft' | 'running' | 'paused' | undefined,
+        status: bd.status as ExperimentStatus | undefined,
+        winner_variant: bd.winner_variant as string | undefined,
         config: bd.config,
       })
       return json({ ok: true, experiment: exp })
@@ -117,7 +128,11 @@ async function handleExperiments(
   if (sub === 'evaluate' && method === 'POST') {
     const detail = await getExperimentDetail(db, expId)
     if (!detail || detail.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
-    return json({ ok: true, ...(await evaluateExperiment(db, actor, expId)) })
+    // Evaluating can decide the experiment, so it is a status change: owner (or system) only.
+    let evalActor = actor
+    if (door === 'human') evalActor = await actorFor('owner')
+    else await requireOwnerOrSystem(db, actor, 'Evaluating an experiment can decide it, so it needs the owner (or the system runner).')
+    return json({ ok: true, ...(await evaluateExperiment(db, evalActor, expId)) })
   }
   if (sub === 'assign' && method === 'POST') {
     const bd = (await body()) ?? {}
@@ -127,29 +142,32 @@ async function handleExperiments(
     if (!companyId) return json({ ok: false, error: 'Body needs {company_id, contact_id?}.' }, 400)
     const contactId = bd.contact_id == null ? null : posInt(bd.contact_id)
     if (bd.contact_id != null && !contactId) return json({ ok: false, error: 'contact_id must be a positive integer.' }, 400)
+    // {assigned: false, reason} (do_not_contact | suppressed) is a normal answer, not an error.
     return json({ ok: true, assignment: await assignVariant(db, expId, companyId, contactId) })
   }
   if (sub === 'outcome' && method === 'POST') {
     const bd = (await body()) ?? {}
     const detail = await getExperimentDetail(db, expId)
     if (!detail || detail.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
-    if (typeof bd.variant !== 'string' || !bd.variant) return json({ ok: false, error: 'Body needs {variant, sends?, replies?}.' }, 400)
+    if (typeof bd.variant !== 'string' || !bd.variant) return json({ ok: false, error: 'Body needs {variant, sends?, positive_replies?}.' }, 400)
     // Owner-only: the human door needs the signed-in owner (not just editor);
     // the ops door needs owner-or-system. The posting actor is logged with the delta.
     const outcomeActor = door === 'human' ? await actorFor('owner') : actor
     if (door === 'ops') {
       await requireOwnerOrSystem(db, actor, 'Posting experiment outcomes needs the owner (or the system runner).')
     }
-    return json({
-      ok: true,
-      outcome: await recordOutcome(db, outcomeActor, expId, bd.variant, {
-        sends: bd.sends as number | undefined,
-        // Positive replies only: auto-replies, unsubscribes, and negative
-        // replies must not be posted here (they would count as wins).
-        replies: bd.replies as number | undefined,
-        idempotency_key: typeof bd.idempotency_key === 'string' ? bd.idempotency_key : undefined,
-      }),
+    if ('replies' in bd) {
+      return json({ ok: false, error: 'Use positive_replies (positive replies only), not replies: auto-replies, unsubscribes and negative replies must not be counted.' }, 400)
+    }
+    const outcome = await recordOutcome(db, outcomeActor, expId, bd.variant, {
+      sends: bd.sends as number | undefined,
+      // Positive replies only: auto-replies, unsubscribes, and negative
+      // replies must not be posted here (they would count as wins).
+      positive_replies: bd.positive_replies as number | undefined,
+      idempotency_key: typeof bd.idempotency_key === 'string' ? bd.idempotency_key : undefined,
     })
+    const { replayed, ...counters } = outcome
+    return json({ ok: true, outcome: counters, replayed })
   }
   return null
 }

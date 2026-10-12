@@ -60,6 +60,8 @@ points at a node, and that every node is reachable. Loops are allowed.
 Built-in kinds (`lib/journeys/nodes.ts`): `wait` ({minutes, hours, days},
 measured from `node_entered_at`), `exit` ({reason}; ends as `exited`), and
 `note` (does nothing; moves on). `branch` above is an example of a kind 3.5 adds.
+`ab_split` (3.6, `lib/journeys/ab-split.ts`, config {experiment_id, variants}) routes a
+lead down the path named after its A/B variant: [experiments.md](experiments.md).
 
 ## Adding a node kind (3.4, 3.5, 3.7, 3.8, 3.9)
 
@@ -198,6 +200,6 @@ Agent keys are otherwise not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
-- Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
+- Node kinds beyond wait/exit/note: branch (3.5), goal and go-to (3.7), actions (3.8), send (3.9).
 - Journey-level approval UI (the builder, 3.13). The approval gate itself is in place now.
 - A journeys page and the builder (3.13). There is no UI in 3.1.

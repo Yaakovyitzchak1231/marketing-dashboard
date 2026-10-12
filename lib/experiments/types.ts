@@ -5,6 +5,14 @@
  * variant stats clear the same 95% z-test the insights engine uses.
  */
 
+/**
+ * A variant key: 1-32 letters, digits, '_' or '-'. No ':' (the dashboard form
+ * writes variants as key:weight) and no spaces. Shared by the server validation,
+ * the dashboard form and the ab_split journey node (a variant key is also the
+ * node's path label).
+ */
+export const VARIANT_KEY_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
+
 export interface VariantConfig {
   /** Variant key, e.g. 'A'. Must be unique within the experiment. */
   key: string
@@ -30,6 +38,8 @@ export interface Experiment {
   status: ExperimentStatus
   config: ExperimentConfig
   winner_variant: string | null
+  /** Sample-size looks the auto-winner has already taken (peeking control). */
+  evaluated_looks: number
   decided_at: Date | null
   decided_by: string | null
   created_by: string | null
@@ -41,7 +51,8 @@ export interface ExperimentOutcome {
   experiment_id: number
   variant: string
   sends: number
-  replies: number
+  /** Positive replies only (never auto-replies, unsubscribes or negative replies). */
+  positive_replies: number
   updated_at: Date
 }
 
