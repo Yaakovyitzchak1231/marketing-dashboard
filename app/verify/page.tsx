@@ -1,4 +1,6 @@
 import { getDb } from '@/lib/db'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { listRuns, getRun, runVerdictCount, type RunRow } from '@/lib/verify/runs'
 import { providerBalancesAsync, verificationCounts, VERIFICATION_STATUSES } from '@/lib/verify/overview'
 import { getPricing } from '@/lib/verify/pricing'
@@ -28,6 +30,19 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function VerifyPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams
+  // Runs carry spend, estimates and per-lead results, and the /api/verify reads
+  // need editor access; the screen asks for the same so a viewer cannot read
+  // the same numbers here instead.
+  if (!canAtLeast(await currentRole(), 'editor')) {
+    return (
+      <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
+        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Verification</h1>
+        <Card className="mt-6">
+          <EmptyNote>This screen shows spend and per-lead results, so it needs editor access. Ask an owner if you need it.</EmptyNote>
+        </Card>
+      </main>
+    )
+  }
   const db = getDb()
   const pricing = getPricing()
 

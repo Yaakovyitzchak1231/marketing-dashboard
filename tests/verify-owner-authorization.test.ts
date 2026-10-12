@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import { NextRequest } from 'next/server'
 import { createTestDb } from './helpers/pglite-db'
-import { fakeFetch, installPaidNetworkGuard } from './helpers/no-paid-network'
+import { installPaidNetworkGuard } from './helpers/no-paid-network'
 
 installPaidNetworkGuard()
 
@@ -45,6 +46,9 @@ import { POST as previewRoute } from '@/app/api/verify/preview/route'
 import { POST as approveRoute } from '@/app/api/verify/runs/[id]/approve/route'
 import { POST as stepRoute } from '@/app/api/verify/runs/[id]/step/route'
 import { POST as cancelRoute } from '@/app/api/verify/runs/[id]/cancel/route'
+import { GET as listRunsRoute } from '@/app/api/verify/runs/route'
+import { GET as getRunRoute } from '@/app/api/verify/runs/[id]/route'
+import { GET as statusRoute } from '@/app/api/verify/status/route'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
@@ -74,7 +78,8 @@ describe('verification routes require owner role', () => {
       insert into lp.actors (id, kind, display_name, email, role, active) values
         ('ed', 'human', 'Ed Itor', 'ed@example.com', 'editor', true),
         ('izzy', 'human', 'Izzy Owner', 'izzy@example.com', 'owner', true),
-        ('val', 'human', 'Val Viewer', 'val@example.com', 'viewer', true)
+        ('val', 'human', 'Val Viewer', 'val@example.com', 'viewer', true),
+        ('olive', 'human', 'Olive Owner', 'olive@example.com', 'owner', true)
     `), 'owner')
     
     // Create test contacts
@@ -525,6 +530,220 @@ describe('verification routes require owner role', () => {
       
       expect(runs.rows[0].approved_by).toBe('izzy')
       expect(runs.rows[0].approved_by).not.toBe('owner')
+    })
+  })
+
+  describe('the role check is the first thing every mutating route does', () => {
+    // An invalid body must not tell a non-owner anything: not a validation
+    // message, not whether the database is connected, not whether the run exists.
+    const badBody = { max_cost_usd: 'not a number', limit: -5, contact_ids: [] as number[], chunk: 'x' }
+
+    it.each([
+      ['editor', 'ed'],
+      ['viewer', 'val'],
+    ])('a %s gets 403 (not 400) on every mutating route, even with an invalid body and a bad run id', async (role, actor) => {
+      as(role, actor)
+      const responses = await Promise.all([
+        previewRoute(req(badBody)),
+        approveRoute(req(badBody), { params: params('not-an-id') }),
+        stepRoute(req(badBody), { params: params('not-an-id') }),
+        cancelRoute(req(badBody), { params: params('not-an-id') }),
+      ])
+      for (const r of responses) {
+        expect(r.status).toBe(403)
+        expect((await r.json()).error).toMatch(/owner access/)
+      }
+    })
+
+    it('a non-owner gets 403 rather than 503 when the database is not connected', async () => {
+      as('editor', 'ed')
+      const saved = holder.db
+      holder.db = null
+      try {
+        const responses = await Promise.all([
+          previewRoute(req(badBody)),
+          approveRoute(req(badBody), { params: params('1') }),
+          stepRoute(req(badBody), { params: params('1') }),
+          cancelRoute(req(badBody), { params: params('1') }),
+        ])
+        expect(responses.map((r) => r.status)).toEqual([403, 403, 403, 403])
+      } finally {
+        holder.db = saved
+      }
+    })
+
+    it('an owner with an invalid body still gets the validation error', async () => {
+      as('owner', 'izzy')
+      const r = await approveRoute(req({ max_cost_usd: 'abc' }), { params: params('1') })
+      expect(r.status).toBe(400)
+      expect((await r.json()).error).toBe('max_cost_usd is required')
+      const p = await previewRoute(req({ contact_ids: [] }))
+      expect(p.status).toBe(400)
+    })
+  })
+
+  describe('step attribution', () => {
+    it('events, lead events and the audit actor name the owner who ran the step, not the approver', async () => {
+      // Fresh disposable-address contacts: the free check rejects them with no DNS or vendor call, so this step writes a verdict.
+      const co = await db.query<{ id: number }>(`insert into lp.companies (name, state) values ('Attribution Co', 'MD') returning id`)
+      const fresh = await db.query<{ id: number }>(
+        `insert into lp.contacts (company_id, email, email_norm, status)
+         values ($1, 'a@mailinator.com', 'a@mailinator.com', 'new'), ($1, 'b@mailinator.com', 'b@mailinator.com', 'new') returning id`,
+        [co.rows[0].id],
+      )
+      as('owner', 'izzy')
+      const previewData = await (await previewRoute(req({ contact_ids: fresh.rows.map((r) => r.id) }))).json()
+      const runId = previewData.run.id as number
+      expect(previewData.run.contact_count).toBe(2)
+      const approved = await approveRoute(req({ max_cost_usd: 10 }), { params: params(String(runId)) })
+      expect(approved.status).toBe(200)
+
+      // lead_events and status_history are append-only and shared across tests: only look at rows this step writes.
+      const baseline = async (table: string) => (await db.query<{ n: string }>(`select coalesce(max(id), 0)::text as n from lp.${table}`)).rows[0].n
+      const leadBase = await baseline('lead_events')
+      const histBase = await baseline('status_history')
+
+      // A different owner runs the step.
+      as('owner', 'olive')
+      const stepped = await stepRoute(req({ chunk: 10 }), { params: params(String(runId)) })
+      expect(stepped.status).toBe(200)
+      const report = await stepped.json()
+      expect(report.run.status).toBe('done')
+
+      const ev = await db.query<{ kind: string; actor: string }>(
+        `select kind, actor from lp.events where entity_type = 'verification_run' and entity_id = $1 order by id`,
+        [String(runId)],
+      )
+      expect(ev.rows).toEqual([
+        { kind: 'verify.preview', actor: 'izzy' },
+        { kind: 'verify.approved', actor: 'izzy' },
+        { kind: 'verify.done', actor: 'olive' },
+      ])
+      // The run row still names the approver; only the step's own records name the runner.
+      const run = await db.query<{ approved_by: string; requested_by: string }>('select approved_by, requested_by from lp.verification_runs where id = $1', [runId])
+      expect(run.rows[0]).toEqual({ approved_by: 'izzy', requested_by: 'izzy' })
+      const leadEvents = await db.query<{ actor: string }>(`select distinct actor from lp.lead_events where source = 'verify' and id > $1::bigint`, [leadBase])
+      expect(leadEvents.rows).toEqual([{ actor: 'olive' }])
+      const history = await db.query<{ changed_by: string }>(`select distinct changed_by from lp.status_history where field = 'verification_status' and id > $1::bigint`, [histBase])
+      expect(history.rows).toEqual([{ changed_by: 'olive' }])
+    })
+  })
+
+  describe('previewing and approving are recorded separately (no self-approval block)', () => {
+    // A single-owner team must be able to approve its own preview: blocking it
+    // would deadlock the only account that can spend. What matters is that the
+    // record says who did which.
+    it('the same owner may preview and approve; both ids are recorded', async () => {
+      as('owner', 'izzy')
+      const run = (await (await previewRoute(req({ contact_ids: contactIds }))).json()).run
+      const r = await approveRoute(req({ max_cost_usd: 10 }), { params: params(String(run.id)) })
+      expect(r.status).toBe(200)
+      const row = await db.query<{ requested_by: string; approved_by: string }>('select requested_by, approved_by from lp.verification_runs where id = $1', [run.id])
+      expect(row.rows[0]).toEqual({ requested_by: 'izzy', approved_by: 'izzy' })
+    })
+
+    it('a second owner may approve the first owner\'s preview; the event carries both ids', async () => {
+      as('owner', 'izzy')
+      const run = (await (await previewRoute(req({ contact_ids: contactIds }))).json()).run
+      as('owner', 'olive')
+      const r = await approveRoute(req({ max_cost_usd: 10 }), { params: params(String(run.id)) })
+      expect(r.status).toBe(200)
+      const row = await db.query<{ requested_by: string; approved_by: string }>('select requested_by, approved_by from lp.verification_runs where id = $1', [run.id])
+      expect(row.rows[0]).toEqual({ requested_by: 'izzy', approved_by: 'olive' })
+      const ev = await db.query<{ actor: string; data: Record<string, unknown> }>(`select actor, data from lp.events where kind = 'verify.approved' and entity_id = $1`, [String(run.id)])
+      expect(ev.rows[0].actor).toBe('olive')
+      expect(ev.rows[0].data).toMatchObject({ requested_by: 'izzy', approved_by: 'olive' })
+    })
+  })
+
+  describe('high-spend confirmation', () => {
+    let runId: number
+    beforeEach(async () => {
+      as('owner', 'izzy')
+      runId = (await (await previewRoute(req({ contact_ids: contactIds }))).json()).run.id
+    })
+    const statusOf = async () => (await db.query<{ status: string; max_cost_usd: number | null }>('select status, max_cost_usd from lp.verification_runs where id = $1', [runId])).rows[0]
+
+    it('refuses a ceiling above $500 without confirm_high_spend and approves nothing', async () => {
+      const r = await approveRoute(req({ max_cost_usd: 501 }), { params: params(String(runId)) })
+      expect(r.status).toBe(400)
+      expect((await r.json()).error).toBe('A ceiling above $500 needs confirmation. Send confirm_high_spend: true if you mean to allow up to $501.')
+      expect(await statusOf()).toEqual({ status: 'preview', max_cost_usd: null })
+    })
+
+    it('treats anything but the boolean true as not confirmed', async () => {
+      for (const v of ['true', 1, 'yes', null]) {
+        const r = await approveRoute(req({ max_cost_usd: 5000, confirm_high_spend: v }), { params: params(String(runId)) })
+        expect(r.status).toBe(400)
+      }
+      expect((await statusOf()).status).toBe('preview')
+    })
+
+    it('approves a ceiling above $500 when confirm_high_spend is true', async () => {
+      const r = await approveRoute(req({ max_cost_usd: 5000, confirm_high_spend: true }), { params: params(String(runId)) })
+      expect(r.status).toBe(200)
+      expect(await statusOf()).toEqual({ status: 'approved', max_cost_usd: 5000 })
+    })
+
+    it('needs no confirmation at exactly $500 or below', async () => {
+      const r = await approveRoute(req({ max_cost_usd: 500 }), { params: params(String(runId)) })
+      expect(r.status).toBe(200)
+      expect(await statusOf()).toEqual({ status: 'approved', max_cost_usd: 500 })
+    })
+
+    it('confirmation does not lift the $10,000 hard cap', async () => {
+      const r = await approveRoute(req({ max_cost_usd: 10001, confirm_high_spend: true }), { params: params(String(runId)) })
+      expect(r.status).toBe(400)
+      expect((await r.json()).error).toMatch(/between 0 and 10000/)
+      expect((await statusOf()).status).toBe('preview')
+    })
+  })
+
+  describe('read routes need editor access', () => {
+    let runId: number
+    beforeEach(async () => {
+      as('owner', 'izzy')
+      runId = (await (await previewRoute(req({ contact_ids: contactIds }))).json()).run.id
+    })
+    const get = (path: string) => new Request(`http://localhost${path}`)
+
+    it('a viewer gets 403 from the run list, one run, and the status route', async () => {
+      as('viewer', 'val')
+      const list = await listRunsRoute(new NextRequest('http://localhost/api/verify/runs'))
+      const one = await getRunRoute(get(`/api/verify/runs/${runId}`), { params: params(String(runId)) })
+      const status = await statusRoute()
+      for (const r of [list, one, status]) {
+        expect(r.status).toBe(403)
+        const body = await r.json()
+        expect(body.error).toMatch(/editor access/)
+        expect(body.runs).toBeUndefined()
+        expect(body.run).toBeUndefined()
+        expect(body.pricing).toBeUndefined()
+      }
+    })
+
+    it('an unauthenticated caller gets 403 and no data', async () => {
+      as(null, 'owner')
+      const r = await listRunsRoute(new NextRequest('http://localhost/api/verify/runs'))
+      expect(r.status).toBe(403)
+      expect((await r.json()).error).toBe('Not signed in.')
+    })
+
+    it('an editor can read runs and status', async () => {
+      as('editor', 'ed')
+      const list = await listRunsRoute(new NextRequest('http://localhost/api/verify/runs'))
+      expect(list.status).toBe(200)
+      expect((await list.json()).runs.map((r: { id: number }) => r.id)).toContain(runId)
+      const one = await getRunRoute(get(`/api/verify/runs/${runId}`), { params: params(String(runId)) })
+      expect(one.status).toBe(200)
+      expect((await one.json()).run.id).toBe(runId)
+      const status = await statusRoute()
+      expect(status.status).toBe(200)
+    })
+
+    it('an owner can read runs', async () => {
+      as('owner', 'izzy')
+      expect((await listRunsRoute(new NextRequest('http://localhost/api/verify/runs'))).status).toBe(200)
     })
   })
 })

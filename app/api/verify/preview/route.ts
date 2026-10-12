@@ -16,6 +16,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: Request) {
+  // Role check first: a non-owner gets 403 before any validation error or database status.
+  let actor: string
+  try {
+    actor = await actorFor('owner')
+  } catch (e) {
+    return fail(e)
+  }
   const db = dbOrNull()
   if (!db) return notConnected()
   const body = await readJson(req)
@@ -30,7 +37,6 @@ export async function POST(req: Request) {
   }
   const recheck = body.recheck_days == null ? undefined : Number(body.recheck_days)
   try {
-    const actor = await actorFor('owner')
     const run = await createPreview(
       db,
       {

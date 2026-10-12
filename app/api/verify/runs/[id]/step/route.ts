@@ -13,6 +13,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Role check first: a non-owner learns nothing about validation, the database or the run.
+  let actor: string
+  try {
+    actor = await actorFor('owner')
+  } catch (e) {
+    return fail(e)
+  }
   const db = dbOrNull()
   if (!db) return notConnected()
   const id = parseRunId((await params).id)
@@ -21,12 +28,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const chunk = body.chunk == null ? undefined : Number(body.chunk)
   const concurrency = body.concurrency == null ? undefined : Number(body.concurrency)
   try {
-    await actorFor('owner')
     const env = await verifyEnvFromConfig()
     const report = await stepRun(db, id, env, {
       chunk: Number.isFinite(chunk) ? chunk : undefined,
       concurrency: Number.isFinite(concurrency) ? concurrency : undefined,
       timeBudgetMs: 40_000,
+      // The person running this step, not whoever approved the run.
+      actor,
     })
     return NextResponse.json(report, { headers: NO_STORE })
   } catch (e) {
