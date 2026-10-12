@@ -77,10 +77,10 @@ export function newTriggerToken(): string {
 }
 
 function tokenMatches(given: string, storedHash: string): boolean {
-  const got = Buffer.from(hashTriggerToken(given), 'hex')
-  const exp = Buffer.from(storedHash, 'hex')
-  if (got.length !== exp.length || got.length === 0) return false
-  return timingSafeEqual(got, exp)
+  const got = new Uint8Array(createHash('sha256').update(given).digest())
+  const raw = Buffer.from(storedHash, 'hex')
+  if (raw.length !== got.length) return false
+  return timingSafeEqual(got, new Uint8Array(raw))
 }
 
 function validTz(tz: string): boolean {
