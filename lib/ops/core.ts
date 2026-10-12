@@ -14,6 +14,7 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { logEvent } from './events.ts'
 import { pauseBlockFor, pauseMessage } from './pause.ts'
+import { isOwnerActor } from './actor-role.ts'
 
 export class OpsError extends Error {
   status: number
@@ -593,7 +594,16 @@ export async function requestApproval(
   actor: string,
   opts: { action: 'send' | 'spend' | 'destructive' | 'other'; summary: string; payload?: unknown; est_cost_usd?: number | null; task_id?: number | null; expires_in_hours?: number },
 ): Promise<ApprovalRow> {
-  return db.tx(async (q) => {
+  return db.tx((q) => requestApprovalIn(q, actor, opts), actor)
+}
+
+/** requestApproval inside a transaction the caller already holds (so it can check and insert atomically). */
+export async function requestApprovalIn(
+  q: Queryable,
+  actor: string,
+  opts: { action: 'send' | 'spend' | 'destructive' | 'other'; summary: string; payload?: unknown; est_cost_usd?: number | null; task_id?: number | null; expires_in_hours?: number },
+): Promise<ApprovalRow> {
+  {
     await requireActor(q, actor)
     if (!['send', 'spend', 'destructive', 'other'].includes(opts.action)) throw new OpsError('action must be send, spend, destructive or other')
     const summary = nonEmpty(opts.summary, 'summary', 1000)
@@ -609,7 +619,7 @@ export async function requestApproval(
     const humans = await q.query<{ id: string }>("select id from lp.actors where kind = 'human' and active")
     for (const h of humans.rows) await notify(q, { recipient: h.id, kind: 'approval', summary: `${who} needs your OK to ${opts.action}: ${summary.slice(0, 200)}`, task_id: opts.task_id ?? null, created_by: actor })
     return rows[0]
-  }, actor)
+  }
 }
 
 export async function decideApproval(db: Db, actor: string, id: number, decision: 'approved' | 'rejected', note?: string): Promise<ApprovalRow> {
@@ -623,6 +633,11 @@ export async function decideApproval(db: Db, actor: string, id: number, decision
     if (a.status !== 'pending') throw new OpsError(`approval ${id} is already ${a.status}`, 409)
     if (a.instantly_action_id) {
       throw new OpsError('This is an Instantly change: decide it with its own Approve / Reject (lib/instantly/gate.ts), which runs or records it.', 409)
+    }
+    // A request to change an Instantly-backed number (lib/edit/ask-change.ts) is decided by an Owner only.
+    const kind = a.payload && typeof a.payload === 'object' ? (a.payload as { kind?: unknown }).kind : null
+    if (kind === 'instantly_value_change' && !(await isOwnerActor(q, actor))) {
+      throw new OpsError('Only an owner can decide a request to change an Instantly number.', 403)
     }
     if (a.expires_at && a.expires_at.getTime() < Date.now()) {
       await q.query("update lp.approvals set status = 'expired' where id = $1", [id])

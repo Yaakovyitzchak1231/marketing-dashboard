@@ -244,7 +244,7 @@ export default async function LeadPage({
         </div>
       ) : null}
 
-      {tab === 'engagement' ? <EngagementPanel data={profile.engagement} /> : null}
+      {tab === 'engagement' ? <EngagementPanel data={profile.engagement} companyId={c.id} /> : null}
 
       {tab === 'details' ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
