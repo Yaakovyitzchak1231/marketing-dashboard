@@ -212,6 +212,26 @@ export function createPrechecker(
   }
 }
 
+/** Resolve the `verify.a_only` policy: stored setting "unknown" -> 'unknown',
+ * anything else (including unset) -> 'invalid'. The setting overrides the
+ * legacy VERIFY_A_ONLY env var so the policy takes effect without a redeploy. */
+export async function resolveAOnly(): Promise<'invalid' | 'unknown'> {
+  const { resolveConfig } = await import('../settings/store.ts')
+  const { value } = await resolveConfig('verify.a_only')
+  return value === 'unknown' ? 'unknown' : 'invalid'
+}
+
+/** Async factory: same as createPrechecker but reads the precheck policy from
+ * the settings store (DB first, VERIFY_A_ONLY env fallback) so saved keys take
+ * effect immediately. */
+export async function createPrecheckerAsync(
+  opts: { resolver?: DnsResolver; timeoutMs?: number; aOnly?: 'invalid' | 'unknown' } = {},
+): Promise<Prechecker> {
+  if (opts.aOnly !== undefined) return createPrechecker(opts)
+  const aOnly = await resolveAOnly()
+  return createPrechecker({ ...opts, aOnly })
+}
+
 /** Run checks with bounded concurrency, preserving input order. */
 export async function precheckMany(
   emails: string[],

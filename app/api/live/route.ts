@@ -5,6 +5,8 @@
  * Closes after ~50 s with retry: 1000 so the browser reconnects at once. While a page is open,
  * it also pushes anything due to agents (retries need no cron).
  */
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { dispatchDue } from '@/lib/notify/deliver'
 import { REPLY_EVENTS } from '@/lib/webhooks/instantly'
@@ -12,13 +14,19 @@ import { REPLY_EVENTS } from '@/lib/webhooks/instantly'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const ME = 'owner'
 const WINDOW_MS = 50_000
 // 10 s keeps Neon's compute and the function cheap while a page is open; the browser stops
 // listening after 15 idle minutes (components/ops/live.ts), so nothing stays awake all day.
 const POLL_MS = 10_000
 
 export async function GET(req: Request) {
+  // Any signed-in role may listen; the unread count is that person's own, not the owner's.
+  let me: string
+  try {
+    me = await actorFor('viewer')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return new Response('database not connected', { status: 503 })
   const enc = new TextEncoder()
@@ -38,7 +46,7 @@ export async function GET(req: Request) {
                     (select max(id) from lp.notifications) as n,
                     (select max(updated_at)::text from lp.deliveries) as d,
                     (select max(id) from lp.campaign_touches where event_type = any($2::text[])) as rp`,
-            [ME, [...REPLY_EVENTS]],
+            [me, [...REPLY_EVENTS]],
           )
           const r = rows[0]
           const sig = `${r.ev}|${r.unread}|${r.n}|${r.d}|${r.rp}`

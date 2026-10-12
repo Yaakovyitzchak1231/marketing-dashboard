@@ -4,7 +4,7 @@ import { createTestDb } from './helpers/pglite-db'
 import { addCompany, addContact } from './helpers/lead-fixtures'
 import { emitLeadEvent } from '@/lib/events/emit'
 import { runOp } from '@/lib/ops/dispatch'
-import { applyExitCriteria, enrollLead, runDueJourneys } from '@/lib/journeys/runner'
+import { advanceRun, applyExitCriteria, enrollLead, runDueJourneys } from '@/lib/journeys/runner'
 import { GraphError, validateGraph } from '@/lib/journeys/graph'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
@@ -225,5 +225,42 @@ describe('goals, go-to, exit, entry cap (plan 3.7)', () => {
     expect(held).toBeGreaterThanOrEqual(1)
     const after = await db.query<{ n: number }>(`select count(*)::int as n from pg_locks where locktype = 'advisory'`)
     expect(after.rows[0].n).toBe(0)
+  })
+
+  it('entry_cap is judged at the run grain: a company-level run counts for its contacts', async () => {
+    const co = await company('Grain Co', 'grain.example')
+    const ct = await addContact(db, co, 'g@grain.example')
+    const jid = await liveJourney(
+      'Cap grain', { start: 'n', nodes: [{ id: 'n', kind: 'exit' }] },
+      { entry_mode: 'multiple', settings: { entry_cap: 1 } },
+    )
+    const a = await db.tx((q) => enrollLead(q, 'owner', jid, { company_id: co }))
+    await runDueJourneys(db)
+    const b = await db.tx((q) => enrollLead(q, 'owner', jid, { contact_id: ct }))
+    expect(a.enrolled).toBe(true)
+    expect(b).toMatchObject({ enrolled: false, reason: 'already_entered' })
+  })
+
+  it('a tick reports exits by criteria, and advanceRun leaves a run between nodes', async () => {
+    const co = await company('Tick Exit Co', 'tickexit.example')
+    const jid = await liveJourney(
+      'Tick exit',
+      { start: 'a', nodes: [{ id: 'a', kind: 'note', next: 'b' }, { id: 'b', kind: 'wait', config: { days: 1 } }] },
+      { goal: { exit_event: 'lead_unsubscribed' } },
+    )
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: jid, company_id: co }) as { results: { run_id: number }[] }
+    await emitLeadEvent(db, { type: 'lead_unsubscribed', company_id: co, source: 'test' })
+    // Direct advance: the in-chain check exits it before node a runs.
+    const adv = await advanceRun(db, en.results[0].run_id)
+    expect(adv).toMatchObject({ advanced: true, status: 'exited' })
+
+    const co2 = await company('Tick Exit Two', 'tickexit2.example')
+    const en2 = await runOp(db, 'owner', 'journey_enroll', { journey_id: jid, company_id: co2 }) as { results: { run_id: number }[] }
+    await runDueJourneys(db)
+    expect((await statusOf(en2.results[0].run_id)).status).toBe('waiting')
+    await emitLeadEvent(db, { type: 'lead_unsubscribed', company_id: co2, source: 'test' })
+    const tick = await runDueJourneys(db, { now: new Date(Date.now() + 60_000) })
+    expect(tick).toMatchObject({ exited_by_criteria: 1, exit_criteria_error: null })
+    expect((await statusOf(en2.results[0].run_id)).status).toBe('exited')
   })
 })

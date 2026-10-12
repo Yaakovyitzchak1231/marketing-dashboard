@@ -72,7 +72,7 @@ Read it as three paths:
 | `app/actions/` | Server actions called by forms (`'use server'`) | `campaigns.ts`, `settings.ts`, `ops.ts`, `seo.ts` |
 | `app/api/` | HTTP routes, grouped by feature | `ops/` (agents), `webhooks/` (Instantly), `verify/`, `find/`, `leads/`, `reports/`, `rules/` |
 | `components/` | Client and shared UI, grouped by page | `nav/AppNav.tsx`, `dashboard/Dashboard.tsx`, `leads/`, `campaigns/`, `settings/` |
-| `middleware.ts` | Login gate. Fails closed. Passes `/api/ops` and `/api/webhooks` to their own auth. Unauthenticated page requests go to `/login?next=…` (guarded by `lib/auth/next-path.ts`) | `isSelfAuthenticatingApi`, `devAuthBypassEnabled` |
+| `middleware.ts` | Login gate. Fails closed. Passes `/api/ops` and `/api/webhooks` to their own auth. Unauthenticated page requests go to `/login?next=…` (guarded by `lib/auth/next-path.ts`). It only checks that the caller is signed in and not a viewer; every mutating route also checks its own role with `actorFor(role)` (`lib/auth/act.ts`) or an agent token with `opsGate`, and `tests/api-route-auth-scan.test.ts` fails if one does not | `isSelfAuthenticatingApi`, `devAuthBypassEnabled` |
 | `public/` | Static files served as-is, outside the login gate only where the middleware matcher exempts them | `robots.txt` (`Disallow: /`) |
 | `lib/` | Server-side logic, one folder per feature, 27 folders | see below |
 | `lib/instantly/` | Read-only Instantly v2 client (retries, pagination, cache) | `client.ts`, `endpoints.ts`, `writer.ts` (approval-gated writes) |
@@ -100,7 +100,7 @@ Read it as three paths:
 | `docs/` | Feature notes, runbooks, reviews, and this file | `ARCHITECTURE.md`, `AGENTS_API.md`, `LEAD_PLATFORM.md` |
 | `.github/workflows/` | CI (`ci.yml`) and the post-merge docs bot (`docs-maintainer.yml`) | see §6 |
 | `AGENTS.md` | House rules for every agent working here. Binding. | — |
-| Root config | Build, lint, test, and deploy settings | `package.json`, `next.config.ts`, `vercel.json` (`buildCommand: npm run vercel-build`), `vitest.config.mts`, `tailwind.config.ts`, `.env.example` |
+| Root config | Build, lint, test, and deploy settings | `package.json`, `next.config.ts`, `vercel.json` (`buildCommand: npm run vercel-build`; automatic deploys only from `main`), `vitest.config.mts`, `tailwind.config.ts`, `.env.example` |
 
 ## 4. Key contracts
 

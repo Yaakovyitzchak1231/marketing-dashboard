@@ -751,7 +751,7 @@ function Composer({
               value={pin.body}
               onChange={(e) => onEdit({ body: e.target.value })}
               placeholder="What should change here?"
-              className="w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[14px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[14px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
@@ -814,7 +814,7 @@ function Composer({
                 putReply(storage(), pin.client_id, e.target.value)
               }}
               placeholder={pin.status === 'resolved' ? 'Reply to reopen…' : 'Reply…'}
-              className="mt-3 w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="mt-3 w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
             </>
             )}
