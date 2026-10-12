@@ -331,7 +331,8 @@ address by a **sha256 hash** — never the plaintext — so the Lead Master impo
 | `list_retention_policies` | `{}` | Every category and its `keep_days`. |
 | `set_retention_policy` | `{event_category, keep_days: number\|null}` | **Owner only.** `null` = forever. |
 | `forget_contact` | `{contact_id, confirm}` | **Owner only.** `confirm` must be the contact's own (normalized) email, or `"forget"` when it has none — a typed confirmation, not a one-click delete. |
-| `retention_sweep` | `{}` | **Owner or `system` (the job runner) only.** Deletes `lp.campaign_touches` rows past their category's `keep_days`. Registered as a job definition (`name: 'retention_sweep'`, disabled, no schedule) the way `lib/jobs` registers any job; the OVH runner needs a handler for `kind: 'retention_sweep'` to fire it on a schedule — until then, Settings → Data has a "Run sweep now" button that calls the op directly. |
+| `retention_preview` | `{}` | What a sweep would delete now, per category (`touches`, `timeline_events`), plus `timeline_impact` (event types, score models, traits and segments that read them) when timeline rows are past their window. Deletes nothing. |
+| `retention_sweep` | `{confirm: true, include_timeline?: boolean}` | **Owner only.** Deletes `lp.campaign_touches` rows past their category's `keep_days`, and `lp.lead_events` rows too only with `include_timeline` (never by default). Without `confirm` nothing is deleted (409). Deletes in batches (each its own short transaction, one cutoff for the whole run). When timeline rows were deleted it resets the affected traits to a full recompute and queues the `score_refresh` and `traits_refresh` jobs (`recompute_queued`); score points already earned are kept. Settings → Data has the review-then-confirm button. |
 
 UI: a lead's contact row has "Forget this person" (typed confirmation);
 Settings → Data lists every category with an editable `keep_days` field and

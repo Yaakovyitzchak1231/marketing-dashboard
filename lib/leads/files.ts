@@ -6,6 +6,7 @@
  * 'file').
  */
 import type { Db, Queryable } from '../db/types'
+import { isUndefinedTable } from '../db/errors.ts'
 
 export class FilesError extends Error {
   status: number
@@ -27,10 +28,16 @@ export interface LeadFileRow {
   created_at: string
 }
 
-/** True when the error is Postgres' "relation ... does not exist" -- the table hasn't migrated on this DB yet. */
+/**
+ * True only when the error is Postgres SQLSTATE 42P01 (undefined_table) -- the
+ * table hasn't migrated on this DB yet. A missing column (42703) or function
+ * (42883) is a real bug and is NOT matched, so callers rethrow it instead of
+ * showing an empty card (review fix, Instinct #86 finding 2). Reused by the
+ * profile's milestones, segments, campaigns, score, engagement, files and
+ * suppression cards (lib/leads/profile.ts).
+ */
 export function isMissingTable(e: unknown): boolean {
-  const msg = (e as Error)?.message ?? ''
-  return /relation .* does not exist/i.test(msg) || /does not exist/i.test(msg)
+  return isUndefinedTable(e)
 }
 
 const COLS = `f.id, f.company_id, f.contact_id, f.name, f.url, f.note, f.uploaded_by, a.display_name as uploaded_by_name, f.created_at::text as created_at`
@@ -74,10 +81,39 @@ export async function addLeadFile(db: Db, actor: string, input: AddFileInput): P
   const url = String(input.url ?? '').trim()
   if (!url || !validUrl(url)) throw new FilesError('url must be a full http(s) link (this stores a link, not an upload).')
   const note = input.note == null || input.note === '' ? null : String(input.note).trim().slice(0, 1000)
+  const contactId = input.contact_id ?? null
   return db.tx(async (tq) => {
+    // Ownership/existence checks (review fix, Instinct #86 finding 3): a file
+    // must hang off a real, live company, and a contact_id must be one of THAT
+    // company's live contacts -- not any contact id at all. Merged-away rows
+    // (merged_into set, the soft delete from 0026) are refused, matching the
+    // rest of the code, which treats them as gone (merge moves their files to
+    // the survivor, lib/merge/merge.ts).
+    const { rows: co } = await tq.query<{ merged_into: number | null }>(
+      `select merged_into from lp.companies where id = $1`,
+      [input.company_id],
+    )
+    if (!co[0]) throw new FilesError(`No lead ${input.company_id}.`, 404)
+    if (co[0].merged_into != null) {
+      throw new FilesError(`Lead ${input.company_id} was merged into lead ${co[0].merged_into}; add the file there.`, 409)
+    }
+    if (contactId != null) {
+      const { rows: ct } = await tq.query<{ company_id: number; merged_into: number | null }>(
+        `select company_id, merged_into from lp.contacts where id = $1`,
+        [contactId],
+      )
+      const c = ct[0]
+      if (!c) throw new FilesError(`No contact ${contactId}.`, 404)
+      if (Number(c.company_id) !== Number(input.company_id)) {
+        throw new FilesError(`Contact ${contactId} does not belong to lead ${input.company_id}.`, 400)
+      }
+      if (c.merged_into != null) {
+        throw new FilesError(`Contact ${contactId} was merged into contact ${c.merged_into}; use that contact instead.`, 409)
+      }
+    }
     const { rows } = await tq.query<{ id: number }>(
       `insert into lp.files (company_id, contact_id, name, url, note, uploaded_by) values ($1, $2, $3, $4, $5, $6) returning id`,
-      [input.company_id, input.contact_id ?? null, name, url, note, actor],
+      [input.company_id, contactId, name, url, note, actor],
     )
     const id = rows[0].id
     await tq.query(

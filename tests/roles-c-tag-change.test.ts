@@ -55,7 +55,7 @@ const leadEvents = async () => (await db.query<{ n: number }>(`select count(*)::
 beforeAll(async () => {
   db = await createTestDb()
   holder.db = db
-  await db.query(`insert into lp.actors (id, kind, display_name, email, role, active) values ('ed', 'human', 'Ed', 'ed@example.com', 'editor', true)`)
+  await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, email, role, active) values ('ed', 'human', 'Ed', 'ed@example.com', 'editor', true)`), 'owner')
   for (let i = 0; i < 5; i++) ids.push(await addCompany(db, { name: `Shop ${i}`, state: i < 3 ? 'NY' : 'NJ' }))
   await db.query(`update lp.companies set tags = array['hot', 'vip'] where id = any($1::bigint[])`, [ids])
   ids = ids.map(Number)

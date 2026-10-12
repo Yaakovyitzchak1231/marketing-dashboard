@@ -46,11 +46,11 @@ const RAW: Record<string, Op> = {
     },
   },
   retention_preview: {
-    args: '{}  -- what a retention sweep would delete now, per category (touches; timeline_events only if opted in). Deletes nothing.',
+    args: '{}  -- what a retention sweep would delete now, per category (touches; timeline_events only if opted in), plus timeline_impact (score models, traits, segments that read the event types whose timeline rows would go). Deletes nothing.',
     run: (db) => retentionPreview(db),
   },
   retention_sweep: {
-    args: '{confirm: true, include_timeline?: boolean}  -- owner only; deletes raw events past their category\'s keep_days, and timeline history too only with include_timeline. Without confirm nothing is deleted (409): the owner reviews retention_preview and confirms each run.',
+    args: '{confirm: true, include_timeline?: boolean}  -- owner only; deletes raw events past their category\'s keep_days, and timeline history too only with include_timeline. Without confirm nothing is deleted (409): the owner reviews retention_preview and confirms each run. Deletes in batches; when timeline rows were deleted it queues score_refresh + traits_refresh (recompute_queued).',
     run: async (db, actor, a) => {
       await requireOwner(db, actor)
       return retentionSweep(db, actor, { confirm: a.confirm === true || a.confirm === 'true', include_timeline: a.include_timeline === true || a.include_timeline === 'true' })

@@ -12,6 +12,9 @@ import { pauseBlockFor, pauseMessage } from './pause'
  *     /agents and kept hashed in lp.agent_keys), or, only where a
  *     route allows it, Vercel Cron's CRON_SECRET (acts as 'system').
  *  2. Is that agent paused (or are all agents paused)? Then 423, nothing runs.
+ *  3. No credential may act as 'owner', the legacy human actor the ALLOWED_USER_EMAIL
+ *     login writes as (Instinct #86 finding 5). An OPS_AGENT_TOKENS entry "owner:<token>"
+ *     is refused with 403 before anything runs.
  *
  * A route never calls agentForToken itself (tests/agent-pause.test.ts checks
  * every route file), so a paused agent is refused on every ops route, old or new.
@@ -23,6 +26,9 @@ export type OpsGate =
   | { ok: false; response: NextResponse }
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
+
+/** The seeded human actor the ALLOWED_USER_EMAIL login writes as (lib/auth/session.ts). */
+const LEGACY_OWNER = 'owner'
 
 export async function opsGate(req: Request, opts: { allowCron?: boolean; cronOnly?: boolean; unauthorizedMessage?: string } = {}): Promise<OpsGate> {
   const authorization = req.headers.get('authorization')
@@ -42,6 +48,15 @@ export async function opsGate(req: Request, opts: { allowCron?: boolean; cronOnl
   if (!agent && (opts.allowCron || opts.cronOnly)) {
     const m = /^Bearer\s+(.+)$/i.exec(authorization ?? '')
     if (m && secretMatches(m[1].trim(), process.env.CRON_SECRET)) agent = 'system'
+  }
+  if (agent === LEGACY_OWNER) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { ok: false, error: "This token is mapped to 'owner', the dashboard owner's own account. Ops tokens are for agents (or a person's own id); give it an agent id in OPS_AGENT_TOKENS." },
+        { status: 403, headers: NO_STORE },
+      ),
+    }
   }
   if (!agent) {
     return {

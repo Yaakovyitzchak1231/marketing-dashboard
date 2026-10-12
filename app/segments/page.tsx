@@ -8,13 +8,15 @@ import { readback } from '@/lib/segments/readback'
 import { listPresets } from '@/lib/segments/presets'
 import { listCampaigns } from '@/lib/campaigns/store'
 import { StartFromTemplate } from './StartFromTemplate'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
 const n = (v: number) => v.toLocaleString('en-US')
 
+/** Only SQLSTATE 42P01 (table not migrated yet); a missing column/function is a real error and is rethrown. */
 function isMissingTable(e: unknown): boolean {
-  return /does not exist/i.test((e as Error)?.message ?? '')
+  return isUndefinedTable(e)
 }
 
 export default async function SegmentsPage() {

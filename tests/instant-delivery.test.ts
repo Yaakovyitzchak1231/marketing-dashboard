@@ -126,7 +126,8 @@ describe('new agents', () => {
     await createTask(db, 'owner', { title: 'Hello fresh', assigned_to: 'fresh-agent' })
     const items = await feed(db, 'fresh-agent', { limit: 10 })
     expect(items.some((e) => e.summary.includes('Hello fresh'))).toBe(true)
-    await addActor(db, 'owner', { id: 'a-person', display_name: 'Person', kind: 'human' })
+    // A person is a team change: made as the owner, in a transaction (0050/0051), as app/actions/connect.ts does.
+    await db.tx((q) => addActor(q, 'owner', { id: 'a-person', display_name: 'Person', kind: 'human' }), 'owner')
     const none = await db.query("select 1 from lp.delivery_channels where actor_id = 'a-person'")
     expect(none.rows).toHaveLength(0)
   })

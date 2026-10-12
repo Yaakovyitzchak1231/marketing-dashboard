@@ -12,6 +12,7 @@
 import { createHash } from 'node:crypto'
 import type { Db, Queryable } from '../db/types'
 import { normalizeEmail } from '../leads/normalize'
+import { getJob, runNow } from '../jobs/store'
 
 export class RetentionError extends Error {
   status: number
@@ -192,10 +193,71 @@ export interface RetentionPreviewRow {
   timeline_events: number
 }
 
+/**
+ * What deleting timeline history would change (Instinct #86 finding 4). Scores, traits,
+ * segment event conditions, lead milestones and engagement benchmarks are all computed
+ * from lp.lead_events, so the owner sees which of them read the event types this sweep
+ * would delete BEFORE choosing to include timeline history.
+ */
+export interface TimelineImpact {
+  /** Event types that have timeline rows past their window (what the opt-in would delete). */
+  event_types: string[]
+  /** Active score models with a rule on one of those event types. */
+  score_models: { id: number; name: string }[]
+  /** Live traits computed from one of those event types. */
+  traits: { key: string; label: string }[]
+  /** Live segments with an event condition on one of those event types. */
+  segments: { id: number; name: string }[]
+  /** One plain sentence for the confirm step. */
+  note: string
+}
+
 export interface RetentionPreview {
   categories: RetentionPreviewRow[]
   total_touches: number
   total_timeline_events: number
+  /** Present when any timeline rows are past their window. */
+  timeline_impact?: TimelineImpact
+}
+
+/** A table this deploy hasn't migrated yet (SQLSTATE 42P01 only): list nothing for it. */
+async function listOrEmpty<T>(run: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await run()
+  } catch (e) {
+    if ((e as { code?: string }).code === '42P01') return []
+    throw e
+  }
+}
+
+export async function timelineImpact(q: Queryable, eventTypes: string[]): Promise<TimelineImpact> {
+  const types = [...new Set(eventTypes)].sort()
+  const score_models = await listOrEmpty(async () => (await q.query<{ id: number; name: string }>(
+    `select id, name from lp.score_models
+      where active and exists (select 1 from jsonb_array_elements(rules) r where r->>'event_type' = any($1::text[]))
+      order by name, id`,
+    [types],
+  )).rows.map((r) => ({ id: Number(r.id), name: r.name })))
+  const traits = await listOrEmpty(async () => (await q.query<{ key: string; label: string }>(
+    `select key, label from lp.traits
+      where archived_at is null
+        and jsonb_typeof(definition->'event_types') = 'array'
+        and exists (select 1 from jsonb_array_elements_text(definition->'event_types') t where t = any($1::text[]))
+      order by label, key`,
+    [types],
+  )).rows)
+  const segments = await listOrEmpty(async () => (await q.query<{ id: number; name: string }>(
+    `select id, name from lp.segments
+      where archived_at is null
+        and exists (select 1 from jsonb_path_query(definition, 'lax $.**.event_type') v where v #>> '{}' = any($1::text[]))
+      order by name, id`,
+    [types],
+  )).rows.map((r) => ({ id: Number(r.id), name: r.name })))
+  const note =
+    'Deleting timeline history changes everything computed from those events: traits, segment event conditions, ' +
+    'lead milestones and engagement benchmarks are recalculated without them. Score points already earned are kept. ' +
+    'A score and trait recompute is queued after the sweep.'
+  return { event_types: types, score_models, traits, segments, note }
 }
 
 /** What a sweep would delete right now, per category. Deletes nothing. */
@@ -211,17 +273,22 @@ export async function retentionPreview(q: Queryable): Promise<RetentionPreview> 
       order by p.event_category`,
   )
   const categories = rows.map((r) => ({ event_category: r.event_category, keep_days: Number(r.keep_days), touches: Number(r.touches), timeline_events: Number(r.timeline_events) }))
-  return {
+  const preview: RetentionPreview = {
     categories,
     total_touches: categories.reduce((n, c) => n + c.touches, 0),
     total_timeline_events: categories.reduce((n, c) => n + c.timeline_events, 0),
   }
+  const timelineTypes = categories.filter((c) => c.timeline_events > 0).map((c) => c.event_category)
+  if (timelineTypes.length) preview.timeline_impact = await timelineImpact(q, timelineTypes)
+  return preview
 }
 
 export interface RetentionSweepResult {
   swept: { event_category: string; keep_days: number; deleted: number; timeline_deleted: number }[]
   total_deleted: number
   total_timeline_deleted: number
+  /** Runner jobs queued (run now) because timeline history was deleted: 'score_refresh', 'traits_refresh'. */
+  recompute_queued: string[]
 }
 
 export interface RetentionSweepOptions {
@@ -229,60 +296,127 @@ export interface RetentionSweepOptions {
   confirm?: boolean
   /** Also delete timeline history (lp.lead_events) past each window. Off unless the owner ticks it. */
   include_timeline?: boolean
+  /** Rows deleted per statement (each batch is its own short transaction). Default 5000. */
+  batch_size?: number
+}
+
+export const RETENTION_BATCH_SIZE = 5000
+
+/**
+ * One batch of at most `limit` rows of `table` of this category older than the cutoff, in
+ * its own short transaction. For lp.lead_events the append-only escape hatch (lp.maintenance,
+ * migrations 0018/0036) is switched on with set_config(..., true) -- transaction-local -- inside
+ * THIS transaction only, and switched off again before it commits (Instinct #86 finding 10).
+ */
+async function deleteBatch(db: Db, actor: string, table: 'campaign_touches' | 'lead_events', category: string, cutoff: string, limit: number): Promise<number> {
+  const typeCol = table === 'lead_events' ? 'type' : 'event_type'
+  return db.tx(async (q) => {
+    if (table === 'lead_events') await q.query("select set_config('lp.maintenance', 'on', true)")
+    const { rows } = await q.query<{ n: number }>(
+      `with victims as (
+         select id from lp.${table} where ${typeCol} = $1 and occurred_at < $2::timestamptz order by id limit $3
+       ), gone as (
+         delete from lp.${table} t using victims v where t.id = v.id returning t.id
+       ) select count(*)::int as n from gone`,
+      [category, cutoff, limit],
+    )
+    if (table === 'lead_events') await q.query("select set_config('lp.maintenance', 'off', true)")
+    return Number(rows[0]?.n ?? 0)
+  }, actor)
+}
+
+async function deleteAllBatches(db: Db, actor: string, table: 'campaign_touches' | 'lead_events', category: string, cutoff: string, limit: number, onBatch: (n: number) => void): Promise<void> {
+  for (;;) {
+    const n = await deleteBatch(db, actor, table, category, cutoff, limit)
+    onBatch(n)
+    if (n < limit) return
+  }
 }
 
 /**
  * Deletes raw campaign-touch events past each category's keep_days -- only when the
  * owner confirmed this run (Yaakov, Oct 11: the owner chooses every time it runs).
- * Timeline history is deleted only with include_timeline. Scores keep working: a
- * score point whose source event is deleted keeps its points (score_points.source_event_id
- * is set null by its FK), so totals do not change.
+ * Timeline history is deleted only with include_timeline; it is never on by default.
+ *
+ * Batched (Instinct #86 finding 4): rows go in chunks of `batch_size`, each chunk its own
+ * short transaction, against one cutoff fixed when the sweep starts -- no single unbounded
+ * delete holding locks. A re-run finishes whatever an interrupted sweep left.
+ *
+ * Score points already earned are kept (score_points.source_event_id is set null by its
+ * FK, and recompute only rebuilds points that still have a source event). Traits, segment
+ * event conditions, milestones and benchmarks are computed from the events, so when any
+ * timeline rows were deleted the sweep resets the affected traits to a full recompute and
+ * queues the 'score_refresh' and 'traits_refresh' runner jobs (never recomputes inline).
  */
 export async function retentionSweep(db: Db, actor: string, opts: RetentionSweepOptions = {}): Promise<RetentionSweepResult> {
   if (opts.confirm !== true) {
     throw new RetentionError('Review what this sweep will delete first, then confirm it. Nothing was deleted.', 409)
   }
   const includeTimeline = opts.include_timeline === true
-  return db.tx(async (q) => {
-    const { rows: policies } = await q.query<{ event_category: string; keep_days: number }>(
-      `select event_category, keep_days from lp.retention_policies where keep_days is not null`,
-    )
-    if (includeTimeline) {
-      // The maintenance escape hatch (0017/0018): the only way lead_events rows may be deleted.
-      await q.query("select set_config('lp.maintenance', 'on', true)")
-    }
-    const swept: RetentionSweepResult['swept'] = []
-    let total = 0
-    let totalTimeline = 0
+  const batch = Math.trunc(Number(opts.batch_size ?? RETENTION_BATCH_SIZE))
+  if (!Number.isInteger(batch) || batch < 1 || batch > 50_000) throw new RetentionError('batch_size must be between 1 and 50000')
+
+  const { rows: policies } = await db.query<{ event_category: string; keep_days: number; cutoff: string }>(
+    `select event_category, keep_days, (now() - (keep_days || ' days')::interval)::text as cutoff
+       from lp.retention_policies where keep_days is not null order by event_category`,
+  )
+  const swept: RetentionSweepResult['swept'] = []
+  let total = 0
+  let totalTimeline = 0
+  let failure: unknown = null
+  try {
     for (const p of policies) {
-      const { rows } = await q.query<{ n: number }>(
-        `with gone as (
-           delete from lp.campaign_touches where event_type = $1 and occurred_at < now() - ($2 || ' days')::interval returning id
-         ) select count(*)::int as n from gone`,
-        [p.event_category, p.keep_days],
-      )
-      const deleted = Number(rows[0]?.n ?? 0)
-      let timelineDeleted = 0
+      const row = { event_category: p.event_category, keep_days: Number(p.keep_days), deleted: 0, timeline_deleted: 0 }
+      swept.push(row)
+      await deleteAllBatches(db, actor, 'campaign_touches', p.event_category, p.cutoff, batch, (n) => { row.deleted += n; total += n })
       if (includeTimeline) {
-        const t = await q.query<{ n: number }>(
-          `with gone as (
-             delete from lp.lead_events where type = $1 and occurred_at < now() - ($2 || ' days')::interval returning id
-           ) select count(*)::int as n from gone`,
-          [p.event_category, p.keep_days],
-        )
-        timelineDeleted = Number(t.rows[0]?.n ?? 0)
+        await deleteAllBatches(db, actor, 'lead_events', p.event_category, p.cutoff, batch, (n) => { row.timeline_deleted += n; totalTimeline += n })
       }
-      swept.push({ event_category: p.event_category, keep_days: p.keep_days, deleted, timeline_deleted: timelineDeleted })
-      total += deleted
-      totalTimeline += timelineDeleted
     }
-    if (includeTimeline) await q.query("select set_config('lp.maintenance', 'off', true)")
+  } catch (e) {
+    failure = e
+  }
+
+  // Audit + recompute in one closing transaction -- also after a failure partway, so what
+  // already committed is recorded and the derived data catches up.
+  const affectedTypes = swept.filter((r) => r.timeline_deleted > 0).map((r) => r.event_category)
+  const recompute_queued: string[] = []
+  if (failure && total + totalTimeline === 0) throw failure
+  await db.tx(async (q) => {
+    if (affectedTypes.length) {
+      // traits_refresh is incremental (only entities with NEW events are recomputed), and a
+      // delete adds no event, so reset the affected traits to "never computed" = full recompute.
+      await q.query(
+        `update lp.traits set last_computed_at = null
+          where archived_at is null and jsonb_typeof(definition->'event_types') = 'array'
+            and exists (select 1 from jsonb_array_elements_text(definition->'event_types') t where t = any($1::text[]))`,
+        [affectedTypes],
+      )
+      for (const job of ['score_refresh', 'traits_refresh']) {
+        if (await getJob(q, job)) {
+          await runNow(q, actor, job)
+          recompute_queued.push(job)
+        }
+      }
+    }
+    const summary =
+      `Retention sweep (confirmed by ${actor}) deleted ${total} event row(s)` +
+      (includeTimeline ? ` and ${totalTimeline} timeline row(s)` : ', timeline kept') +
+      ` across ${swept.length} categor${swept.length === 1 ? 'y' : 'ies'}` +
+      (recompute_queued.length ? `; queued ${recompute_queued.join(', ')}` : '') +
+      (failure ? '; STOPPED PARTWAY on an error, run it again to finish' : '')
     await q.query(
       `insert into lp.status_history (entity_type, entity_key, field, new_value, changed_by, via, note)
          values ('job', 'retention_sweep', 'run', $1, $2, 'ops_api', $3)`,
-      [String(total + totalTimeline), actor,
-       `Retention sweep (confirmed by ${actor}) deleted ${total} event row(s)${includeTimeline ? ` and ${totalTimeline} timeline row(s)` : ', timeline kept'} across ${swept.length} categor${swept.length === 1 ? 'y' : 'ies'}`],
+      [String(total + totalTimeline), actor, summary],
     )
-    return { swept, total_deleted: total, total_timeline_deleted: totalTimeline }
   }, actor)
+  if (failure) {
+    console.error('retention sweep stopped partway', (failure as Error).message)
+    throw new RetentionError(
+      `The sweep stopped partway after deleting ${total} event row(s)${includeTimeline ? ` and ${totalTimeline} timeline row(s)` : ''}. Run it again to finish.`,
+      500,
+    )
+  }
+  return { swept, total_deleted: total, total_timeline_deleted: totalTimeline, recompute_queued }
 }

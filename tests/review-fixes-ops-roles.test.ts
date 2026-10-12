@@ -15,11 +15,11 @@ describe('review fix: /api/ops write ops respect a human key-holder\'s role', ()
   let campaignId: number
   beforeAll(async () => {
     db = await createTestDb()
-    await db.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
+    await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, active, role, email) values
       ('vera', 'human', 'Vera', true, 'viewer', 'vera@example.com'),
       ('ed', 'human', 'Ed', true, 'editor', 'ed@example.com'),
       ('gone', 'human', 'Gone', false, 'editor', 'gone@example.com')
-      on conflict do nothing`)
+      on conflict do nothing`), 'owner')
     await db.query(`insert into lp.actors (id, kind, display_name) values ('hermes', 'agent', 'Hermes') on conflict do nothing`)
     const c = await createCampaign(db, 'owner', parseCampaignPatch({ name: 'Roles', pool: 'jeweler' }, { create: true }) as { name: string })
     campaignId = c.id
