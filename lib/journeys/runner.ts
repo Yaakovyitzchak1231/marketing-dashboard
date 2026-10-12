@@ -92,6 +92,11 @@ export async function enrollLead(q: Queryable, actor: string, journeyId: number,
   const source = input.source ?? 'manual'
   if (!(ENROLL_SOURCES as readonly string[]).includes(source)) throw new JourneyError(`source must be one of: ${ENROLL_SOURCES.join(', ')}`)
 
+  // Serialise entries per journey so the once/cap checks below and the insert are one step:
+  // two parallel enrols for the same lead cannot both read "cap - 1" and both insert.
+  // Transaction-scoped, so it is released at commit; re-entrant within one transaction.
+  await q.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [`lp.journey_entry:${journeyId}`])
+
   if (j.entry_mode === 'once') {
     const prior = await q.query(
       `select 1 from lp.journey_runs where journey_id = $1 and coalesce(company_id, 0) = coalesce($2::bigint, 0) and coalesce(contact_id, 0) = coalesce($3::bigint, 0) limit 1`,
@@ -99,6 +104,7 @@ export async function enrollLead(q: Queryable, actor: string, journeyId: number,
     )
     if (prior.rows[0]) return { enrolled: false, run_id: null, reason: 'already_entered' }
   }
+  // entry_cap counts every run this lead has had in this journey, open or finished (all-time entries).
   const cap = Number(j.settings?.entry_cap)
   if (Number.isInteger(cap) && cap >= 1) {
     const prior = await q.query<{ n: number }>(
@@ -322,8 +328,13 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
   return out
 }
 
-/** Exit open runs whose journey goal.exit_event has happened, even if the wait is not due yet. */
-async function applyExitCriteria(db: Db, now: Date, actor: string): Promise<void> {
+/**
+ * Exit open runs whose journey goal.exit_event has happened for the run's lead since it entered,
+ * even if the wait is not due yet. One set-based, bounded query (no per-run lookups): at most
+ * `limit` runs are exited per tick; the rest are picked up on the next one. Events are matched
+ * by `occurred_at`, contact runs by contact and company runs by company.
+ */
+export async function applyExitCriteria(db: Db, now: Date, actor: string, limit = 500): Promise<number> {
   const { rows } = await db.query<{
     id: number
     journey_id: number
@@ -331,28 +342,36 @@ async function applyExitCriteria(db: Db, now: Date, actor: string): Promise<void
     company_id: number | null
     contact_id: number | null
     node_id: string
+    node_entered_at: Date
     entered_at: Date
     campaign_id: number | null
-    goal: { exit_event?: string }
+    event: string
   }>(
-    `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.entered_at,
-            j.campaign_id, j.goal
+    `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at,
+            j.campaign_id, j.goal->>'exit_event' as event
        from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
       where r.status in ${OPEN}
         and j.status in ('live', 'testing', 'sunset')
-        and j.goal->>'exit_event' is not null`,
+        and coalesce(j.goal->>'exit_event', '') <> ''
+        and exists (
+          select 1 from lp.lead_events e
+           where e.type = j.goal->>'exit_event'
+             and e.occurred_at >= r.entered_at
+             and case when r.contact_id is not null then e.contact_id = r.contact_id else e.company_id = r.company_id end
+        )
+      order by r.id
+      limit $1`,
+    [limit],
   )
+  let exited = 0
   for (const row of rows) {
-    const event = row.goal?.exit_event
-    if (!event) continue
     const run: RunState = {
       id: Number(row.id), journey_id: Number(row.journey_id), version: Number(row.version),
       company_id: row.company_id == null ? null : Number(row.company_id),
       contact_id: row.contact_id == null ? null : Number(row.contact_id),
-      node_id: row.node_id, node_entered_at: new Date(row.entered_at), entered_at: new Date(row.entered_at),
+      node_id: row.node_id, node_entered_at: new Date(row.node_entered_at), entered_at: new Date(row.entered_at),
       context: {},
     }
-    if (!(await seenSince(db, run, [event], run.entered_at)).has(event)) continue
     await db.tx(async (q) => {
       const updated = await q.query(
         `update lp.journey_runs set status = 'exited', finished_at = $2, next_run_at = null
@@ -360,10 +379,12 @@ async function applyExitCriteria(db: Db, now: Date, actor: string): Promise<void
         [run.id, now.toISOString()],
       )
       if (!updated.rows[0]) return
-      await logStep(q, run, run.node_id, 'exit_criteria', { event }, actor)
-      await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', event })
+      exited++
+      await logStep(q, run, run.node_id, 'exit_criteria', { event: row.event }, actor)
+      await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', event: row.event })
     }, actor)
   }
+  return exited
 }
 
 /** One runner tick. */
@@ -374,7 +395,7 @@ export async function runDueJourneys(
   const actor = opts.actor ?? 'system'
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000)
   const consumed = await consumeTriggerFires(db, actor)
-  await applyExitCriteria(db, now, actor)
+  await applyExitCriteria(db, now, actor, limit)
   const { rows } = await db.query<{ id: number }>(
     `select r.id from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
       where r.status in ${OPEN} and r.next_run_at <= $1 and j.status in ('live', 'testing', 'sunset')

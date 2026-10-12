@@ -100,7 +100,8 @@ export function validateGraph(raw: unknown): JourneyGraph {
         })
       }
     }
-    nodes.push({ id, kind, config: isObject(n.config) ? n.config : {}, next, paths })
+    const built: GraphNode = { id, kind, config: isObject(n.config) ? n.config : {}, next, paths }
+    nodes.push(getNodeHandler(kind)?.normalize?.(built) ?? built)
   })
   if (errors.length) throw new GraphError(errors)
 
