@@ -188,6 +188,18 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     envFallback: 'ZEROBOUNCE_API_KEY',
     help: 'Used by the verification waterfall.',
   },
+  {
+    key: 'verify.a_only',
+    label: 'No-MX (A record only) domains',
+    group: 'Verification',
+    secret: false,
+    envFallback: 'VERIFY_A_ONLY',
+    options: [
+      { value: 'invalid', label: 'Treat as invalid (free)' },
+      { value: 'unknown', label: 'Send to paid tier' },
+    ],
+    optional: true,
+  },
   // --------------------------------------------------------------------- AI
   {
     key: 'ai.base_url',
