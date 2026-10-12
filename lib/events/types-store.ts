@@ -32,6 +32,8 @@ export type EventTypeRow = {
   created_at: string | Date
   /** true when an identical re-register was a no-op (nothing written, no audit row) */
   unchanged?: boolean
+  /** registerEventType changed an existing custom type's label/category instead of creating one. */
+  relabeled?: boolean
 }
 
 const COLS = 'key, label, category, source, props_schema, active, created_by, created_at'
@@ -74,6 +76,7 @@ export async function registerEventType(
   actor: string,
   input: { key: unknown; label: unknown; category: unknown; props_schema?: unknown; source?: string },
   opts: { canRelabel?: boolean } = {},
+  retried = false,
 ): Promise<EventTypeRow> {
   const key = typeof input.key === 'string' ? input.key.trim() : ''
   if (!EVENT_TYPE_SLUG.test(key)) throw new EventTypeError("key must be a lowercase slug, e.g. 'review_posted' (letters, digits, '_' or '.', starting with a letter)")
@@ -97,24 +100,40 @@ export async function registerEventType(
     if (BUILT_IN_SOURCES.has(existing.source)) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
     if (!canRelabel) throw new EventTypeError(`'${key}' is already registered with a different label/category/props_schema; a person can relabel it in Settings → Event types`, 409)
   }
+  if (!existing) {
+    // A brand-new key. `for update` above locked nothing (no row yet), so someone else may insert
+    // the same key before us: never upsert over their row. On conflict, insert nothing and re-run
+    // once against the row that now exists, so an agent gets its 409 (or the no-op) and a person
+    // gets a proper relabel with its audit row.
+    const { rows } = await q.query<EventTypeRow>(
+      `insert into lp.event_types (key, label, category, source, props_schema, created_by)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (key) do nothing
+       returning ${COLS}`,
+      [key, label, category, input.source ?? 'agent', schema, actor],
+    )
+    if (!rows[0]) {
+      if (retried) throw new EventTypeError(`'${key}' was registered by someone else at the same moment; try again`, 409)
+      return registerEventType(q, actor, input, opts, true)
+    }
+    await audit(q, actor, 'event_type.registered', key, `Registered event type ${key} (${label})`, { label, category })
+    return rows[0]
+  }
+  // An existing custom type, locked above, relabeled by someone allowed to.
   const { rows } = await q.query<EventTypeRow>(
-    `insert into lp.event_types (key, label, category, source, props_schema, created_by)
-     values ($1, $2, $3, $4, $5, $6)
-     on conflict (key) do update set label = excluded.label, category = excluded.category
-       where lp.event_types.source not in ('instantly', 'system')
-     returning ${COLS}`,
-    [key, label, category, input.source ?? 'agent', schema, actor],
+    `update lp.event_types set label = $2, category = $3
+      where key = $1 and source not in ('instantly', 'system')
+      returning ${COLS}`,
+    [key, label, category],
   )
   if (!rows[0]) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
-  if (existing) {
+  {
     const changes: Record<string, { from: unknown; to: unknown }> = {}
     if (label !== existing.label) changes.label = { from: existing.label, to: label }
     if (category !== existing.category) changes.category = { from: existing.category, to: category }
     await audit(q, actor, 'event_type.updated', key, `Relabeled event type ${key} (${label})`, changes)
-  } else {
-    await audit(q, actor, 'event_type.registered', key, `Registered event type ${key} (${label})`, { label, category })
   }
-  return rows[0]
+  return { ...rows[0], relabeled: true }
 }
 
 /** Change a custom type's label, category and/or active flag. The key never changes. */
@@ -143,8 +162,9 @@ export async function updateEventType(
   if (Object.keys(changes).length) {
     const what = changes.active ? (active ? 'Activated' : 'Deactivated') : 'Relabeled'
     await audit(q, actor, 'event_type.updated', key, `${what} event type ${key}`, changes)
+    return rows[0]
   }
-  return rows[0]
+  return { ...rows[0], unchanged: true }
 }
 
 export type EventTypeListRow = EventTypeRow & { created_by_name: string | null; stored_count: number }

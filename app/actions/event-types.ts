@@ -15,7 +15,8 @@ import { EventTypeError, registerEventType, updateEventType } from '@/lib/events
 
 function db() {
   const d = getDb()
-  if (!d) throw new Error('The lead database is not connected (DATABASE_URL is not set).')
+  // A refusal the page can show, not a 500: fail() turns EventTypeError into the error banner.
+  if (!d) throw new EventTypeError('The lead database is not connected (DATABASE_URL is not set).', 503)
   return d
 }
 const s = (f: FormData, k: string) => {
@@ -31,28 +32,30 @@ function fail(e: unknown): never {
 }
 
 export async function registerEventTypeAction(f: FormData) {
-  let key = ''
+  let msg = ''
   try {
     const ME = await actorFor('editor')
     const row = await db().tx((q) => registerEventType(q, ME, { key: s(f, 'key'), label: s(f, 'label'), category: s(f, 'category'), source: 'dashboard' }), ME)
-    key = row.key
+    msg = row.unchanged ? `${row.key} is already registered exactly like that; nothing changed.` : row.relabeled ? `Relabeled ${row.key}.` : `Registered ${row.key}.`
   } catch (e) {
     fail(e)
   }
   revalidatePath('/settings/event-types')
-  back({ saved: `Registered ${key}.` })
+  back({ saved: msg })
 }
 
 export async function updateEventTypeAction(f: FormData) {
   const key = s(f, 'key')
+  let changed = true
   try {
     const ME = await actorFor('editor')
-    await db().tx((q) => updateEventType(q, ME, key, { label: s(f, 'label'), category: s(f, 'category') }), ME)
+    const row = await db().tx((q) => updateEventType(q, ME, key, { label: s(f, 'label'), category: s(f, 'category') }), ME)
+    changed = !row.unchanged
   } catch (e) {
     fail(e)
   }
   revalidatePath('/settings/event-types')
-  back({ saved: `Saved ${key}.` })
+  back({ saved: changed ? `Saved ${key}.` : `No changes to ${key}.` })
 }
 
 export async function setEventTypeActiveAction(f: FormData) {
