@@ -29,7 +29,7 @@ export function AgentAdminCard({
           <input type="hidden" name="agent_id" value={a.id} />
           <label className="block text-[12px] font-medium text-ink-muted" htmlFor="agent-display-name">Name</label>
           <div className="flex gap-2">
-            <input id="agent-display-name" name="display_name" required maxLength={80} defaultValue={a.display_name} className={inputCls} />
+            <input id="agent-display-name" name="display_name" required maxLength={80} pattern=".*\S.*" title="Give the agent a name (not just spaces)." defaultValue={a.display_name} className={inputCls} />
             <button type="submit" className={btnCls}>Rename</button>
           </div>
           <p className="text-[11.5px] text-ink-faint">The id <span className="text-ink-muted">{a.id}</span> stays the same, so keys and @mentions keep working.</p>

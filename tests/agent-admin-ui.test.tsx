@@ -25,4 +25,13 @@ describe('Agent settings card', () => {
     expect(hidden(re.closest('form')!)).toEqual([['agent_id', 'tab'], ['active', 'true'], ['confirm', 'yes']])
     expect(screen.getByRole('button', { name: 'Turn off' })).toBeInTheDocument()
   })
+  it('the name box refuses a whitespace-only name before submit (Kilo review, round 3)', () => {
+    render(<AgentAdminCard agent={{ id: 'tab', display_name: 'Tab', active: true, can_send: false }} renameAction={noop} canSendAction={noop} activeAction={noop} />)
+    const box = screen.getByLabelText('Name') as HTMLInputElement
+    expect(box).toHaveAttribute('pattern', '.*\\S.*')
+    box.value = '   '
+    expect(box.checkValidity()).toBe(false)
+    box.value = 'Tab Two'
+    expect(box.checkValidity()).toBe(true)
+  })
 })

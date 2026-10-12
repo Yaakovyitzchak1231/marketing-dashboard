@@ -15,10 +15,17 @@ import { ConnectPanel } from '@/components/ops/ConnectPanel'
 import { DeliveryChip } from '@/components/ops/DeliveryChip'
 import type { DeliveryStatus } from '@/lib/notify/deliver'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
+import { ActionNote } from '@/components/reports/Note'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ note?: string; tone?: string }>
+}) {
   const db = getDb()
   if (!db) {
     return (
@@ -28,6 +35,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
     )
   }
   const id = (await params).id
+  const sp = (await searchParams) ?? {}
   const [d, projects, shared, all, actors, role] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db), listActors(db), currentRole()])
   if (!d) notFound()
   const { actor: a } = d
@@ -51,6 +59,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       actions={<Link href="/agents" className={btnCls}>All agents</Link>}
     >
       <AutoRefresh seconds={15} />
+      <ActionNote note={sp.note} tone={sp.tone} />
       {isAgent ? (
         <Card className={`mb-5 flex flex-wrap items-center gap-3 p-4 ${a.paused_at || all ? 'border-warn/40' : ''}`}>
           <div className="min-w-0 flex-1 text-[12.5px] leading-snug">
