@@ -1,5 +1,6 @@
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { ConfirmAction } from '@/components/reports/ConfirmAction'
 import { TD, TDN, TH } from '@/components/reports/bits'
 import { EVENT_TYPE_CATEGORIES, isBuiltInEventType, type EventTypeListRow } from '@/lib/events/types-store'
 
@@ -8,6 +9,18 @@ type FormAction = (f: FormData) => void | Promise<void>
 function fmtDate(v: string | Date): string {
   const d = new Date(v)
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+/**
+ * The confirm line for Deactivate. Once off, track_event/track_events refuse the key, so
+ * any agent still sending it loses those events; with stored events the copy says how many.
+ */
+export function deactivateWarning(t: Pick<EventTypeListRow, 'key' | 'stored_count'>): string {
+  const n = Number(t.stored_count)
+  if (Number.isFinite(n) && n > 0) {
+    return `${t.key} has ${n.toLocaleString('en-US')} stored ${n === 1 ? 'event' : 'events'}. Deactivating makes track_event refuse it, so new ${t.key} events from agents are dropped, not saved, until you activate it again. Stored events stay.`
+  }
+  return `Deactivate ${t.key}? track_event will refuse this key until you activate it again.`
 }
 
 function CategorySelect({ value, label }: { value?: string; label: string }) {
@@ -114,13 +127,25 @@ export function EventTypesSection({
                                   Save
                                 </button>
                               </form>
-                              <form action={setActiveAction}>
-                                <input type="hidden" name="key" value={t.key} />
-                                <input type="hidden" name="active" value={t.active ? 'false' : 'true'} />
-                                <button type="submit" className={btnCls}>
-                                  {t.active ? 'Deactivate' : 'Activate'}
-                                </button>
-                              </form>
+                              {t.active ? (
+                                <div className="max-w-[17rem]" data-testid={`deactivate-${t.key}`}>
+                                  <ConfirmAction
+                                    action={setActiveAction}
+                                    fields={{ key: t.key, active: 'false' }}
+                                    label="Deactivate"
+                                    confirmLabel="Yes, deactivate"
+                                    confirmText={deactivateWarning(t)}
+                                  />
+                                </div>
+                              ) : (
+                                <form action={setActiveAction}>
+                                  <input type="hidden" name="key" value={t.key} />
+                                  <input type="hidden" name="active" value="true" />
+                                  <button type="submit" className={btnCls}>
+                                    Activate
+                                  </button>
+                                </form>
+                              )}
                             </div>
                           )}
                         </td>

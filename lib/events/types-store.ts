@@ -34,6 +34,8 @@ export type EventTypeRow = {
   unchanged?: boolean
   /** registerEventType changed an existing custom type's label/category instead of creating one. */
   relabeled?: boolean
+  /** registerEventType replaced an existing custom type's props_schema (a person sent a different one). */
+  schema_updated?: boolean
 }
 
 const COLS = 'key, label, category, source, props_schema, active, created_by, created_at'
@@ -83,20 +85,24 @@ export async function registerEventType(
   const label = cleanLabel(input.label)
   const category = cleanCategory(input.category)
   const schema = cleanPropsSchema(input.props_schema)
+  // props_schema is only part of a re-register when the caller sent one: omitted means
+  // "keep what is stored", an explicit null clears it. A sent schema is compared AND
+  // written below, so a schema change is never reported as done and then dropped.
+  const schemaGiven = input.props_schema !== undefined
   const canRelabel = opts.canRelabel !== false
-  const { rows: ex } = await q.query<EventTypeRow & { same: boolean }>(
-    `select ${COLS}, (label = $2 and category is not distinct from $3 and props_schema is not distinct from $4::jsonb) as same
+  const { rows: ex } = await q.query<EventTypeRow & { same_meta: boolean; same_schema: boolean }>(
+    `select ${COLS}, (label = $2 and category is not distinct from $3) as same_meta,
+            (props_schema is not distinct from $4::jsonb) as same_schema
        from lp.event_types where key = $1 for update`,
     [key, label, category, schema],
   )
-  const existing = ex[0]
-  if (existing) {
-    // Identical re-register (label, category, props_schema — jsonb equality) is an
-    // idempotent no-op for everyone, built-ins included, so seeds can re-run: no write, no audit.
-    if (existing.same) {
-      const { same: _same, ...row } = existing
-      return { ...row, unchanged: true }
-    }
+  const found = ex[0]
+  const existing = found ? (({ same_meta: _m, same_schema: _s, ...row }) => row)(found) : undefined
+  const schemaChanged = !!found && schemaGiven && !found.same_schema
+  if (found && existing) {
+    // Identical re-register (label, category and, when sent, props_schema — jsonb equality)
+    // is an idempotent no-op for everyone, built-ins included, so seeds can re-run: no write, no audit.
+    if (found.same_meta && !schemaChanged) return { ...existing, unchanged: true }
     if (BUILT_IN_SOURCES.has(existing.source)) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
     if (!canRelabel) throw new EventTypeError(`'${key}' is already registered with a different label/category/props_schema; a person can relabel it in Settings → Event types`, 409)
   }
@@ -121,19 +127,24 @@ export async function registerEventType(
   }
   // An existing custom type, locked above, relabeled by someone allowed to.
   const { rows } = await q.query<EventTypeRow>(
-    `update lp.event_types set label = $2, category = $3
+    `update lp.event_types
+        set label = $2, category = $3, props_schema = case when $4::boolean then $5::jsonb else props_schema end
       where key = $1 and source not in ('instantly', 'system')
       returning ${COLS}`,
-    [key, label, category],
+    [key, label, category, schemaChanged, schema],
   )
   if (!rows[0]) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
-  {
-    const changes: Record<string, { from: unknown; to: unknown }> = {}
-    if (label !== existing.label) changes.label = { from: existing.label, to: label }
-    if (category !== existing.category) changes.category = { from: existing.category, to: category }
-    await audit(q, actor, 'event_type.updated', key, `Relabeled event type ${key} (${label})`, changes)
-  }
-  return { ...rows[0], relabeled: true }
+  const changes: Record<string, { from: unknown; to: unknown }> = {}
+  if (label !== existing.label) changes.label = { from: existing.label, to: label }
+  if (category !== existing.category) changes.category = { from: existing.category, to: category }
+  if (schemaChanged) changes.props_schema = { from: existing.props_schema ?? null, to: rows[0].props_schema ?? null }
+  const relabeled = !!(changes.label || changes.category)
+  // Say what actually changed: "Relabeled" for label/category, and the schema change by name.
+  const summary = relabeled
+    ? `Relabeled event type ${key} (${label})${schemaChanged ? '; props_schema updated' : ''}`
+    : `Updated props_schema of event type ${key}`
+  await audit(q, actor, 'event_type.updated', key, summary, changes)
+  return { ...rows[0], ...(relabeled ? { relabeled: true } : {}), ...(schemaChanged ? { schema_updated: true } : {}) }
 }
 
 /** Change a custom type's label, category and/or active flag. The key never changes. */

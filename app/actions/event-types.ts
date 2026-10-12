@@ -61,6 +61,9 @@ export async function updateEventTypeAction(f: FormData) {
 export async function setEventTypeActiveAction(f: FormData) {
   const key = s(f, 'key')
   const active = s(f, 'active') === 'true'
+  // Deactivating makes track_event refuse the key, so live agent events of that type are
+  // lost until it is switched back on: the form's confirm step must have been passed.
+  if (!active && s(f, 'confirm') !== 'yes') back({ error: `Deactivating ${key} needs the confirm step; nothing changed.` })
   try {
     const ME = await actorFor('editor')
     await db().tx((q) => updateEventType(q, ME, key, { active }), ME)
