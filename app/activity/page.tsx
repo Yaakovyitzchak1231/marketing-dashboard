@@ -3,9 +3,12 @@ import { getDb } from '@/lib/db'
 import { activeLocks, feed, listActors, pendingApprovals } from '@/lib/ops/queries'
 import { decideApprovalAction, releaseLockAction } from '@/app/actions/ops'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
-import { Ago, DbNotConnected, PageFrame, btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { Ago, DbNotConnected, PageFrame, btnCls } from '@/components/ops/bits'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
+import { ApprovalDecideForm } from '@/components/ops/ApprovalDecideForm'
+import { currentRole } from '@/lib/auth/session'
 import { InstantlyApprovalCard } from '@/components/ops/InstantlyApprovalCard'
+import { isValueChangePayload } from '@/lib/edit/ask-change'
 import { ActionNote } from '@/components/reports/Note'
 import { actionsEnabled } from '@/lib/instantly/writer'
 import { expireStaleInstantlyRequests, type GatePreview } from '@/lib/instantly/gate'
@@ -44,11 +47,12 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
   const before = Number(sp.before) > 0 ? Number(sp.before) : null
   await expireStaleInstantlyRequests(db).catch(() => 0)
   const instantlyOn = actionsEnabled()
-  const [events, approvals, locks, actors] = await Promise.all([
+  const [events, approvals, locks, actors, role] = await Promise.all([
     feed(db, { actor: sp.actor || null, kind_prefix: sp.kind || null, limit: 150, before_id: before }),
     pendingApprovals(db),
     activeLocks(db),
     listActors(db),
+    currentRole(),
   ])
   const now = new Date()
   const tz = process.env.DASHBOARD_TZ || 'America/New_York'
@@ -117,19 +121,19 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
                     <span className="text-[11.5px] text-ink-faint">{a.requester_name} · <Ago at={a.created_at} now={now} /></span>
                   </div>
                   <p className="leading-snug text-ink">{a.summary}</p>
+                  {isValueChangePayload(a.payload) ? (
+                    <p className="text-[12px] text-ink-muted">
+                      {a.payload.field_label}: <span className="tabular-nums">{a.payload.current}</span> stored → <span className="tabular-nums">{a.payload.proposed}</span> asked.{' '}
+                      Approving records the decision; the number changes only when Instantly&rsquo;s data does.{' '}
+                      <Link className="text-accent" href={`/leads/${a.payload.entity_id}?tab=engagement`}>Open the lead</Link>
+                    </p>
+                  ) : null}
                   {a.est_cost_usd != null ? <p className="text-[12px] tabular-nums text-ink-muted">Estimated cost ${Number(a.est_cost_usd).toFixed(2)}</p> : null}
                   {a.task_id ? <Link className="text-[12px] text-accent" href={`/team/${a.task_id}`}>Open the task</Link> : null}
                   {a.instantly_action_id ? (
                     <InstantlyApprovalCard approvalId={a.id} preview={a.payload as GatePreview} enabled={instantlyOn} />
                   ) : (
-                    <form action={decideApprovalAction} className="space-y-2">
-                      <input type="hidden" name="approval_id" value={a.id} />
-                      <input name="note" className={inputCls} placeholder="Note (optional)" />
-                      <div className="flex gap-2">
-                        <button name="decision" value="approved" className={primaryBtnCls} type="submit">Approve</button>
-                        <button name="decision" value="rejected" className={btnCls} type="submit">Reject</button>
-                      </div>
-                    </form>
+                    <ApprovalDecideForm approvalId={a.id} payload={a.payload} role={role} action={decideApprovalAction} />
                   )}
                 </div>
               )) : <EmptyNote>Nothing is waiting for you.</EmptyNote>}

@@ -2,12 +2,12 @@
  * GET  /api/leads/segments            -> {segments: [{id, name, kind, entity}]}
  * POST /api/leads/segments {name, definition} -> {id, name}   (create_segment, kind=dynamic)
  * The Leads screen's advanced-filters drawer (plan 2.5): the "Saved segments"
- * tab's list, and "Save as segment". Human route; actor is the owner. Thin
+ * tab's list, and "Save as segment". Human route (editor or owner); actor is the signed-in person. Thin
  * wrapper over the already-tested segment engine ops (lib/ops/dispatch.ts).
  */
 import { NextResponse } from 'next/server'
-import { currentRole } from '@/lib/auth/session'
-import { canAtLeast } from '@/lib/auth/roles'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { runOp } from '@/lib/ops/dispatch'
 import { listSegments } from '@/lib/segments/store'
@@ -35,13 +35,18 @@ export async function GET() {
 
 export async function POST(req: Request) {
   // A Viewer can read lists/segments but not create or change them.
-  if (!canAtLeast(await currentRole(), 'editor')) return NextResponse.json({ error: 'This needs editor access.' }, { status: 403 })
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { name?: unknown; definition?: unknown } | null
   if (typeof body?.name !== 'string' || !body.name.trim()) return NextResponse.json({ error: 'Name the segment.' }, { status: 400 })
   try {
-    const seg = (await runOp(db, 'owner', 'create_segment', { name: body.name, entity: 'company', definition: body.definition })) as { id: number; name: string }
+    const seg = (await runOp(db, actor, 'create_segment', { name: body.name, entity: 'company', definition: body.definition })) as { id: number; name: string }
     return NextResponse.json({ id: seg.id, name: seg.name })
   } catch (e) {
     if (e instanceof OpsError) return NextResponse.json({ error: e.message }, { status: e.status })

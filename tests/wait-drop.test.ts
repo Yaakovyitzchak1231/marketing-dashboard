@@ -148,10 +148,14 @@ describe('wait and drop if replied (plan 3.4)', () => {
     const c = await addCompany(db, { name: 'Unregistered', domain: 'unregistered.example', city: 'Towson' })
     const { id } = await liveJourney('Unregistered drop', { start: 'w', nodes: [{ id: 'w', kind: 'wait', config: { days: 2, drop_if: 'reply_recieved' } }] })
     const runId = await enroll(id, c)
+    // The runner retries a failing node (backoff 1, then 5 minutes) and marks the run
+    // error on the third failure. The message names the bad type each time.
     await runDueJourneys(db)
-    const r = await status(runId)
-    expect(r.status).toBe('error')
-    expect(r.last_error).toMatch(/reply_recieved/)
+    expect(await status(runId)).toMatchObject({ status: 'active', last_error: expect.stringMatching(/reply_recieved/) })
+    const later = new Date(Date.now() + 2 * 24 * 3600_000)
+    await runDueJourneys(db, { now: later })
+    await runDueJourneys(db, { now: new Date(later.getTime() + 24 * 3600_000) })
+    expect(await status(runId)).toMatchObject({ status: 'error', last_error: expect.stringMatching(/reply_recieved/) })
   })
 
   it('does not drop for a reply that happened before the lead entered the journey', async () => {

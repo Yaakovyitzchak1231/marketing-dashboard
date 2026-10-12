@@ -227,12 +227,12 @@ export interface ResolvedConfig {
  */
 export async function resolveConfig(key: string, env: Record<string, string | undefined> = process.env): Promise<ResolvedConfig> {
   const spec = settingSpec(key)
-  // lib/db/index.ts is a server-only module; load it on first use so this store (and
+  // lib/db is a server-only module; load it on first use so this store (and
   // lib/ops/dispatch.ts, which imports SETTINGS_OPS) stays importable anywhere,
   // the same pattern dispatch.ts uses for the Instantly gate.
   let q: Queryable | null = null
   try {
-    const { getDb } = await import('../db/index.ts')
+    const { getDb } = await import('@/lib/db')
     q = getDb()
   } catch {
     q = null

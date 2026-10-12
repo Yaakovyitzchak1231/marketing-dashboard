@@ -31,6 +31,7 @@ import { normalizeEmail } from '@/lib/leads/normalize'
 import { STAGES, type Stage } from '@/lib/leads/types'
 import { logEvent } from '@/lib/ops/events'
 import { emitLeadEvent } from '@/lib/events/emit'
+import { evaluateCompositeRules } from '@/lib/events/composite'
 import { addSuppressionIn, type SuppressionReason } from '@/lib/suppressions/store'
 
 export interface InstantlyEvent {
@@ -231,7 +232,7 @@ export async function ingestInstantlyEvent(db: Db, e: InstantlyEvent): Promise<I
     // touch insert above already returns early on a retried delivery, before this ever runs.
     const dashboardCampaignId = await dashboardCampaignFor(q, e.campaign_id)
     const eventType = INSTANTLY_EVENT_TYPE_MAP[type] ?? 'custom'
-    await emitLeadEvent(q, {
+    const emitted = await emitLeadEvent(q, {
       type: eventType,
       company_id: contact?.company_id ?? null,
       contact_id: contact?.id ?? null,
@@ -254,6 +255,18 @@ export async function ingestInstantlyEvent(db: Db, e: InstantlyEvent): Promise<I
         ...(eventType === 'email_opened' ? { low_trust: true } : {}),
       },
     })
+    // Composite rules (e.g. positive_reply): a reply that was marked
+    // interested derives its own event, in the same transaction.
+    if (emitted.inserted && emitted.id != null) {
+      await evaluateCompositeRules(q, {
+        id: emitted.id,
+        type: eventType,
+        company_id: emitted.company_id,
+        contact_id: emitted.contact_id,
+        campaign_id: dashboardCampaignId,
+        instantly_campaign_id: e.campaign_id ?? null,
+      })
+    }
 
     let taskId: number | null = null
     if (REPLY_EVENTS.has(type)) {

@@ -108,8 +108,8 @@ Copy `.env.example` to `.env.local` for local work. Never commit real values.
 | `DATABASE_URL` | for the lead platform | Postgres connection string for the `lp` schema (Supabase: use the pooler URL; or the OVH server). Unset = the lead screens show "not connected" and the Instantly pages still work. |
 | `OPS_AGENT_TOKENS` | for agents | `tab:<token>,hermes:<token>,...` — one long random token per agent for the ops API. |
 | `INSTANTLY_WEBHOOK_SECRET` | for the reply desk | Shared secret Instantly sends on each webhook (`Authorization: Bearer <secret>`), 16+ characters. |
-| `MILLIONVERIFIER_API_KEY` | for paid verification | MillionVerifier API key. Used only after you approve a run's cost preview. |
-| `ZEROBOUNCE_API_KEY` | for paid verification | ZeroBounce API key. Used only for MillionVerifier catch-all/unknown results, after approval. |
+| `MILLIONVERIFIER_API_KEY` | for paid verification | MillionVerifier API key, or save it on Settings. A saved value takes precedence. Used only after you approve a run's cost preview. |
+| `ZEROBOUNCE_API_KEY` | for paid verification | ZeroBounce API key, or save it on Settings. A saved value takes precedence. Used only for MillionVerifier catch-all/unknown results, after approval. |
 | `ENGINE_PROXIES` | runner only | On the server that runs the lead engine: comma-separated proxy URLs, used only when a job ticks "Rotate proxies". Not needed on Vercel. |
 | `SEARXNG_URL` | runner only, optional | Free self-hosted search used by the owner-name step. Without it (or `SERPER_API_KEY`) the search steps are skipped. |
 | `SERPER_API_KEY` | runner only, optional | Paid search alternative to SearXNG. Leave unset to stay free. |
@@ -176,8 +176,12 @@ Vercel installs with npm (`package-lock.json`; there is no other lockfile).
 `next build`. Preview migrations are off unless explicitly enabled; preview
 runtime connections must also use an isolated database branch (skipping migrations
 does not prevent preview code from writing to a shared production database).
+`vercel.json` also sets `git.deploymentEnabled` so only pushes to `main` deploy;
+pull-request branches get no automatic preview deployment (this keeps the project
+under Vercel's free-tier daily deployment limit). Deploy a branch by hand with
+`vercel` from the CLI when a preview is needed.
 
-Agent delivery readiness and mail settings are visible on `/setup`. Notification
+Agent delivery readiness and mail settings are visible on `/settings`. Notification
 reliability and scheduler activation: [docs/agent-delivery.md](docs/agent-delivery.md).
 
 ## Metrics, defined

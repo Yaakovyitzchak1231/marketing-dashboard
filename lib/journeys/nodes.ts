@@ -46,6 +46,11 @@ export interface NodeContext {
   node: GraphNode
   graph: JourneyGraph
   now: Date
+  /**
+   * Stable for one visit of this run to this node: the same on every retry, new when a loop
+   * brings the run back. Hand it to an outside service as its idempotency key.
+   */
+  idempotencyKey: string
 }
 
 export type NodeOutcome =
@@ -56,8 +61,25 @@ export type NodeOutcome =
   /** End the run. */
   | { type: 'finish'; status: 'done' | 'exited' | 'goal'; result?: Record<string, unknown> }
 
+/**
+ * Side effects. The runner commits each node on its own. A handler runs inside its node's
+ * transaction, and if it throws that transaction rolls back (the run stays on the node and
+ * is retried), but nodes the run already passed stay committed. So:
+ *  - Database writes through `q` roll back with the node that threw. Safe.
+ *  - Anything outside the database (an email, an HTTP call, an Instantly push) is NOT
+ *    rolled back. If the node throws after making the call, the retry makes it again.
+ *    Pass `ctx.idempotencyKey` to the outside service so a repeat is a no-op there, and
+ *    call it as the LAST thing the handler does. A service with no idempotency key is
+ *    at-least-once: say so in the node's docs.
+ */
 export interface NodeHandler {
   kind: string
+  /**
+   * True when the node can send or push something outside the database. The runner
+   * will not run it on a journey version the owner has not approved (journey_approve),
+   * and it checks suppression before each run of it.
+   */
+  sends?: boolean
   /** Problems with this node's config/paths, as plain sentences. Empty when fine. */
   validate(node: GraphNode): string[]
   run(ctx: NodeContext): Promise<NodeOutcome>

@@ -6,6 +6,7 @@ type TestDb = Awaited<ReturnType<typeof createTestDb>>
 const { holder, kick } = vi.hoisted(() => ({ holder: { db: null as unknown }, kick: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db }))
+vi.mock('@/lib/auth/session', () => ({ currentRole: async () => 'owner', currentActorId: async () => 'owner', currentEmail: async () => null }))
 vi.mock('@/lib/notify/kick', () => ({ kickDelivery: kick }))
 
 import { PATCH } from '@/app/api/leads/stage/route'
