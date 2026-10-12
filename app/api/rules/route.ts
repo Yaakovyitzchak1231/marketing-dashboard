@@ -1,5 +1,5 @@
 /**
- * Lead rules API (humans; behind the login gate, actor = the owner).
+ * Lead rules API (humans; writes need editor or owner, actor = the signed-in person).
  *
  *   GET  /api/rules            -> {rule_sets: [... with counts + re-score status], standing_rules, fields, conditions, proposals}
  *   POST /api/rules            {scope: 'campaign'|'template', from_id, campaign_id?, campaign_name?, segment?, name?}
@@ -16,6 +16,8 @@
  * PROPOSE a change (propose_rule_change -> Needs your OK). Shapes: lib/rules/schema.ts; docs: docs/lead-rules.md.
  */
 import { NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { createRuleSet, listProposals, listRuleSets, resolveFieldCatalog } from '@/lib/rules/store'
 import { recomputeStatus, tierCounts } from '@/lib/rules/recompute'
@@ -40,11 +42,18 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // Role check first (editor and above); the change is logged as the signed-in person.
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: NO_DB }, { status: 503 })
   try {
     const body = (await req.json().catch(() => null)) ?? {}
-    const rs = await createRuleSet(db, 'owner', body as Record<string, unknown>)
+    const rs = await createRuleSet(db, actor, body as Record<string, unknown>)
     kickRecompute(db)
     return NextResponse.json({ rule_set: rs }, { status: 201 })
   } catch (e) {

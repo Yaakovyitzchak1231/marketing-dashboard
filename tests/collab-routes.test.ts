@@ -11,6 +11,10 @@ import { NextRequest } from 'next/server'
 
 const sessionEmailMock = vi.fn()
 
+vi.mock('server-only', () => ({}))
+vi.mock('@/lib/db', () => ({ getDb: () => null }))
+vi.mock('@/lib/auth/session', () => ({ currentRole: async () => 'editor', currentActorId: async () => 'ed', currentEmail: async () => null }))
+
 vi.mock('@/lib/request-client', () => ({
   getRequestClient: vi.fn(),
 }))

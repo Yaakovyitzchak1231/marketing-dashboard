@@ -9,12 +9,20 @@
 import { NextResponse } from 'next/server'
 import { createPreview, verifyEnvFromConfig } from '@/lib/verify/runs'
 import type { LeadFilter } from '@/lib/verify/select'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, readJson } from '../_shared'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: Request) {
+  // Role check first: a non-owner gets 403 before any validation error or database status.
+  let actor: string
+  try {
+    actor = await actorFor('owner')
+  } catch (e) {
+    return fail(e)
+  }
   const db = dbOrNull()
   if (!db) return notConnected()
   const body = await readJson(req)
@@ -37,7 +45,7 @@ export async function POST(req: Request) {
         limit,
         force: body.force === true,
         recheck_days: recheck != null && Number.isFinite(recheck) ? recheck : undefined,
-        actor: 'owner',
+        actor,
       },
       await verifyEnvFromConfig(),
     )

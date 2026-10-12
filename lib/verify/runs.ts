@@ -16,7 +16,7 @@ import type { Db, Queryable } from '@/lib/db/types'
 import { logEvent } from '@/lib/ops/events'
 import { emitLeadEvent } from '@/lib/events/emit'
 import { createPrecheckerAsync, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
-import { estimateCost, getPricing, usd4, type CostEstimate, type Pricing } from './pricing'
+import { estimateCost, getPricing, usd4, MAX_CEILING_USD, type CostEstimate, type Pricing } from './pricing'
 import { selectCandidates, cleanFilter, mvPending, type LeadFilter, DEFAULT_RECHECK_DAYS } from './select'
 import { nextContactStatus, precheckStep, runWaterfall, worstCaseCost, type StepRecord, type WaterfallKeys, type WaterfallOutcome } from './waterfall'
 import type { FetchLike } from './types'
@@ -153,11 +153,12 @@ export interface PreviewInput {
   limit?: number | null
   force?: boolean
   recheck_days?: number
-  actor?: string
+  /** Who is previewing (lp.actors id). Required: no run is ever attributed to a guessed actor. */
+  actor: string
 }
 
 export async function createPreview(db: Db, input: PreviewInput, env: VerifyEnv): Promise<RunRow> {
-  const actor = input.actor ?? 'owner'
+  const actor = input.actor
   const recheckDays = Math.max(0, Math.floor(input.recheck_days ?? DEFAULT_RECHECK_DAYS))
   const sel = await selectCandidates(db, {
     contact_ids: input.contact_ids,
@@ -265,9 +266,10 @@ export async function createPreview(db: Db, input: PreviewInput, env: VerifyEnv)
 // ---------------------------------------------------------------------------
 // approve / cancel
 
-export async function approveRun(db: Db, id: number, maxCostUsd: number, actor = 'owner'): Promise<RunRow> {
-  if (!Number.isFinite(maxCostUsd) || maxCostUsd < 0 || maxCostUsd > 10_000) {
-    throw new RunError(400, 'max_cost_usd must be a dollar amount between 0 and 10000')
+/** `actor` is the lp.actors id of the person approving; required so an approval is never attributed to a default. */
+export async function approveRun(db: Db, id: number, maxCostUsd: number, actor: string): Promise<RunRow> {
+  if (!Number.isFinite(maxCostUsd) || maxCostUsd < 0 || maxCostUsd > MAX_CEILING_USD) {
+    throw new RunError(400, `max_cost_usd must be a dollar amount between 0 and ${MAX_CEILING_USD}`)
   }
   const max = usd4(maxCostUsd)
   return db.tx(async (t) => {
@@ -297,13 +299,15 @@ export async function approveRun(db: Db, id: number, maxCostUsd: number, actor =
           : `Raised the ceiling on verification run #${id} to ${money(max)} (spent so far ${money(run.spent_usd)})`,
       entity_type: 'verification_run',
       entity_id: id,
-      data: { max_cost_usd: max, est_cost_usd: run.est_cost_usd },
+      // Who previewed and who approved are both on the record: the preview row
+      // keeps requested_by, this event carries both ids.
+      data: { max_cost_usd: max, est_cost_usd: run.est_cost_usd, requested_by: run.requested_by, approved_by: actor },
     })
     return (await getRun(t, id)) as RunRow
   }, actor)
 }
 
-export async function cancelRun(db: Db, id: number, actor = 'owner'): Promise<RunRow> {
+export async function cancelRun(db: Db, id: number, actor: string): Promise<RunRow> {
   return db.tx(async (t) => {
     const run = await getRun(t, id)
     if (!run) throw new RunError(404, `No verification run #${id}`)
@@ -330,7 +334,8 @@ export interface StepOptions {
   concurrency?: number
   /** Stop starting new contacts after this many ms (serverless functions are short). */
   timeBudgetMs?: number
-  actor?: string
+  /** Who is running this step (lp.actors id). Required: step events and verified_by name the person who ran it, not the approver. */
+  actor: string
 }
 
 export interface StepReport {
@@ -382,7 +387,7 @@ function bump(rec: Record<string, number>, key: string, by = 1) {
   rec[key] = (rec[key] ?? 0) + by
 }
 
-export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOptions = {}): Promise<StepReport> {
+export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOptions): Promise<StepReport> {
   const chunk = Math.min(100, Math.max(1, Math.floor(opts.chunk ?? 20)))
   const concurrency = Math.min(8, Math.max(1, Math.floor(opts.concurrency ?? 4)))
   const timeBudgetMs = opts.timeBudgetMs ?? 40_000
@@ -398,7 +403,7 @@ export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOpti
   try {
     const run = (await getRun(db, id)) as RunRow // re-read under the lock
     if (!['approved', 'running'].includes(run.status)) throw new RunError(409, `Run #${id} is ${run.status}`)
-    const actor = opts.actor ?? run.approved_by ?? 'owner'
+    const actor = opts.actor
     if (run.status === 'approved') {
       await db.query(`update lp.verification_runs set status = 'running' where id = $1 and status = 'approved'`, [id])
     }

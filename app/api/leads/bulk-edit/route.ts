@@ -7,8 +7,9 @@
  * own audit-log row naming the signed-in person.
  */
 import { NextResponse } from 'next/server'
-import { currentActorId, currentRole } from '@/lib/auth/session'
-import { canAtLeast } from '@/lib/auth/roles'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
+import { currentRole } from '@/lib/auth/session'
 import { getDb } from '@/lib/db'
 import { RegistryError } from '@/lib/edit/registry'
 import { MAX_BULK_EDIT, bulkEditSentence, bulkUpdateCompanies } from '@/lib/edit/bulk'
@@ -18,8 +19,13 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 export async function PATCH(req: Request) {
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const role = await currentRole()
-  if (!canAtLeast(role, 'editor')) return NextResponse.json({ error: 'This needs editor access.' }, { status: 403 })
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { company_ids?: unknown; field?: unknown; value?: unknown } | null
@@ -33,7 +39,7 @@ export async function PATCH(req: Request) {
   }
   if (typeof body?.field !== 'string') return NextResponse.json({ error: 'field is required.' }, { status: 400 })
   try {
-    const r = await bulkUpdateCompanies(db, await currentActorId(), {
+    const r = await bulkUpdateCompanies(db, actor, {
       ids: ids as number[],
       field: body.field,
       value: body.value ?? null,

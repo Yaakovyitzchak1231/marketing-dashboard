@@ -2,10 +2,12 @@
  * PATCH /api/leads/stage  {company_ids: number[], stage: Stage}
  *   -> 200 {updated, unchanged, missing}
  *   -> 400 {error} bad body · 503 {error} no DATABASE_URL
- * Human route (behind the login gate); the actor is the owner. History rows are
+ * Human route (editor or owner); the actor is the signed-in person. History rows are
  * written by the database trigger; one plain-English event is logged.
  */
 import { NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { setStage } from '@/lib/leads/queries'
 import { STAGES, type Stage } from '@/lib/leads/types'
@@ -15,6 +17,13 @@ export const dynamic = 'force-dynamic'
 const MAX_IDS = 5000
 
 export async function PATCH(req: Request) {
+  // Role check first (editor and above); the change is logged as the signed-in person.
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { company_ids?: unknown; stage?: unknown } | null
@@ -25,6 +34,6 @@ export async function PATCH(req: Request) {
   if (typeof body?.stage !== 'string' || !(STAGES as readonly string[]).includes(body.stage)) {
     return NextResponse.json({ error: `stage must be one of: ${STAGES.join(', ')}.` }, { status: 400 })
   }
-  const result = await setStage(db, ids as number[], body.stage as Stage, 'owner')
+  const result = await setStage(db, ids as number[], body.stage as Stage, actor)
   return NextResponse.json(result)
 }

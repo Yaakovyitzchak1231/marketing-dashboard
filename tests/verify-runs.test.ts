@@ -10,6 +10,9 @@ installPaidNetworkGuard()
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
+/** The lp.actors id every test call acts as (seeded by the base migration). */
+const ACTOR = 'owner'
+
 const MV_KEY = 'mv_TEST_KEY_123456'
 const ZB_KEY = 'zb_TEST_KEY_654321'
 
@@ -187,7 +190,7 @@ describe('verification runs (PGlite)', () => {
   it('preview runs only the free check, records it, and stores the estimate', async () => {
     const ids = await seed(db, ['owner@gemco.com', 'catchall@gemco.com', 'x@deadshop.com', 'y@mailinator.com'])
     const e = env()
-    const run = await createPreview(db, { contact_ids: ids }, e)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
     expect(e.fetch.calls).toEqual([]) // nothing paid during preview
     expect(run).toMatchObject({ status: 'preview', contact_count: 4, precheck_pass: 2, est_mv_checks: 2, est_zb_checks: 1 })
     expect(run.est_cost_usd).toBeCloseTo(2 * 0.0039 + 0.0129, 4)
@@ -205,18 +208,18 @@ describe('verification runs (PGlite)', () => {
     await seed(db, ['a@gemco.com', 'b@gemco.com'], { state: 'MD' })
     await seed(db, ['c@gemco.com'], { state: 'NY' })
     await db.query(`update lp.contacts set verification_status = 'valid', verified_at = now(), verified_by = 'millionverifier' where email_norm = 'b@gemco.com'`)
-    const md = await createPreview(db, { filter: { state: 'md' } }, env())
+    const md = await createPreview(db, { actor: ACTOR, filter: { state: 'md' } }, env())
     expect(md.contact_count).toBe(1)
     expect(md.summary?.selection?.skipped.recently_verified).toBe(1)
-    const forced = await createPreview(db, { filter: { state: 'MD' }, force: true }, env())
+    const forced = await createPreview(db, { actor: ACTOR, filter: { state: 'MD' }, force: true }, env())
     expect(forced.contact_count).toBe(2)
   })
 
   it('refuses to step before approval; approval is recorded as the owner', async () => {
     const ids = await seed(db, ['owner@gemco.com'])
-    const run = await createPreview(db, { contact_ids: ids }, env())
-    await expect(stepRun(db, run.id, env())).rejects.toThrow(/not been approved/)
-    const ok = await approveRun(db, run.id, 1)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, env())
+    await expect(stepRun(db, run.id, env(), { actor: ACTOR })).rejects.toThrow(/not been approved/)
+    const ok = await approveRun(db, run.id, 1, ACTOR)
     expect(ok).toMatchObject({ status: 'approved', approved_by: 'owner', max_cost_usd: 1 })
     const ev = await db.query<{ actor: string; summary: string }>(
       `select actor, summary from lp.events where kind = 'verify.approved' and entity_id = $1`,
@@ -229,9 +232,9 @@ describe('verification runs (PGlite)', () => {
   it('a full run: writes every step, updates contacts, spends, logs, finishes', async () => {
     const ids = await seed(db, ['owner@gemco.com', 'catchall@gemco.com', 'catchall2@gemco.com', 'bad@gemco.com', 'x@deadshop.com'])
     const e = env({}, { 'catchall@gemco.com': 'valid', 'catchall2@gemco.com': 'catch-all' })
-    const run = await createPreview(db, { contact_ids: ids }, e)
-    await approveRun(db, run.id, 5)
-    const rep = await stepRun(db, run.id, e, { chunk: 10 })
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
+    await approveRun(db, run.id, 5, ACTOR)
+    const rep = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 10 })
     expect(rep).toMatchObject({ done: true, processed_now: 5, halted: null, paused: null })
     expect(rep.run.status).toBe('done')
     // 4 MV checks + 2 ZB checks
@@ -270,36 +273,36 @@ describe('verification runs (PGlite)', () => {
   it('steps through a run in chunks and never pays twice for the same contact', async () => {
     const ids = await seed(db, Array.from({ length: 7 }, (_, i) => `p${i}@gemco.com`))
     const e = env()
-    const run = await createPreview(db, { contact_ids: ids }, e)
-    await approveRun(db, run.id, 1)
-    const a = await stepRun(db, run.id, e, { chunk: 3 })
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
+    await approveRun(db, run.id, 1, ACTOR)
+    const a = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 3 })
     expect(a).toMatchObject({ processed_now: 3, done: false })
-    const b = await stepRun(db, run.id, e, { chunk: 3 })
-    const c = await stepRun(db, run.id, e, { chunk: 3 })
+    const b = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 3 })
+    const c = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 3 })
     expect([b.processed_now, c.processed_now, c.done]).toEqual([3, 1, true])
     expect(e.fetch.calls.length).toBe(7)
-    await expect(stepRun(db, run.id, e)).rejects.toThrow(/is done/)
+    await expect(stepRun(db, run.id, e, { actor: ACTOR })).rejects.toThrow(/is done/)
   })
 
   it('stops before crossing the cost ceiling, then continues when the ceiling is raised', async () => {
     const ids = await seed(db, Array.from({ length: 10 }, (_, i) => `c${i}@gemco.com`))
     const e = env()
-    const run = await createPreview(db, { contact_ids: ids }, e)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
     // Worst case per contact = MV + ZB = 0.0168. A $0.05 ceiling allows 2 at a time: 0.0168*3 = 0.0504 > 0.05.
-    await approveRun(db, run.id, 0.05)
-    const r1 = await stepRun(db, run.id, e, { chunk: 10, concurrency: 1 })
+    await approveRun(db, run.id, 0.05, ACTOR)
+    const r1 = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 10, concurrency: 1 })
     expect(r1.done).toBe(false)
     expect(r1.paused).toMatch(/ceiling/)
     expect(r1.run.spent_usd).toBeLessThanOrEqual(0.05)
     expect(r1.run.status).toBe('running')
     const callsAtPause = e.fetch.calls.length
     // Stepping again without raising: nothing new happens, nothing spent.
-    const r2 = await stepRun(db, run.id, e, { chunk: 10, concurrency: 1 })
+    const r2 = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 10, concurrency: 1 })
     expect(r2.processed_now).toBe(0)
     expect(e.fetch.calls.length).toBe(callsAtPause)
-    await expect(approveRun(db, run.id, 0.001)).rejects.toThrow(/below what this run already spent/)
-    await approveRun(db, run.id, 1)
-    const r3 = await stepRun(db, run.id, e, { chunk: 10, concurrency: 4 })
+    await expect(approveRun(db, run.id, 0.001, ACTOR)).rejects.toThrow(/below what this run already spent/)
+    await approveRun(db, run.id, 1, ACTOR)
+    const r3 = await stepRun(db, run.id, e, { actor: ACTOR, chunk: 10, concurrency: 4 })
     expect(r3.done).toBe(true)
     expect(r3.run.spent_usd).toBeCloseTo(10 * 0.0039, 4)
     const paused = await db.query<{ n: number }>(`select count(*)::int n from lp.events where kind = 'verify.paused' and entity_id = $1`, [String(run.id)])
@@ -314,11 +317,11 @@ describe('verification runs (PGlite)', () => {
       [ids[0]],
     )
     const e = env({}, { 'catchall@gemco.com': 'valid' })
-    const run = await createPreview(db, { contact_ids: ids }, e)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
     expect(run.contact_count).toBe(2) // not skipped as "recently verified": ZeroBounce never looked
     expect(run.summary?.estimate).toMatchObject({ mv_checks: 1, zb_direct: 1, zb_checks: 2 })
-    await approveRun(db, run.id, 1)
-    await stepRun(db, run.id, e)
+    await approveRun(db, run.id, 1, ACTOR)
+    await stepRun(db, run.id, e, { actor: ACTOR })
     const hosts = e.fetch.calls.map((c) => `${new URL(c).hostname} ${new URL(c).searchParams.get('email')}`)
     expect(hosts.sort()).toEqual(['api.millionverifier.com owner@gemco.com', 'api.zerobounce.net catchall@gemco.com'])
     const c = await db.query<{ verification_status: string; verified_by: string; status: string }>(
@@ -331,9 +334,9 @@ describe('verification runs (PGlite)', () => {
   it('a ceiling of $0 refuses every paid call (only free results are applied)', async () => {
     const ids = await seed(db, ['x@deadshop.com', 'owner@gemco.com'])
     const e = env()
-    const run = await createPreview(db, { contact_ids: ids }, e)
-    await approveRun(db, run.id, 0)
-    const r = await stepRun(db, run.id, e)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
+    await approveRun(db, run.id, 0, ACTOR)
+    const r = await stepRun(db, run.id, e, { actor: ACTOR })
     expect(e.fetch.calls).toEqual([])
     expect(r.run.spent_usd).toBe(0)
     expect(r.paused).toMatch(/ceiling/)
@@ -342,11 +345,11 @@ describe('verification runs (PGlite)', () => {
   it('with no MillionVerifier key: free results applied, the rest left unverified and said plainly', async () => {
     const ids = await seed(db, ['x@deadshop.com', 'owner@gemco.com'])
     const e = env({ keys: { millionverifier: null, zerobounce: null } })
-    const run = await createPreview(db, { contact_ids: ids }, e)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
     expect(run.est_cost_usd).toBe(0)
     expect(run.summary?.warnings?.[0]).toMatch(/MillionVerifier key not set/)
-    await approveRun(db, run.id, 1)
-    const r = await stepRun(db, run.id, e)
+    await approveRun(db, run.id, 1, ACTOR)
+    const r = await stepRun(db, run.id, e, { actor: ACTOR })
     expect(r.done).toBe(true)
     expect(r.run.summary?.not_checked?.mv_key_missing).toBe(1)
     const c = await db.query<{ verification_status: string }>(`select verification_status from lp.contacts order by id`)
@@ -359,9 +362,9 @@ describe('verification runs (PGlite)', () => {
     const ids = await seed(db, ['owner@gemco.com', 'two@gemco.com'])
     const f = fakeFetch(() => ({ body: { error: 'Invalid API key' } }))
     const e = { ...env(), fetch: f }
-    const run = await createPreview(db, { contact_ids: ids }, e)
-    await approveRun(db, run.id, 1)
-    const r = await stepRun(db, run.id, e, { concurrency: 1 })
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, e)
+    await approveRun(db, run.id, 1, ACTOR)
+    const r = await stepRun(db, run.id, e, { actor: ACTOR, concurrency: 1 })
     expect(r.halted).toMatch(/MillionVerifier: Invalid API key/)
     expect(r.run.status).toBe('failed')
     expect(r.run.spent_usd).toBe(0)
@@ -371,20 +374,66 @@ describe('verification runs (PGlite)', () => {
 
   it('one step at a time per run (a second concurrent step is refused)', async () => {
     const ids = await seed(db, ['owner@gemco.com'])
-    const run = await createPreview(db, { contact_ids: ids }, env())
-    await approveRun(db, run.id, 1)
+    const run = await createPreview(db, { actor: ACTOR, contact_ids: ids }, env())
+    await approveRun(db, run.id, 1, ACTOR)
     await db.query(`insert into lp.locks (resource, holder, lease_expires_at) values ($1, 'system', now() + interval '1 minute')`, [`verify-run:${run.id}`])
-    await expect(stepRun(db, run.id, env())).rejects.toThrow(/already being processed/)
+    await expect(stepRun(db, run.id, env(), { actor: ACTOR })).rejects.toThrow(/already being processed/)
     await db.query(`delete from lp.locks`)
   })
 
   it('cancel stops a run; runs list newest first', async () => {
     const ids = await seed(db, ['owner@gemco.com'])
-    const r1 = await createPreview(db, { contact_ids: ids }, env())
-    const r2 = await createPreview(db, { contact_ids: ids }, env())
-    expect((await cancelRun(db, r1.id)).status).toBe('cancelled')
-    await expect(approveRun(db, r1.id, 1)).rejects.toThrow(/cancelled/)
+    const r1 = await createPreview(db, { actor: ACTOR, contact_ids: ids }, env())
+    const r2 = await createPreview(db, { actor: ACTOR, contact_ids: ids }, env())
+    expect((await cancelRun(db, r1.id, ACTOR)).status).toBe('cancelled')
+    await expect(approveRun(db, r1.id, 1, ACTOR)).rejects.toThrow(/cancelled/)
     expect((await listRuns(db)).map((r) => r.id)).toEqual([r2.id, r1.id])
     expect(await getRun(db, 999999)).toBeNull()
+  })
+
+  it('previewer, approver and the person who runs a step are each recorded under their own id', async () => {
+    // Two owners: one previews, a second approves, a third runs the step. Nothing may be attributed to the approver by default.
+    await db.tx(
+      (q) =>
+        q.query(`
+          insert into lp.actors (id, kind, display_name, email, role, active) values
+            ('pat', 'human', 'Pat Preview', 'pat@example.com', 'owner', true),
+            ('amy', 'human', 'Amy Approve', 'amy@example.com', 'owner', true),
+            ('sam', 'human', 'Sam Step', 'sam@example.com', 'owner', true)
+          on conflict (id) do nothing`),
+      'owner',
+    )
+    const ids = await seed(db, ['owner@gemco.com', 'bad@gemco.com'])
+    const e = env()
+    const run = await createPreview(db, { actor: 'pat', contact_ids: ids }, e)
+    expect(run.requested_by).toBe('pat')
+    const approved = await approveRun(db, run.id, 5, 'amy')
+    expect(approved.requested_by).toBe('pat')
+    expect(approved.approved_by).toBe('amy')
+    // lp.lead_events is append-only and shared across tests: only look at rows this step wrote.
+    const baseline = (await db.query<{ n: string }>(`select coalesce(max(id), 0)::text as n from lp.lead_events`)).rows[0].n
+    const rep = await stepRun(db, run.id, e, { actor: 'sam' })
+    expect(rep.done).toBe(true)
+
+    // The audit feed: preview by pat, approval by amy (carrying both ids), completion by sam.
+    const ev = await db.query<{ kind: string; actor: string; data: Record<string, unknown> | null }>(
+      `select kind, actor, data from lp.events where entity_id = $1 and kind like 'verify.%' order by id`,
+      [String(run.id)],
+    )
+    expect(ev.rows.map((r) => [r.kind, r.actor])).toEqual([
+      ['verify.preview', 'pat'],
+      ['verify.approved', 'amy'],
+      ['verify.done', 'sam'],
+    ])
+    expect(ev.rows[1].data).toMatchObject({ requested_by: 'pat', approved_by: 'amy' })
+
+    // The per-lead stream and the status history name the person who ran the step, not the approver.
+    const le = await db.query<{ actor: string }>(`select distinct actor from lp.lead_events where source = 'verify' and id > $1::bigint`, [baseline])
+    expect(le.rows).toEqual([{ actor: 'sam' }])
+    const h = await db.query<{ changed_by: string }>(`select distinct changed_by from lp.status_history where field = 'verification_status'`)
+    expect(h.rows).toEqual([{ changed_by: 'sam' }])
+    // verified_by on the contact is the PROVIDER that decided, not a person; it must not be touched by this change.
+    const c = await db.query<{ verified_by: string }>(`select verified_by from lp.contacts order by id`)
+    expect(c.rows.map((r) => r.verified_by)).toEqual(['millionverifier', 'millionverifier'])
   })
 })

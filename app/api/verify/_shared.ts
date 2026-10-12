@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getDb, type Db } from '@/lib/db'
 import { RunError } from '@/lib/verify/runs'
+import { AuthError } from '@/lib/auth/roles'
 
 export const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
@@ -27,6 +28,7 @@ export async function readJson(req: Request): Promise<Record<string, unknown>> {
 }
 
 export function fail(e: unknown) {
+  if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: 403, headers: NO_STORE })
   if (e instanceof RunError) return NextResponse.json({ error: e.message }, { status: e.status, headers: NO_STORE })
   // Never echo internals (or anything that might carry a key) to the browser.
   console.error('verify route failed:', e instanceof Error ? e.name : 'error')
