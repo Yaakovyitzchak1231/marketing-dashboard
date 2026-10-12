@@ -69,6 +69,62 @@ describe('QuietHoursField', () => {
   })
 })
 
+describe('QuietHoursField clear', () => {
+  const recorder = () => {
+    const calls: [string, string][] = []
+    const action = async (_p: FormResult | null, f: FormData): Promise<FormResult> => {
+      calls.push([String(f.get('start')), String(f.get('end'))])
+      return { ok: true }
+    }
+    return { calls, action }
+  }
+
+  it('a saved range has a Clear button that sends both ends blank in one call and empties the pickers', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(await screen.findByText('Cleared: no workspace quiet hours.')).toBeInTheDocument()
+    expect(calls).toEqual([['', '']])
+    expect(screen.getByLabelText('Quiet hours start')).toHaveValue('')
+    expect(screen.getByLabelText('Quiet hours end')).toHaveValue('')
+  })
+
+  it('emptying both fields and pressing Save also clears', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.change(screen.getByLabelText('Quiet hours start'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Cleared: no workspace quiet hours.')).toBeInTheDocument()
+    expect(calls).toEqual([['', '']])
+  })
+
+  it('emptying only one field is refused on the client and calls nothing', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/Pick both a start and an end time/)).toBeInTheDocument()
+    expect(calls).toEqual([])
+  })
+
+  it('a server refusal on Clear is shown and the pickers keep their values', async () => {
+    const action = async (): Promise<FormResult> => ({ ok: false, message: 'Only a person can change settings.' })
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(await screen.findByText('Only a person can change settings.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Quiet hours start')).toHaveValue('21:00')
+  })
+
+  it('a half-set stored pair can be cleared, and a wholly unset one has nothing to clear', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end={null} action={noopForm} />)
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start={null} end={null} action={noopForm} />)
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+  })
+})
+
 describe('QuietHoursField with a bad stored pair', () => {
   it('a half-set pair is "Incomplete", says which end is saved and that sends are held, not "Not set"', () => {
     const { unmount } = render(<QuietHoursField start="21:00" end={null} action={noopForm} />)

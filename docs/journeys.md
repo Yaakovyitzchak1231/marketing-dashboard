@@ -323,7 +323,14 @@ and `workspace.quiet_hours_end` are both set (24-hour `HH:MM`, different) or bot
 blank. Saving enforces it on every path: the Quiet hours control on Settings and the
 `put_quiet_hours {start, end}` op (owner only) write both in one transaction, and
 `put_setting` on a single quiet-hours key is refused (400, naming both keys) if it would
-leave one end unset or the two equal. Pre-existing data that breaks the rule (half-set,
+leave one end unset or the two equal. **To turn workspace quiet hours off, clear the pair:**
+press Clear on the Quiet hours control (or empty both fields and Save), or call
+`put_quiet_hours {"start": "", "end": ""}` (owner only; both keys must be present, so a
+call with the arguments forgotten is a 400, not a silent clear). Clearing deletes both settings
+rows in one transaction, so they read back as unset (Settings shows "Not set", and sends are
+no longer held by workspace quiet hours); each cleared key is audited old value to null.
+Clearing exactly one end is still refused. Clearing is also the way out of a stored
+half-set or invalid pair. Pre-existing data that breaks the rule (half-set,
 equal, or not `HH:MM`) is not guessed at: while a journey has no quiet hours of its
 own, every send for it holds with `reason: "invalid workspace quiet hours"` until the
 pair is fixed on Settings, where the Quiet hours row shows "Incomplete" or "Not valid" with the reason instead of "Not set". A journey that sets its own `quiet_hours` never reads the

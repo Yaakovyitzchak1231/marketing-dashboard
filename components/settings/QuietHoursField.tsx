@@ -1,9 +1,9 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { startTransition, useActionState, useState } from 'react'
 import type { FormResult } from '@/app/actions/settings'
 import { Pill } from '@/components/dashboard/primitives'
-import { inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { btnCls, inputCls, primaryBtnCls } from '@/components/ops/bits'
 import { quietHoursPairError } from '@/lib/settings/quiet-hours'
 
 type SaveAction = (prev: FormResult | null, f: FormData) => Promise<FormResult>
@@ -49,8 +49,20 @@ export function QuietHoursField({
 }) {
   const [s, setS] = useState(start ?? '')
   const [e, setE] = useState(end ?? '')
-  const save = async (_prev: FormResult | null, _f: FormData): Promise<FormResult> => {
-    if (!HHMM.test(s) || !HHMM.test(e)) return { ok: false, message: 'Pick both a start and an end time (24-hour HH:MM, e.g. 21:00).' }
+  const save = async (_prev: FormResult | null, f: FormData): Promise<FormResult> => {
+    // Clear (the button, or saving both fields empty) goes through the same server call with both ends blank.
+    const clearing = f.get('intent') === 'clear' || (!s && !e)
+    if (clearing) {
+      const fd = new FormData()
+      fd.set('start', '')
+      fd.set('end', '')
+      const r = await action(null, fd)
+      if (!r.ok) return r
+      setS('')
+      setE('')
+      return { ok: true, message: 'Cleared: no workspace quiet hours.' }
+    }
+    if (!HHMM.test(s) || !HHMM.test(e)) return { ok: false, message: 'Pick both a start and an end time (24-hour HH:MM, e.g. 21:00), or clear both.' }
     if (s === e) return { ok: false, message: 'Start and end are the same time, so there would be no quiet hours.' }
     const fd = new FormData()
     fd.set('start', s)
@@ -61,6 +73,12 @@ export function QuietHoursField({
   const [state, formAction, pending] = useActionState<FormResult | null, FormData>(save, null)
   const problem = storedProblem(start, end)
   const isSet = !problem && Boolean(start && end)
+  const canClear = Boolean(start || end) // anything stored, including a half-set or invalid pair, can be cleared
+  const clear = () => {
+    const fd = new FormData()
+    fd.set('intent', 'clear')
+    startTransition(() => formAction(fd))
+  }
   const overnight = HHMM.test(s) && HHMM.test(e) && e < s
   return (
     <div id={anchorStart} className="scroll-mt-20 border-b border-line-soft py-3 last:border-b-0 target:bg-warn-soft">
@@ -80,6 +98,11 @@ export function QuietHoursField({
         <button type="submit" disabled={pending || (s === (start ?? '') && e === (end ?? ''))} className={primaryBtnCls}>
           {pending ? 'Saving…' : 'Save'}
         </button>
+        {canClear ? (
+          <button type="button" onClick={clear} disabled={pending} className={btnCls}>
+            Clear
+          </button>
+        ) : null}
         {overnight ? <span className="text-[12px] text-ink-faint">(overnight, ends the next morning)</span> : null}
       </form>
       {state ? (

@@ -58,13 +58,13 @@ export async function saveSettingAction(_prev: FormResult | null, f: FormData): 
   }
 }
 
-/** Quiet hours are one range, saved together (start and end in a single transaction). */
+/** Quiet hours are one range, saved (or, with both blank, cleared) together in a single transaction. */
 export async function saveQuietHoursAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
   try {
     requireRole(await currentRole(), 'owner')
     const r = await putQuietHours(db(), await currentActorId(), s(f, 'start'), s(f, 'end'), { via: 'ui' })
     revalidatePath('/settings')
-    return { ok: true, message: `Saved: no emails from ${r.start} to ${r.end}.` }
+    return { ok: true, message: r.start ? `Saved: no emails from ${r.start} to ${r.end}.` : 'Cleared: no workspace quiet hours.' }
   } catch (e) {
     return fail(e)
   }

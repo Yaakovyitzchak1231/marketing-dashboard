@@ -201,6 +201,13 @@ describe('sendAllowed (plan 3.10)', () => {
       companyTimezone: 'America/New_York',
       workspaceQuietHours: { start: '', end: '' },
     })).toEqual({ allow: true })
+    // A cleared pair (rows deleted, so null/absent) is the same: no workspace quiet hours, not invalid.
+    for (const workspaceQuietHours of [{ start: null, end: null }, {}, null] as const) {
+      expect(sendAllowed(at('2026-10-14T01:30:00Z'), {
+        companyTimezone: 'America/New_York',
+        workspaceQuietHours,
+      })).toEqual({ allow: true })
+    }
   })
 
   it('a malformed quiet-hours clock holds the send instead of dropping the limit', () => {

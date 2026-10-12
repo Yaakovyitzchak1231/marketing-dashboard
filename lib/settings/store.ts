@@ -122,7 +122,7 @@ async function writeSetting(q: Queryable, actor: string, key: string, v: string,
 /**
  * Validated write of one non-secret setting. No-ops (still returns the row) when the value is unchanged.
  * The two quiet-hours keys are one range: a single-key write is refused when the pair it would leave is
- * half-set or has equal ends (use putQuietHours to set both together).
+ * half-set or has equal ends (use putQuietHours to set or clear both together).
  */
 export async function putSetting(db: Db, actor: string, key: string, value: string, opts: { via: Via; note?: string } = { via: 'ui' }): Promise<SettingRow> {
   const spec = requireNonSecretSpec(key)
@@ -134,13 +134,26 @@ export async function putSetting(db: Db, actor: string, key: string, value: stri
     if (key === QUIET_START_KEY || key === QUIET_END_KEY) {
       const other = await getSetting(q, key === QUIET_START_KEY ? QUIET_END_KEY : QUIET_START_KEY)
       const pairErr = key === QUIET_START_KEY ? quietHoursPairError(v, other) : quietHoursPairError(other, v)
-      if (pairErr) throw new SettingsError(`${pairErr} Save the start and end together (the Quiet hours control, or the put_quiet_hours op).`, 400)
+      if (pairErr) throw new SettingsError(`${pairErr} Save the start and end together, or clear both (the Quiet hours control, or the put_quiet_hours op).`, 400)
     }
     return writeSetting(q, actor, key, v, opts)
   }, actor)
 }
 
-/** Set quiet hours as one range: both required, 24-hour HH:MM, different. One transaction, so a half-set range is never stored. */
+/** Delete one non-secret setting row (a key with no row reads back as null: unset). Audits old -> null when it held a value. */
+async function deleteSetting(q: Queryable, actor: string, key: string, opts: { via: Via; note?: string }): Promise<void> {
+  const before = await getSetting(q, key)
+  await q.query('delete from lp.settings where key = $1', [key])
+  if (before !== null) await audit(q, actor, { key, oldValue: before, newValue: null, via: opts.via, note: opts.note })
+}
+
+/**
+ * Set quiet hours as one range, or clear them. To set: both required, 24-hour HH:MM, different.
+ * To clear: pass both blank; both rows are deleted (so getSetting reads null, "Not set") in the
+ * same transaction, each audited old -> null. Exactly one blank is refused. One transaction either
+ * way, so a half-set range is never stored. Clearing also repairs a stored half-set or invalid pair.
+ * Returns the saved range, or { start: '', end: '' } when cleared.
+ */
 export async function putQuietHours(
   db: Db,
   actor: string,
@@ -150,7 +163,15 @@ export async function putQuietHours(
 ): Promise<{ start: string; end: string }> {
   const s = typeof start === 'string' ? start.trim() : ''
   const e = typeof end === 'string' ? end.trim() : ''
-  if (!s || !e) throw new SettingsError(`Quiet hours need both a start and an end (${QUIET_START_KEY} and ${QUIET_END_KEY}).`, 400)
+  if (!s && !e) {
+    return db.tx(async (q) => {
+      await requireCanWriteSettings(q, actor, QUIET_START_KEY) // both keys are workspace.*, so one check covers the pair
+      await deleteSetting(q, actor, QUIET_START_KEY, opts)
+      await deleteSetting(q, actor, QUIET_END_KEY, opts)
+      return { start: '', end: '' }
+    }, actor)
+  }
+  if (!s || !e) throw new SettingsError(`Quiet hours need both a start and an end (${QUIET_START_KEY} and ${QUIET_END_KEY}), or leave both blank to clear them.`, 400)
   const pairErr = quietHoursPairError(s, e)
   if (pairErr) throw new SettingsError(pairErr, 400)
   return db.tx(async (q) => {
