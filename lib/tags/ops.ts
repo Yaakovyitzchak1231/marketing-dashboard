@@ -2,6 +2,8 @@
  * Tag ops for agents (POST /api/ops {op, ...} and the REST aliases in
  * lib/ops/dispatch.ts): list_tags, add_tag, remove_tag, rename_tag, merge_tags,
  * set_tag_style, tag_trends, change_tag. One spread line in lib/ops/dispatch.ts.
+ * set_tag_style is owner-only (agent keys too), and change_tag is capped at
+ * EDITOR_TAG_CHANGE_CAP leads for anyone but an owner.
  *
  * Renaming or merging a tag on EVERY lead is an owner's explicit choice
  * (Yaakov, Oct 11, 2026): rename_tag / merge_tags refuse any caller that is
@@ -10,7 +12,8 @@
  */
 import type { Db } from '@/lib/db/types'
 import { OpsError } from '@/lib/ops/core'
-import { addTag, changeTagOnLeads, countLeadsWithAnyTag, listTags, mergeTags, previewTagChange, removeTag, renameTag, setTagStyle, tagTrends, TagError } from './store'
+import { isOwnerActor, requireOwnerActor } from '@/lib/ops/actor-role'
+import { EDITOR_TAG_CHANGE_CAP, addTag, changeTagOnLeads, countLeadsWithAnyTag, listTags, mergeTags, previewTagChange, removeTag, renameTag, setTagStyle, tagTrends, TagError } from './store'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -79,11 +82,11 @@ export const TAG_OPS: Record<string, Op> = {
     run: wrap((db, actor, a) => removeTag(db, actor, { company_id: posInt(a.company_id, 'company_id'), tag: String(a.tag ?? '') })),
   },
   change_tag: {
-    args: '{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}  -- change a tag on one lead, on chosen leads, or on a segment\'s leads only. preview:true returns {count} and changes nothing; a change to more than one lead needs expected_count = that count. One audit entry, no per-lead timeline rows.',
+    args: `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}  -- change a tag on one lead, on chosen leads, or on a segment's leads only. preview:true returns {count} and changes nothing; a change to more than one lead needs expected_count = that count. At most ${EDITOR_TAG_CHANGE_CAP} leads per change unless the key is an owner's (agents: ask the owner for bigger changes). One audit entry, no per-lead timeline rows.`,
     run: wrap(async (db, actor, a) => {
       const scope = scopeOf(a)
       if (a.preview === true) return previewTagChange(db, { from: String(a.from ?? ''), ...scope })
-      return changeTagOnLeads(db, actor, { from: String(a.from ?? ''), to: String(a.to ?? ''), expected_count: optInt(a.expected_count, 'expected_count'), via: 'ops_api', ...scope })
+      return changeTagOnLeads(db, actor, { from: String(a.from ?? ''), to: String(a.to ?? ''), expected_count: optInt(a.expected_count, 'expected_count'), via: 'ops_api', ...scope }, { isOwner: await isOwnerActor(db, actor) })
     }),
   },
   rename_tag: {
@@ -106,8 +109,11 @@ export const TAG_OPS: Record<string, Op> = {
     run: wrap(async (db, _actor, a) => ({ count: await countLeadsWithAnyTag(db, strList(a.tags, 'tags')) })),
   },
   set_tag_style: {
-    args: '{tag, colour?: "#rrggbb", description?}',
-    run: wrap((db, actor, a) => setTagStyle(db, actor, { tag: String(a.tag ?? ''), colour: a.colour == null ? null : String(a.colour), description: a.description == null ? null : String(a.description) })),
+    args: '{tag, colour?: "#rrggbb", description?}  -- OWNER ONLY (same as Settings > Tags in the dashboard)',
+    run: wrap(async (db, actor, a) => {
+      await requireOwnerActor(db, actor, 'Styling a tag is an owner setting, made in the dashboard (Settings > Tags).')
+      return setTagStyle(db, actor, { tag: String(a.tag ?? ''), colour: a.colour == null ? null : String(a.colour), description: a.description == null ? null : String(a.description) })
+    }),
   },
   tag_trends: {
     args: '{weeks?}  -- tag-added counts per week (default last 8 weeks)',

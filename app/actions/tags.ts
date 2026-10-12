@@ -3,15 +3,17 @@
 /**
  * The /settings/tags page's buttons. Each checks the role itself (actorFor)
  * and writes as the signed-in person. Changing a tag on chosen leads needs
- * editor; renaming / merging a tag on every lead, and styling, need owner.
+ * editor (at most EDITOR_TAG_CHANGE_CAP leads; owners are not capped);
+ * renaming / merging a tag on every lead, and styling, need owner.
  * Every many-lead change goes through a confirm step showing the count.
  */
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { actorFor } from '@/lib/auth/act'
+import { currentRole } from '@/lib/auth/session'
 import { AuthError } from '@/lib/auth/roles'
-import { TagError, changeTagOnLeads, countLeadsWithAnyTag, mergeTags, previewTagChange, renameTag, setTagStyle } from '@/lib/tags/store'
+import { EDITOR_TAG_CHANGE_CAP, TagError, changeTagOnLeads, editorCapMessage, countLeadsWithAnyTag, mergeTags, previewTagChange, renameTag, setTagStyle } from '@/lib/tags/store'
 
 function db() {
   const d = getDb()
@@ -51,15 +53,18 @@ export async function previewTagChangeAction(f: FormData) {
   let q: Record<string, string>
   try {
     const ME = await actorFor('editor')
+    const isOwner = (await currentRole()) === 'owner'
     const scope = scopeFrom(f)
     const from = s(f, 'from')
     const to = s(f, 'to')
     if (scope.mode === 'one') {
-      await changeTagOnLeads(db(), ME, { from, to, company_id: scope.company_id, via: 'ui' })
+      await changeTagOnLeads(db(), ME, { from, to, company_id: scope.company_id, via: 'ui' }, { isOwner })
       revalidatePath('/settings/tags')
       q = { saved: `Changed "${from}" to "${to}" on lead #${scope.target}.` }
     } else {
       const p = await previewTagChange(db(), { from, company_ids: scope.company_ids, segment_id: scope.segment_id })
+      // Refuse at the preview, so nobody is asked to confirm a change that would be refused.
+      if (!isOwner && p.count > EDITOR_TAG_CHANGE_CAP) throw new TagError(editorCapMessage(p.count), 403)
       q = { confirm: 'change', from, to, mode: scope.mode, target: scope.target, count: String(p.count), scope: p.scope }
     }
   } catch (e) {
@@ -75,6 +80,7 @@ export async function changeTagAction(f: FormData) {
   let done = 0
   try {
     const ME = await actorFor('editor')
+    const isOwner = (await currentRole()) === 'owner'
     const scope = scopeFrom(f)
     const r = await changeTagOnLeads(db(), ME, {
       from: s(f, 'from'),
@@ -84,7 +90,7 @@ export async function changeTagAction(f: FormData) {
       company_id: scope.company_id,
       expected_count: Number(s(f, 'expected_count')),
       via: 'ui',
-    })
+    }, { isOwner })
     done = r.companies_updated
   } catch (e) {
     const m = msg(e)

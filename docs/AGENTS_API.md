@@ -217,8 +217,8 @@ crossing (deduped), so journeys can trigger on it later. A nightly job
 |---|---|
 | `list_score_models` | `{campaign_id?, kind?: engagement\|fit, active_only?}` |
 | `get_score_model` | `{id}` |
-| `upsert_score_model` | `{id?, name, entity: company\|contact, kind: engagement\|fit, campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}` — create (omit id) or edit (give id); writes one `lp.status_history` row (`entity_type: 'score_model'`). At most one default (campaign_id null) model per entity+kind, one per-campaign model per entity+kind+campaign. |
-| `recompute_scores` | `{model_id?, company_id?, contact_id?}` — omit everything to recompute every active model for every lead it covers (the nightly job's call). |
+| `upsert_score_model` | **Owner or system only** (an agent or Editor key gets 403). `{id?, name, entity: company\|contact, kind: engagement\|fit, campaign_id?, rules: [{rule_key,label,event_type,points,expires_after_days?,props_match?}], thresholds?: [{key,label,min}], max_points?, active?}` — create (omit id) or edit (give id); writes one `lp.status_history` row (`entity_type: 'score_model'`). At most one default (campaign_id null) model per entity+kind, one per-campaign model per entity+kind+campaign. |
+| `recompute_scores` | **Owner or system only** (the nightly `score_refresh` job runs it as system). `{model_id?, company_id?, contact_id?}` — omit everything to recompute every active model for every lead it covers (the nightly job's call). |
 | `lead_scores` | `{company_id}` → every active model's current score + threshold for one lead, for the lead page / a leads-table column. |
 
 `lib/scoring/fields.ts#scoreFieldDescriptors` is the hand-off point for the segment
@@ -240,7 +240,7 @@ existed since 0018_lead_events.sql).
 | `add_tag` / `remove_tag` | `{company_id, tag, colour?, description?}` / `{company_id, tag}` — one company, emits `tag_added`/`tag_removed`. |
 | `rename_tag` | `{from, to}` — updates every company carrying `from`; audited; `tag_removed`+`tag_added` per affected lead. |
 | `merge_tags` | `{tags: [...], into}` — updates every company carrying any listed tag; audited; events per affected lead. |
-| `set_tag_style` | `{tag, colour?: "#rrggbb", description?}` |
+| `set_tag_style` | **Owner only** (agent keys too). `{tag, colour?: "#rrggbb", description?}` |
 | `tag_trends` | `{weeks?}` → tag-added counts per week (default last 8 weeks), from `lp.lead_events`. |
 
 UI: Settings → Scoring (`/settings/scoring`) and Settings → Data → Tags
@@ -530,7 +530,7 @@ now, no form yet); a `score.*` field to read for `avg_score` (2.8's own PR).
 
 A tag is never silently changed on every lead.
 
-- `change_tag` `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}` changes the tag only on one lead, on the leads you list, or on a segment's leads. A static list uses its members; a dynamic segment uses its rules. `preview: true` returns `{count, scope}` and changes nothing. A change to more than one lead needs `expected_count` equal to that count, and a moved count is refused with 409. It writes one audit entry (who, old name, new name, how many leads) and no per-lead timeline rows.
+- `change_tag` `{from, to, company_id? | company_ids?: number[] | segment_id?, preview?: boolean, expected_count?}` changes the tag only on one lead, on the leads you list, or on a segment's leads. A static list uses its members; a dynamic segment uses its rules. `preview: true` returns `{count, scope}` and changes nothing. A change to more than one lead needs `expected_count` equal to that count, and a moved count is refused with 409. It writes one audit entry (who, old name, new name, how many leads) and no per-lead timeline rows. Anyone but an owner (agent keys and Editors) may change at most 500 leads in one call; a bigger change gets 403, so ask the owner. Merged-away leads are never counted or changed.
 - `rename_tag` `{from, to, expected_count}` and `merge_tags` `{tags, into, expected_count}` change the tag on every lead. They are owner-only: an agent key gets 403, and agents use `change_tag`. They also need `expected_count`, and each writes one audit entry with no per-lead timeline rows.
 - `count_tagged` `{tags: [string,...]}` returns how many leads carry any of the tags now.
 
