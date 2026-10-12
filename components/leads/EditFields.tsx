@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BUTTON_PRIMARY } from '@/components/app/PageShell'
+import { fetchRole, useRole } from '@/components/auth/useRole'
+import { VIEW_ONLY_DIM, VIEW_ONLY_PROPS, announceViewOnly, failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 export interface EditField {
   name: string
@@ -35,6 +37,7 @@ export function EditFields({
   const [values, setValues] = useState<Record<string, string>>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const viewer = useRole() === 'viewer'
 
   function close() {
     setOpen(false)
@@ -67,13 +70,13 @@ export function EditFields({
         body: JSON.stringify(changed),
       })
       const json = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) setError(json?.error ?? `Not saved (${res.status}).`)
+      if (!res.ok) setError(failedWriteText(res.status, json?.error, `Not saved (${res.status}).`, await fetchRole()))
       else {
         setOpen(false)
         router.refresh?.()
       }
-    } catch {
-      setError('Couldn’t reach the server. Not saved.')
+    } catch (err) {
+      setError(thrownWriteText(err, await fetchRole(), 'Not saved.'))
     } finally {
       setBusy(false)
     }
@@ -81,7 +84,13 @@ export function EditFields({
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[12px] text-accent hover:underline" aria-label={`Edit ${title}`}>
+      <button
+        type="button"
+        onClick={() => (viewer ? announceViewOnly() : setOpen(true))}
+        className={`text-[12px] text-accent ${viewer ? VIEW_ONLY_DIM : 'hover:underline'}`}
+        aria-label={`Edit ${title}`}
+        {...(viewer ? VIEW_ONLY_PROPS : {})}
+      >
         Edit
       </button>
     )
@@ -89,7 +98,7 @@ export function EditFields({
 
   const input = 'w-full rounded-[3px] border border-line bg-surface px-2 py-1 text-[13px] text-ink'
   return (
-    <form onSubmit={submit} className="w-full basis-full rounded-card border border-line-soft bg-canvas p-3" aria-label={`Edit ${title}`}>
+    <form onSubmit={submit} data-write className="w-full basis-full rounded-card border border-line-soft bg-canvas p-3" aria-label={`Edit ${title}`}>
       <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
         {fields.map((f) => {
           const id = `${endpoint}-${f.name}`.replace(/[^a-z0-9-]/gi, '-')

@@ -7,6 +7,12 @@ import { EDITABLE_CONTACT_STATUSES } from '@/lib/leads/edit-fields'
 
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh }) }))
+// The form reads the role (GET /api/internal/role) for UI only; keep that out of the fetch mocks below.
+vi.mock('@/components/auth/useRole', async (orig) => ({
+  ...(await orig<typeof import('@/components/auth/useRole')>()),
+  useRole: () => 'owner',
+  fetchRole: async () => 'owner',
+}))
 
 function contactForm() {
   return render(

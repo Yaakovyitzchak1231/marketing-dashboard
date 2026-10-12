@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRole } from './useRole'
-import { VIEW_ONLY_TOAST, isViewerRefusal, isWriteForm, submitButtonsOf } from './viewOnly'
+import { VIEW_ONLY_EVENT, VIEW_ONLY_TOAST, isViewerRefusal, isWriteForm, submitButtonsOf } from './viewOnly'
 
 const MARK = 'data-view-only-disabled'
 const DIM = ['opacity-50', 'cursor-not-allowed']
@@ -11,7 +11,8 @@ const DIM = ['opacity-50', 'cursor-not-allowed']
  * For viewers only: stops write forms before they post (the server would
  * refuse them anyway), marks their submit buttons as view-only, and turns a
  * refused write that slipped through (a click handler calling a server
- * action) into a short, calm note instead of silence.
+ * action) into a short, calm note instead of silence. Components that already
+ * know the role call announceViewOnly() to show the same note.
  *
  * UI only. middleware.ts stays the gate; nothing here grants or removes access.
  * Mount once, in app/layout.tsx: <ViewOnlyGuard />
@@ -30,6 +31,13 @@ export function ViewOnlyGuard() {
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
   }, [])
+
+  // Components that know the person is a viewer (an inline edit cell, an
+  // "Edit" toggle) ask for the same calm note instead of opening an editor.
+  useEffect(() => {
+    window.addEventListener(VIEW_ONLY_EVENT, show)
+    return () => window.removeEventListener(VIEW_ONLY_EVENT, show)
+  }, [show])
 
   useEffect(() => {
     if (role !== 'viewer') return

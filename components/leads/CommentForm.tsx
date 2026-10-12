@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BUTTON_PRIMARY } from '@/components/app/PageShell'
+import { fetchRole } from '@/components/auth/useRole'
+import { failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 /** Add a comment as the owner. @tab, @hermes, @claude… notify that teammate. */
 export function CommentForm({ companyId, handles }: { companyId: number; handles: string[] }) {
@@ -23,20 +25,20 @@ export function CommentForm({ companyId, handles }: { companyId: number; handles
         body: JSON.stringify({ body }),
       })
       const json = (await res.json().catch(() => null)) as { error?: string } | null
-      if (!res.ok) setError(json?.error ?? `Couldn’t post (${res.status}).`)
+      if (!res.ok) setError(failedWriteText(res.status, json?.error, `Couldn’t post (${res.status}).`, await fetchRole()))
       else {
         setBody('')
         router.refresh?.()
       }
-    } catch {
-      setError('Couldn’t reach the server.')
+    } catch (err) {
+      setError(thrownWriteText(err, await fetchRole()))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form onSubmit={submit} className="mt-3">
+    <form onSubmit={submit} data-write className="mt-3">
       <label htmlFor="comment-body" className="sr-only">
         Comment
       </label>

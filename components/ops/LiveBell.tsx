@@ -4,10 +4,16 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { subscribeLive } from './live'
 
-/** Unread count for Yaakov, live (screens that show live data refresh themselves via AutoRefresh). */
-export function LiveBell() {
+/** The live unread count (null until the first answer). One shared connection, however many callers. */
+export function useUnread(): number | null {
   const [unread, setUnread] = useState<number | null>(null)
   useEffect(() => subscribeLive((c) => setUnread(c.unread)), [])
+  return unread
+}
+
+/** Unread count for Yaakov, live (screens that show live data refresh themselves via AutoRefresh). */
+export function LiveBell() {
+  const unread = useUnread()
   return (
     <Link
       href="/agents/owner"

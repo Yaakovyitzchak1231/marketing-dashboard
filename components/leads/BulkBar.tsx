@@ -7,6 +7,8 @@ import { STAGE_LABELS } from '@/lib/leads/filters'
 import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { VerifyButton } from '@/components/verify/VerifyButton'
 import Link from 'next/link'
+import { fetchRole, useRole } from '@/components/auth/useRole'
+import { VIEW_ONLY_DIM, VIEW_ONLY_PROPS, announceViewOnly, failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 export interface Selected {
   companyIds: number[]
@@ -23,6 +25,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   const [lists, setLists] = useState<{ id: number; name: string }[]>([])
   const [listChoice, setListChoice] = useState('')
   const [newListName, setNewListName] = useState('')
+  const viewer = useRole() === 'viewer'
 
   useEffect(() => {
     fetch('/api/leads/lists')
@@ -40,7 +43,15 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
     ) : null
   }
 
+  /** Viewers can select and look; the write buttons only say so. */
+  function viewOnly(): boolean {
+    if (!viewer) return false
+    announceViewOnly()
+    return true
+  }
+
   async function research() {
+    if (viewOnly()) return
     setBusy(true)
     setNote(null)
     try {
@@ -51,22 +62,22 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
       })
       const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
       if (res.status === 404) setNote({ tone: 'bad', text: 'The research queue isn’t on this deploy yet.' })
-      else if (!res.ok) setNote({ tone: 'bad', text: String(body?.error ?? `Research request failed (${res.status}).`) })
+      else if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, body?.error, `Research request failed (${res.status}).`, await fetchRole()) })
       else {
         const queued = typeof body?.queued === 'number' ? body.queued : null
         setNote({ tone: 'good', text: queued === null ? 'Sent to the research queue.' : `${queued} queued for research.` })
         onDone()
         router.refresh?.()
       }
-    } catch {
-      setNote({ tone: 'bad', text: 'Couldn’t reach the server.' })
+    } catch (err) {
+      setNote({ tone: 'bad', text: thrownWriteText(err, await fetchRole()) })
     } finally {
       setBusy(false)
     }
   }
 
   async function applyStage() {
-    if (!stage) return
+    if (!stage || viewOnly()) return
     setBusy(true)
     setNote(null)
     try {
@@ -76,21 +87,21 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
         body: JSON.stringify({ company_ids: selected.companyIds, stage }),
       })
       const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
-      if (!res.ok) setNote({ tone: 'bad', text: String(body?.error ?? `Couldn’t change the stage (${res.status}).`) })
+      if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, body?.error, `Couldn’t change the stage (${res.status}).`, await fetchRole()) })
       else {
         setNote({ tone: 'good', text: typeof body?.updated === 'number' ? `${body.updated} moved to ${STAGE_LABELS[stage]}.` : `Moved to ${STAGE_LABELS[stage]}.` })
         onDone()
         router.refresh?.()
       }
-    } catch {
-      setNote({ tone: 'bad', text: 'Couldn’t reach the server.' })
+    } catch (err) {
+      setNote({ tone: 'bad', text: thrownWriteText(err, await fetchRole()) })
     } finally {
       setBusy(false)
     }
   }
 
   async function addToList() {
-    if (!listChoice && !newListName.trim()) return
+    if ((!listChoice && !newListName.trim()) || viewOnly()) return
     setBusy(true)
     setNote(null)
     try {
@@ -103,7 +114,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
         body: JSON.stringify(body),
       })
       const resBody = (await res.json().catch(() => null)) as Record<string, unknown> | null
-      if (!res.ok) setNote({ tone: 'bad', text: String(resBody?.error ?? `Couldn\u2019t add to the list (${res.status}).`) })
+      if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, resBody?.error, `Couldn\u2019t add to the list (${res.status}).`, await fetchRole()) })
       else {
         const list = resBody?.list as { name?: string } | undefined
         setNote({ tone: 'good', text: `Added ${resBody?.added ?? ''} lead${resBody?.added === 1 ? '' : 's'} to \u201C${list?.name ?? 'the list'}\u201D.` })
@@ -112,8 +123,8 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
         onDone()
         router.refresh?.()
       }
-    } catch {
-      setNote({ tone: 'bad', text: 'Couldn\u2019t reach the server.' })
+    } catch (err) {
+      setNote({ tone: 'bad', text: thrownWriteText(err, await fetchRole()) })
     } finally {
       setBusy(false)
     }
@@ -127,7 +138,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
       className="sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 shadow-card"
     >
       <span className="mr-1 text-[12px] font-medium tabular-nums text-ink">{n} selected</span>
-      <button type="button" className={BUTTON_PRIMARY} disabled={busy} onClick={research}>
+      <button type="button" className={`${BUTTON_PRIMARY} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy} onClick={research} {...(viewer ? VIEW_ONLY_PROPS : {})}>
         Research selected
       </button>
       {verifyIds.length ? (
@@ -166,7 +177,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             className="w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
           />
         ) : null}
-        <button type="button" className={BUTTON} disabled={busy || (!listChoice && !newListName.trim())} onClick={addToList}>
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy || (!listChoice && !newListName.trim())} onClick={addToList} {...(viewer ? VIEW_ONLY_PROPS : {})}>
           Add
         </button>
       </span>
@@ -195,7 +206,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             </option>
           ))}
         </select>
-        <button type="button" className={BUTTON} disabled={busy || !stage} onClick={applyStage}>
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy || !stage} onClick={applyStage} {...(viewer ? VIEW_ONLY_PROPS : {})}>
           Apply
         </button>
       </span>

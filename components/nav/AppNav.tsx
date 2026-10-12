@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { LiveBell } from '@/components/ops/LiveBell'
+import { LiveBell, useUnread } from '@/components/ops/LiveBell'
 
 /**
  * The app's one navigation bar.
@@ -117,6 +117,9 @@ export function AppNav() {
   const menuBox = useRef<HTMLDivElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
   const menuPanel = useRef<HTMLElement>(null)
+  // Shares LiveBell's one live connection. When the Inbox badge shows, More drops the
+  // "· Settings"-style name so the bar never crowds the badge at xl (1280-1535px).
+  const unread = useUnread()
 
   // Any route change closes both panels (adjusting state during render, not in an effect).
   const [lastPath, setLastPath] = useState(pathname)
@@ -138,12 +141,15 @@ export function AppNav() {
     const root = document.documentElement
     const prevOverflow = root.style.overflow
     root.style.overflow = 'hidden'
+    // The comment layer's floating "My comments" pill hides itself while this is set.
+    root.setAttribute('data-nav-menu-open', '')
     const panel = menuPanel.current
     const target = panel?.querySelector<HTMLElement>('a[aria-current="page"]') ?? panel?.querySelector<HTMLElement>('a')
     target?.focus({ preventScroll: true })
     const button = menuButton.current
     return () => {
       root.style.overflow = prevOverflow
+      root.removeAttribute('data-nav-menu-open')
       // Only pull focus back if it was left nowhere (inside the now-closed drawer), not if the
       // close came from a tap somewhere else on the page.
       const at = document.activeElement
@@ -159,7 +165,12 @@ export function AppNav() {
   const activeInMoreAtSomeWidth = active ? tierOf(active.href) !== 'md' : false
 
   return (
-    <div ref={menuBox} className="sticky top-0 z-30 print:hidden border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85">
+    // While the phone drawer is open the bar (and the drawer inside it) stacks above the comment
+    // layer (pins z-40, pill and tray z-50), so nothing of it can draw over the drawer.
+    <div
+      ref={menuBox}
+      className={`sticky top-0 ${menuOpen ? 'z-[55]' : 'z-30'} print:hidden border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85`}
+    >
       <div className="mx-auto flex max-w-shell items-center gap-2 px-4 sm:px-6 md:gap-4">
         <Link href="/" prefetch={false} className="shrink-0 py-3 text-[13px] font-semibold tracking-[-0.01em] text-ink">
           TapDash
@@ -206,8 +217,12 @@ export function AppNav() {
                 More
                 {active && activeInMoreAtSomeWidth ? (
                   <>
-                    {/* The name only where there is room for it (xl, where More holds the short admin names). */}
-                    {tierOf(active.href) === 'never' ? <span className="hidden font-medium text-ink xl:inline">· {active.label}</span> : null}
+                    {/* The name only where there is room for it: xl, where More holds the short admin names,
+                        and only while the Inbox has no unread badge (with "99+" the bar has ~7px left at
+                        1280-1535px). The underline still marks More as the current place. */}
+                    {tierOf(active.href) === 'never' && !unread ? (
+                      <span className="hidden font-medium text-ink xl:inline">· {active.label}</span>
+                    ) : null}
                     <span aria-hidden="true" className={`absolute inset-x-2.5 bottom-[-1px] h-[2px] bg-accent ${activeMoreClass}`} />
                   </>
                 ) : null}
