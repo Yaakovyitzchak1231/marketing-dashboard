@@ -19,7 +19,7 @@ export function Milestones({ data }: { data: MilestonesData }) {
       {any ? (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] sm:grid-cols-4">
           {ROWS.map((r) => (
-            <div key={r.key}>
+            <div key={r.key} className="min-w-0">
               <dt className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">{r.label}</dt>
               <dd className="mt-0.5 text-ink">{data[r.key] ? dateTime(data[r.key]) : 'Not yet'}</dd>
             </div>

@@ -95,12 +95,12 @@ export function LeadTimeline({ events }: { events: LeadEventRow[] }) {
       {events.map((e) => (
         <li key={e.id} className="px-4 py-2.5 text-[13px]">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-medium text-ink">{eventLabel(e)}</span>
+            <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{eventLabel(e)}</span>
             <span className="text-[12px] tabular-nums text-ink-faint" title={new Date(e.occurred_at).toLocaleString('en-US')}>
               {relativeTime(e.occurred_at)}
             </span>
           </div>
-          {e.campaign_name ? <div className="text-[12px] text-ink-faint">{e.campaign_name}</div> : null}
+          {e.campaign_name ? <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">{e.campaign_name}</div> : null}
         </li>
       ))}
     </ol>

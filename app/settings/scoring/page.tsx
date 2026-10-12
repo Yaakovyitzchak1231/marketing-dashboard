@@ -92,7 +92,7 @@ export default async function ScoringSettingsPage({ searchParams }: { searchPara
                       </table>
                     ) : (
                       <p className="mb-3 text-[12.5px] text-ink-faint">
-                        {m.kind === 'fit' ? 'No signal rules yet — add approved signal_rule items to this campaign&rsquo;s profile.' : 'No rules yet.'}
+                        {m.kind === 'fit' ? 'No signal rules yet — add approved signal_rule items to this campaign’s profile.' : 'No rules yet.'}
                       </p>
                     )}
 

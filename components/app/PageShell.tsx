@@ -6,8 +6,8 @@ export function PageHeader({ title, meta, actions }: { title: string; meta?: Rea
   return (
     <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h1>
-        {meta ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{meta}</p> : null}
+        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink [overflow-wrap:anywhere]">{title}</h1>
+        {meta ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint [overflow-wrap:anywhere]">{meta}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>

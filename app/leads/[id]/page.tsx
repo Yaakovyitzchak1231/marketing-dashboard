@@ -161,7 +161,7 @@ export default async function LeadPage({
         <div className="flex flex-col gap-6">
           <Milestones data={profile.milestones} />
           <Reachability items={profile.reachability} />
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <SegmentsCard data={profile.segments} />
             <CampaignsCard data={profile.campaigns} />
             <LeadListsCard db={db} companyId={c.id} />
@@ -170,15 +170,15 @@ export default async function LeadPage({
                 <ul className="divide-y divide-line-soft">
                   {d.tasks.map((t) => (
                     <li key={t.id} className="px-4 py-2.5 text-[13px]">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="min-w-0 truncate text-ink">{t.title}</span>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 text-ink [overflow-wrap:anywhere]">{t.title}</span>
                         <Pill tone={t.status === 'done' ? 'good' : t.status === 'failed' ? 'bad' : t.status === 'needs_approval' ? 'warn' : 'neutral'}>{t.status.replace(/_/g, ' ')}</Pill>
                       </div>
-                      <div className="text-[12px] text-ink-faint">
+                      <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">
                         {[t.claimed_by ? `by ${t.claimed_by}` : t.assigned_to ? `for ${t.assigned_to}` : 'unclaimed', shortDate(t.updated_at)].join(' · ')}
                       </div>
-                      {t.report ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted">{t.report}</p> : null}
-                      {t.error ? <p className="mt-1 text-[12px] text-bad">{t.error}</p> : null}
+                      {t.report ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted [overflow-wrap:anywhere]">{t.report}</p> : null}
+                      {t.error ? <p className="mt-1 text-[12px] text-bad [overflow-wrap:anywhere]">{t.error}</p> : null}
                     </li>
                   ))}
                 </ul>
@@ -193,11 +193,11 @@ export default async function LeadPage({
                   <ul className="flex flex-col gap-3">
                     {d.comments.map((cm) => (
                       <li key={cm.id} className="text-[13px]">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="font-medium text-ink">{cm.author_name}</span>
-                          <span className="text-[11px] tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                          <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{cm.author_name}</span>
+                          <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
                         </div>
-                        <p className="whitespace-pre-wrap break-words text-ink-muted">{cm.body}</p>
+                        <p className="whitespace-pre-wrap text-ink-muted [overflow-wrap:anywhere]">{cm.body}</p>
                       </li>
                     ))}
                   </ul>
@@ -228,11 +228,11 @@ export default async function LeadPage({
                   return (
                     <li key={t.id} className="px-4 py-2.5 text-[13px]">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-medium text-ink">{EVENT_LABEL[t.event_type] ?? t.event_type.replace(/_/g, ' ')}</span>
+                        <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{EVENT_LABEL[t.event_type] ?? t.event_type.replace(/_/g, ' ')}</span>
                         <span className="text-[12px] tabular-nums text-ink-faint">{dateTime(t.occurred_at)}</span>
                       </div>
-                      <div className="text-[12px] text-ink-faint">{[t.campaign_name, t.email].filter(Boolean).join(' · ')}</div>
-                      {snippet ? <p className="mt-1 line-clamp-3 break-words text-[12px] text-ink-muted">“{snippet}”</p> : null}
+                      <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">{[t.campaign_name, t.email].filter(Boolean).join(' · ')}</div>
+                      {snippet ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted [overflow-wrap:anywhere]">“{snippet}”</p> : null}
                     </li>
                   )
                 })}
@@ -247,10 +247,10 @@ export default async function LeadPage({
       {tab === 'engagement' ? <EngagementPanel data={profile.engagement} /> : null}
 
       {tab === 'details' ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-6">
             <Card className="px-4 py-3">
-              <div className="mb-2 flex items-center justify-end gap-3">
+              <div className="mb-2 flex flex-wrap items-center justify-end gap-3">
                 <HistoryDrawer type="company" id={c.id} />
                 <EditFields
                   endpoint={`/api/leads/${c.id}`}
@@ -292,9 +292,9 @@ export default async function LeadPage({
                 <ul className="divide-y divide-line-soft">
                   {d.contacts.map((ct) => (
                     <li key={ct.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-ink">{ct.email ?? 'No email'}</div>
-                        <div className="text-[12px] text-ink-faint">
+                      <div className="min-w-0 flex-1 basis-[220px]">
+                        <div className="font-medium text-ink [overflow-wrap:anywhere]">{ct.email ?? 'No email'}</div>
+                        <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">
                           {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
                             .filter(Boolean)
                             .join(' · ')}
@@ -304,7 +304,7 @@ export default async function LeadPage({
                         <div className="mt-1"><ForgetContactButton contactId={ct.id} email={ct.email} /></div>
 
                       </div>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex shrink-0 flex-wrap items-center gap-1.5">
                         {ct.do_not_contact ? <Pill tone="bad">Do not contact</Pill> : null}
                         <VerificationPill status={ct.verification_status} />
                         <HistoryDrawer type="contact" id={ct.id} label="History" />
@@ -373,7 +373,7 @@ export default async function LeadPage({
               {d.history.length ? (
                 <ol className="divide-y divide-line-soft">
                   {d.history.map((h) => (
-                    <li key={h.id} className="px-4 py-2 text-[12px]">
+                    <li key={h.id} className="px-4 py-2 text-[12px] [overflow-wrap:anywhere]">
                       <div className="text-ink-muted">
                         {h.entity_type === 'contact' ? <span className="text-ink-faint">{h.email ?? 'contact'} · </span> : null}
                         {historyLine(h.field, h.old_value, h.new_value)}
@@ -394,9 +394,9 @@ export default async function LeadPage({
                 <ul className="divide-y divide-line-soft">
                   {d.sources.map((s) => (
                     <li key={s.id} className="px-4 py-2 text-[12px]">
-                      <div className="text-ink">{s.kind.replace(/_/g, ' ')}{s.source_ref ? <span className="text-ink-faint"> · {s.source_ref}</span> : null}</div>
+                      <div className="text-ink [overflow-wrap:anywhere]">{s.kind.replace(/_/g, ' ')}{s.source_ref ? <span className="text-ink-faint"> · {s.source_ref}</span> : null}</div>
                       <div className="flex justify-between gap-2 text-ink-faint">
-                        {safeHref(s.url) ? <a className="truncate text-accent" href={safeHref(s.url)!} target="_blank" rel="noreferrer noopener">{s.url}</a> : <span />}
+                        {safeHref(s.url) ? <a className="min-w-0 truncate text-accent" href={safeHref(s.url)!} target="_blank" rel="noreferrer noopener">{s.url}</a> : <span />}
                         <span className="shrink-0 tabular-nums">{shortDate(s.observed_at)}</span>
                       </div>
                     </li>
@@ -430,7 +430,7 @@ function historyLine(field: string, from: string | null, to: string | null): str
 
 function Section({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
   return (
-    <section>
+    <section className="min-w-0">
       <SectionHeader title={title} meta={meta} />
       <Card className="overflow-hidden">{children}</Card>
     </section>
@@ -441,7 +441,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 items-baseline gap-3">
       <dt className="w-[72px] shrink-0 text-[12px] text-ink-faint">{label}</dt>
-      <dd className="min-w-0 break-words text-ink">{children === null || children === undefined || children === '' ? <Dash /> : children}</dd>
+      <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{children === null || children === undefined || children === '' ? <Dash /> : children}</dd>
     </div>
   )
 }
@@ -478,13 +478,13 @@ function Readiness({ list, contacts }: { list: LeadReadiness[]; contacts: LeadDe
           <li key={ruleSet.id} className="px-4 py-2.5 text-[13px]">
             <div className="flex flex-wrap items-center gap-2">
               <TierPill tier={verdict.tier} />
-              <Link href={`/rules/${ruleSet.id}`} prefetch={false} className="font-medium text-ink hover:text-accent">
+              <Link href={`/rules/${ruleSet.id}`} prefetch={false} className="min-w-0 font-medium text-ink hover:text-accent [overflow-wrap:anywhere]">
                 {ruleSet.name}
               </Link>
-              {verdict.contact_id ? <span className="text-[12px] text-ink-faint">via {email(verdict.contact_id) ?? `contact ${verdict.contact_id}`}</span> : null}
+              {verdict.contact_id ? <span className="min-w-0 text-[12px] text-ink-faint [overflow-wrap:anywhere]">via {email(verdict.contact_id) ?? `contact ${verdict.contact_id}`}</span> : null}
             </div>
             {verdict.reasons.length ? (
-              <ul className="mt-1 list-disc pl-5 text-[12.5px] text-ink-muted">
+              <ul className="mt-1 list-disc pl-5 text-[12.5px] text-ink-muted [overflow-wrap:anywhere]">
                 {verdict.reasons.map((r, i) => (
                   <li key={i}>
                     {r.label}: {r.detail}

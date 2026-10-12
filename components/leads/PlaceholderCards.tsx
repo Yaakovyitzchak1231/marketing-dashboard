@@ -12,11 +12,11 @@ export function PlaceholderCards({ placeholders }: { placeholders: LeadProfile['
   return (
     <Card className="p-4">
       <SectionHeader title="Coming later" />
-      <dl className="grid grid-cols-3 gap-3 text-[13px]">
+      <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-3">
         {rows.map((r) => (
-          <div key={r.label}>
+          <div key={r.label} className="min-w-0">
             <dt className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">{r.label}</dt>
-            <dd className="mt-0.5 text-ink-faint">{r.note}</dd>
+            <dd className="mt-0.5 text-ink-faint [overflow-wrap:anywhere]">{r.note}</dd>
           </div>
         ))}
       </dl>

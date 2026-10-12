@@ -360,7 +360,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
 
       {step === 3 ? (
         <Card className="space-y-4 p-4">
-          <SectionHeader title="Add &amp; review items" />
+          <SectionHeader title="Add & review items" />
           <div className="flex flex-wrap items-end gap-2 border-b border-line pb-3">
             <label className={LABEL}>
               Kind
@@ -402,7 +402,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
 
       {step === 4 ? (
         <Card className="space-y-3 p-4">
-          <SectionHeader title="UTM conventions &amp; KPIs" />
+          <SectionHeader title="UTM conventions & KPIs" />
           <div className="grid gap-2 sm:grid-cols-2">
             <label className={LABEL}>utm_source<input className={INPUT} value={utmSource} onChange={(e) => setUtmSource(e.target.value)} placeholder="tapdash" /></label>
             <label className={LABEL}>utm_medium<input className={INPUT} value={utmMedium} onChange={(e) => setUtmMedium(e.target.value)} placeholder="email" /></label>

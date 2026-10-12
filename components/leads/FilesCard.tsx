@@ -27,8 +27,8 @@ export function FilesCard({ companyId, data }: { companyId: number; data: FilesS
             const removeAction = removeLeadFileAction.bind(null, companyId, f.id)
             return (
               <li key={f.id} className="flex items-center justify-between gap-2 py-1.5">
-                <div className="min-w-0">
-                  <a href={f.url} target="_blank" rel="noreferrer" className="truncate text-ink hover:underline">
+                <div className="min-w-0 flex-1">
+                  <a href={f.url} target="_blank" rel="noreferrer" className="block truncate text-ink hover:underline">
                     {f.name}
                   </a>
                   {f.note ? <div className="truncate text-[12px] text-ink-faint">{f.note}</div> : null}
