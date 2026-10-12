@@ -32,6 +32,8 @@ function back(q: Record<string, string>): never {
 }
 
 export async function poolsPageRole(): Promise<{ isOwner: boolean }> {
+  // Read used by the pools page (viewers included) to hide owner-only buttons.
+  await actorFor('viewer')
   return { isOwner: (await currentRole()) === 'owner' }
 }
 

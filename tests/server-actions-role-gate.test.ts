@@ -41,6 +41,7 @@ const ALLOW: Record<string, string> = {
 /** Actions gated at viewer on purpose. They must be reads; anything that writes needs editor or owner. */
 const VIEWER_READS: Record<string, string> = {
   'page-comments.ts:listMyCommentsAction': "read: the caller's own comments",
+  'pools.ts:poolsPageRole': 'read: whether the signed-in person is an owner, so the pools page can hide owner buttons',
 }
 
 /** Split a file into [name, body] for each `export async function name(...) { ... }`. */
