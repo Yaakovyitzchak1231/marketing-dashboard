@@ -148,7 +148,7 @@ describe('settings store (real Postgres via PGlite)', () => {
       await putSecret(db, 'owner', 'mail.api_key', 'db-resend-api-key')
 
       const env = {
-        NODE_ENV: 'test',
+        NODE_ENV: 'test' as const,
         MAIL_PROVIDER: 'brevo',
         MAIL_API_KEY: 'env-brevo-api-key',
         MAIL_FROM: 'Env Alerts <env-alerts@example.com>',
