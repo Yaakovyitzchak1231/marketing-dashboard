@@ -75,6 +75,19 @@ until you click Approve on a cost preview with a dollar ceiling; spend never pas
 the ceiling. Prices (Oct 8, 2026 list prices) are in `lib/verify/pricing.ts` and can be
 overridden with `MV_COST_PER_CHECK` / `ZB_COST_PER_CHECK`.
 
+Who can do what: previewing, approving, running and cancelling a run need the owner
+role (each route checks it before anything else, so a non-owner gets 403 and learns
+nothing). Reading runs, spend and balances (`GET /api/verify/runs`, `/runs/:id`,
+`/status`, and the `/verify` screen itself) needs editor or owner. A ceiling above
+$500 also needs `confirm_high_spend: true` in the approve request (400 without it);
+the screen asks "Is that the amount you mean?" and sends the flag on the second click.
+The hard cap is $10,000 either way. A single owner can approve their own preview (a
+rule against it would lock out a one-owner team); instead each step is recorded under
+its own person: the run keeps `requested_by` and `approved_by`, the `verify.approved`
+event carries both ids, and the `verify.done` / `verify.failed` event, the per-lead
+`verified` event and the status history name whoever ran the step. (`verified_by` on a
+contact is the provider that decided, not a person.)
+
 ## The database
 
 Plain PostgreSQL 13+ in its own schema, `lp` (`db/migrations/`). No Supabase-only

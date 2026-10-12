@@ -6,12 +6,20 @@
  */
 import { NextResponse } from 'next/server'
 import { stepRun, verifyEnvFromConfig } from '@/lib/verify/runs'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId, readJson } from '../../../_shared'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // Role check first: a non-owner learns nothing about validation, the database or the run.
+  let actor: string
+  try {
+    actor = await actorFor('owner')
+  } catch (e) {
+    return fail(e)
+  }
   const db = dbOrNull()
   if (!db) return notConnected()
   const id = parseRunId((await params).id)
@@ -25,6 +33,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       chunk: Number.isFinite(chunk) ? chunk : undefined,
       concurrency: Number.isFinite(concurrency) ? concurrency : undefined,
       timeBudgetMs: 40_000,
+      // The person running this step, not whoever approved the run.
+      actor,
     })
     return NextResponse.json(report, { headers: NO_STORE })
   } catch (e) {
