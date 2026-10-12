@@ -119,13 +119,13 @@ describe('campaign profile reader, REST, validate/export/import (plan 1.16)', ()
     const patched = await handleCampaignProfile(
       new Request('http://localhost/api/campaigns/1/profile', { method: 'PATCH', body: JSON.stringify({ value_prop: 'Fill tables' }) }),
       db,
-      'editor-1',
+      'owner',
       String(campaignId),
     )
     expect(patched.status).toBe(200)
     const next = (await patched.json()) as { profile: { value_prop: string; updated_by: string } }
     expect(next.profile.value_prop).toBe('Fill tables')
-    expect(next.profile.updated_by).toBe('editor-1')
+    expect(next.profile.updated_by).toBe('owner')
 
     const missing = await handleCampaignProfile(new Request('http://localhost'), db, 'owner', 'nope')
     expect(missing.status).toBe(404)

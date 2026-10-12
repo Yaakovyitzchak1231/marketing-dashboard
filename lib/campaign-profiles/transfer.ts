@@ -127,6 +127,18 @@ export async function importProfileDocument(db: Db, actor: string, campaignId: n
   if (doc.profile) profile = await upsertProfile(db, actor, campaignId, doc.profile)
   else await getProfile(db, campaignId)
   if (!doc.items.length) return { profile, added: [], already: [] }
-  const added = await addItems(db, actor, campaignId, doc.items, 'import')
+  // addItems re-parses each object and treats a present-but-empty verify_status as invalid.
+  // Drop those keys so a validated item (source forced to import) round-trips.
+  const items = doc.items.map((it) => ({
+    kind: it.kind,
+    name: it.name,
+    value: it.value ?? null,
+    config: it.config ?? {},
+    status: it.status,
+    source: 'import' as const,
+    rationale: it.rationale ?? null,
+    sort: it.sort,
+  }))
+  const added = await addItems(db, actor, campaignId, items, 'import')
   return { profile, added: added.added, already: added.already }
 }
