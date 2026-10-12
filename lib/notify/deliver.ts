@@ -18,7 +18,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Db, Queryable } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { mailConfigured, sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
+import { mailConfiguredAsync, sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
 import { shabbosEndsAt } from './shabbos.ts'
 
 export const CHANNEL_KINDS = ['webhook', 'ntfy', 'email', 'stream', 'pull', 'mcp', 'relay'] as const
@@ -301,7 +301,7 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       return
     }
     if (r.kind === 'email') {
-      if (!mailConfigured(opts.env)) {
+      if (!(await mailConfiguredAsync(opts.env))) {
         // Not a failure: hold it without spending an attempt; it goes out once MAIL_* exist.
         await db.query(
           `update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), last_error = $3,
