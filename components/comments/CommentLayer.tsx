@@ -77,7 +77,10 @@ function pinLabel(p: Pin): string {
   return p.page_title || p.page_path.split('?')[0] || '/'
 }
 
-export function CommentLayer({ actions }: { actions: CommentActions }) {
+/** What a viewer sees in place of the Comment button, and if any write is tried anyway. */
+export const VIEW_ONLY_NOTE = "View-only access: you can't comment"
+
+export function CommentLayer({ actions, readOnly = false }: { actions: CommentActions; readOnly?: boolean }) {
   const pathname = usePathname() ?? '/'
   const router = useRouter()
   const [pins, setPins] = useState<Pin[]>([])
@@ -104,6 +107,8 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
   const nameOf = useCallback((id: string) => recipients.find((r) => r.id === id)?.display_name ?? id, [recipients])
   const nameRef = useRef(nameOf)
   nameRef.current = nameOf
+  const readOnlyRef = useRef(readOnly)
+  readOnlyRef.current = readOnly
 
   // ---------------------------------------------------------------- server sync
 
@@ -112,6 +117,8 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
       clearTimeout(timers.current[clientId])
       delete timers.current[clientId]
       if (closedDrafts.current.has(clientId)) return
+      // A viewer can't save (the server refuses it); a draft left on this device stays on it.
+      if (readOnlyRef.current) return setSaveState((s) => ({ ...s, [clientId]: 'local' }))
       const local = loadLocal(storage())[clientId]
       const p = pinsRef.current.find((x) => x.client_id === clientId) ?? (local ? localToPin(local, nameRef.current) : undefined)
       if (!p || p.status !== 'draft') return
@@ -356,6 +363,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
     async (ids: string[]) => {
       const ready = ids.filter((id) => !closedDrafts.current.has(id) && pinsRef.current.find((p) => p.client_id === id && p.status === 'draft')?.body.trim())
       if (!ready.length) return setNotice('Write something first.')
+      if (readOnlyRef.current) return setNotice(VIEW_ONLY_NOTE)
       setBusy(true)
       setNotice(null)
       await Promise.all(ready.map((id) => saveNow(id))) // the server sends what you see
@@ -391,6 +399,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
       removeLocal(storage(), clientId)
       setPins((all) => all.filter((p) => p.client_id !== clientId))
       setOpenId((o) => (o === clientId ? null : o))
+      if (readOnlyRef.current) return // only ever on this device for a viewer
       const r = await actions.discard(clientId).catch(() => null)
       if (r?.ok) return
       // The server still holds this draft. Leaving the ID closed would hide a draft that exists,
@@ -409,6 +418,10 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
   const reply = useCallback(
     async (p: Pin, body: string) => {
       if (!p.id || !body.trim()) return false
+      if (readOnlyRef.current) {
+        setNotice(VIEW_ONLY_NOTE)
+        return false
+      }
       setBusy(true)
       const r = await actions.reply(p.id, body).catch(() => ({ ok: false, error: 'Could not reach the server. Your reply is kept here.' }) as Fail)
       setBusy(false)
@@ -425,6 +438,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
   const resolve = useCallback(
     async (p: Pin, resolved: boolean) => {
       if (!p.id) return
+      if (readOnlyRef.current) return setNotice(VIEW_ONLY_NOTE)
       const r = await actions.resolve(p.id, resolved).catch(() => ({ ok: false, error: 'Could not reach the server.' }) as Fail)
       if (!r.ok) return setNotice(r.error)
       setPins((all) => all.map((x) => (x.client_id === p.client_id ? { ...r.comment, unsynced: false } : x)))
@@ -511,6 +525,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
           recipients={recipients}
           saveState={saveState[open.client_id] ?? (open.unsynced ? 'local' : 'saved')}
           busy={busy}
+          readOnly={readOnly}
           onEdit={(patch) => edit(open.client_id, patch)}
           onClose={() => {
             // A pin closed before anything was written is not worth keeping.
@@ -641,18 +656,22 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
             </span>
           ) : null}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpenId(null)
-            setTrayOpen(false)
-            setPicking((x) => !x)
-          }}
-          aria-pressed={picking}
-          className="rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-accent-soft shadow-sm hover:opacity-95"
-        >
-          {picking ? 'Cancel' : 'Comment'}
-        </button>
+        {readOnly ? (
+          <span className="rounded-full border border-line-soft bg-surface px-3 py-2 text-[12px] text-ink-muted shadow-sm">{VIEW_ONLY_NOTE}</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setOpenId(null)
+              setTrayOpen(false)
+              setPicking((x) => !x)
+            }}
+            aria-pressed={picking}
+            className="rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-accent-soft shadow-sm hover:opacity-95"
+          >
+            {picking ? 'Cancel' : 'Comment'}
+          </button>
+        )}
       </div>
     </>
   )
@@ -661,7 +680,7 @@ export function CommentLayer({ actions }: { actions: CommentActions }) {
 // ------------------------------------------------------------------ the comment box
 
 function Composer({
-  pin, spot, narrow, recipients, saveState, busy, onEdit, onClose, onSend, onDiscard, onReply, onResolve,
+  pin, spot, narrow, recipients, saveState, busy, readOnly = false, onEdit, onClose, onSend, onDiscard, onReply, onResolve,
 }: {
   pin: Pin
   spot: PinSpot | null
@@ -669,6 +688,7 @@ function Composer({
   recipients: { id: string; display_name: string }[]
   saveState: SaveState
   busy: boolean
+  readOnly?: boolean
   onEdit: (patch: Partial<Pick<Pin, 'body' | 'recipient' | 'tag'>>) => void
   onClose: () => void
   onSend: () => void
@@ -774,6 +794,8 @@ function Composer({
             ) : (
               <p className="mt-2 text-[12px] text-ink-faint">{pin.status === 'seen' ? `${pin.recipient_name} has seen it.` : `Waiting for ${pin.recipient_name}.`}</p>
             )}
+            {readOnly ? null : (
+            <>
             <label className="sr-only" htmlFor={`r-${pin.client_id}`}>
               Reply
             </label>
@@ -788,6 +810,8 @@ function Composer({
               placeholder={pin.status === 'resolved' ? 'Reply to reopen…' : 'Reply…'}
               className="mt-3 w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
             />
+            </>
+            )}
           </>
         )}
       </div>
@@ -828,6 +852,8 @@ function Composer({
               )}
             </div>
           </>
+        ) : readOnly ? (
+          <span className="text-[11px] text-ink-faint">{VIEW_ONLY_NOTE}</span>
         ) : (
           <>
             <button type="button" onClick={() => onResolve(pin.status !== 'resolved')} className="rounded-md px-2 py-1 text-[12px] text-ink-muted hover:text-ink">

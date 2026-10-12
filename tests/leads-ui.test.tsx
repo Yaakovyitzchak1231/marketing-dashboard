@@ -42,6 +42,52 @@ describe('AppNav', () => {
     expect(isActive('/leads', '/')).toBe(false)
   })
 
+  it('opens More with the screens that do not fit inline, and closes on Escape', () => {
+    pathname.value = '/settings'
+    render(<AppNav />)
+    const nav = screen.getByRole('navigation', { name: 'Screens' })
+    const more = within(nav).getByRole('button', { name: /More/ })
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+    expect(more).toHaveAttribute('aria-haspopup')
+    expect(more).toHaveTextContent('Settings')
+    fireEvent.click(more)
+    expect(more).toHaveAttribute('aria-expanded', 'true')
+    const panel = screen.getByRole('list', { name: 'More screens' })
+    const labels = within(panel).getAllByRole('link').map((a) => a.textContent)
+    for (const l of ['Verification', 'Suppressions', 'Settings', 'Tools', 'Activity', 'Reports', 'Jobs']) expect(labels).toContain(l)
+    expect(labels).not.toContain('Overview')
+    expect(within(panel).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('list', { name: 'More screens' })).toBeNull()
+    expect(more).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes More on an outside click', () => {
+    pathname.value = '/'
+    render(<AppNav />)
+    fireEvent.click(screen.getByRole('button', { name: /More/ }))
+    expect(screen.getByRole('list', { name: 'More screens' })).toBeInTheDocument()
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('list', { name: 'More screens' })).toBeNull()
+  })
+
+  it('phone Menu lists every screen, marks the active one, and closes on Escape or a tap', () => {
+    pathname.value = '/jobs'
+    render(<AppNav />)
+    const btn = screen.getByRole('button', { name: 'Menu' })
+    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
+    fireEvent.click(btn)
+    const menu = screen.getByRole('navigation', { name: 'All screens' })
+    const labels = within(menu).getAllByRole('link').map((a) => a.textContent)
+    expect([...labels].sort()).toEqual(NAV_ITEMS.map((i) => i.label).sort())
+    expect(within(menu).getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'All screens' })).getByRole('link', { name: 'Leads' }))
+    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
+  })
+
   it('stays off the login page', () => {
     pathname.value = '/login'
     const { container } = render(<AppNav />)

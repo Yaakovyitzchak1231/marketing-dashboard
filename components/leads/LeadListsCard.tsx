@@ -41,8 +41,8 @@ export async function LeadListsCard({ db, companyId }: { db: Queryable; companyI
             {lists.length ? (
               <ul className="flex flex-wrap gap-1.5">
                 {lists.map((l) => (
-                  <li key={l.id} className="flex items-center gap-1 rounded-full border border-line bg-canvas/60 py-0.5 pl-2.5 pr-1 text-[12px] text-ink">
-                    {l.name}
+                  <li key={l.id} className="flex min-w-0 max-w-full items-center gap-1 rounded-full border border-line bg-canvas/60 py-0.5 pl-2.5 pr-1 text-[12px] text-ink">
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{l.name}</span>
                     <form action={removeFromListAction}>
                       <input type="hidden" name="list_id" value={l.id} />
                       <input type="hidden" name="company_id" value={companyId} />

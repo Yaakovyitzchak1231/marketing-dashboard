@@ -30,7 +30,7 @@ export function EngagementPanel({ data }: { data: EngagementSection }) {
               const avg = b.campaign_average[c.key]
               const ahead = avg > 0 ? mine >= avg : mine > 0
               return (
-                <div key={c.key} className="rounded-card border border-line-soft p-3 text-center">
+                <div key={c.key} className="min-w-0 rounded-card border border-line-soft p-2 text-center xs:p-3">
                   <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">{c.label}</div>
                   <div className="mt-1 text-[20px] font-semibold text-ink">{mine}</div>
                   <div className={`mt-0.5 text-[12px] ${ahead ? 'text-good' : 'text-ink-faint'}`}>campaign avg {avg}</div>

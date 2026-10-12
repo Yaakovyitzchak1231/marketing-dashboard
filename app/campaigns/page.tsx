@@ -125,7 +125,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
           </div>
           <section aria-labelledby="c-h">
             <SectionHeader id="c-h" title="Campaigns" />
-            <Card>{table(live, 'No campaigns yet. Start one on the right.')}</Card>
+            <Card>{table(live, 'No campaigns yet. Start one with the New campaign form.')}</Card>
           </section>
           <section aria-labelledby="t-h">
             <SectionHeader id="t-h" title="Templates" meta="Start a new campaign from one: settings and leads are copied" />

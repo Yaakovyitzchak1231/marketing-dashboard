@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { AppNav } from '@/components/nav/AppNav'
 import { PageComments } from '@/components/comments/PageComments'
+import { ViewOnlyGuard } from '@/components/auth/ViewOnlyGuard'
 
 /**
  * Document metadata. Deliberately plain -- no OpenGraph image, no theme-color
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppNav />
         {children}
         <PageComments />
+        <ViewOnlyGuard />
       </body>
     </html>
   )

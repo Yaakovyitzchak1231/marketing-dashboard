@@ -16,7 +16,7 @@ export function Val({ value, children }: { value: unknown; children: ReactNode }
 export function SectionHeader({ title, meta, id }: { title: string; meta?: ReactNode; id?: string }) {
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <h2 id={id} className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+      <h2 id={id} className="min-w-0 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted [overflow-wrap:anywhere]">
         {title}
       </h2>
       {meta ? <div className="text-[12px] text-ink-faint">{meta}</div> : null}
