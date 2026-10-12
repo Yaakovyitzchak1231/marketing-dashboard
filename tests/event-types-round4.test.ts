@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   },
 }))
 import { createTestDb } from './helpers/pglite-db'
-import { registerEventType } from '@/lib/events/types-store'
+import { registerBanner, registerEventType } from '@/lib/events/types-store'
 import { setEventTypeActiveAction } from '@/app/actions/event-types'
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
@@ -68,6 +68,19 @@ describe('event types round 4 (PR #101 review: schema on relabel, deactivate con
     expect((await stored('sch_b')).props_schema).toEqual({ a: 'string' })
     const cleared = await registerEventType(db, 'owner', { key: 'sch_b', label: 'Schema B2', category: 'custom', props_schema: null })
     expect(cleared).toMatchObject({ schema_updated: true, props_schema: null })
+  })
+
+  it('the register banner is honest for schema-only, relabel-only and relabel+schema re-registers', async () => {
+    const b = async (input: { label: string; props_schema?: unknown }) =>
+      registerBanner(await registerEventType(db, 'owner', { key: 'ban_s', category: 'custom', ...input }))
+    expect(await b({ label: 'Ban', props_schema: { a: 'string' } })).toBe('Registered ban_s.')
+    expect(await b({ label: 'Ban', props_schema: { a: 'string' } })).toBe('ban_s is already registered exactly like that; nothing changed.')
+    // Schema-only: must NOT say "Registered".
+    expect(await b({ label: 'Ban', props_schema: { a: 'number' } })).toBe('Updated props_schema of ban_s.')
+    expect(await b({ label: 'Ban 2', props_schema: { a: 'number' } })).toBe('Relabeled ban_s.')
+    // Both at once: names both.
+    expect(await b({ label: 'Ban 3', props_schema: { a: 'string' } })).toBe('Relabeled ban_s and updated its props_schema.')
+    expect((await stored('ban_s')).props_schema).toEqual({ a: 'string' })
   })
 
   it('an agent sending a different schema is still a 409 and writes nothing', async () => {

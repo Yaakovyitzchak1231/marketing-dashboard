@@ -11,7 +11,7 @@ import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { actorFor } from '@/lib/auth/act'
 import { AuthError } from '@/lib/auth/roles'
-import { EventTypeError, registerEventType, updateEventType } from '@/lib/events/types-store'
+import { EventTypeError, registerBanner, registerEventType, updateEventType } from '@/lib/events/types-store'
 
 function db() {
   const d = getDb()
@@ -36,7 +36,7 @@ export async function registerEventTypeAction(f: FormData) {
   try {
     const ME = await actorFor('editor')
     const row = await db().tx((q) => registerEventType(q, ME, { key: s(f, 'key'), label: s(f, 'label'), category: s(f, 'category'), source: 'dashboard' }), ME)
-    msg = row.unchanged ? `${row.key} is already registered exactly like that; nothing changed.` : row.relabeled ? `Relabeled ${row.key}.` : `Registered ${row.key}.`
+    msg = registerBanner(row)
   } catch (e) {
     fail(e)
   }

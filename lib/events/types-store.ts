@@ -147,6 +147,18 @@ export async function registerEventType(
   return { ...rows[0], ...(relabeled ? { relabeled: true } : {}), ...(schemaChanged ? { schema_updated: true } : {}) }
 }
 
+/**
+ * The settings page's banner for a register result: says only what the store reported
+ * happened (nothing written / relabeled / schema replaced / both / newly registered).
+ */
+export function registerBanner(row: Pick<EventTypeRow, 'key' | 'unchanged' | 'relabeled' | 'schema_updated'>): string {
+  if (row.unchanged) return `${row.key} is already registered exactly like that; nothing changed.`
+  if (row.relabeled && row.schema_updated) return `Relabeled ${row.key} and updated its props_schema.`
+  if (row.relabeled) return `Relabeled ${row.key}.`
+  if (row.schema_updated) return `Updated props_schema of ${row.key}.`
+  return `Registered ${row.key}.`
+}
+
 /** Change a custom type's label, category and/or active flag. The key never changes. */
 export async function updateEventType(
   q: Queryable,
