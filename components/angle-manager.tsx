@@ -253,7 +253,7 @@ export function AngleManager({
               placeholder="Search angles or campaigns..."
               value={angleQuery}
               onChange={e => setAngleQuery(e.target.value)}
-              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted min-w-64"
+              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted min-w-64"
             />
           )}
         </div>
