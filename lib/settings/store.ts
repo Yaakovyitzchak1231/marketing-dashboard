@@ -7,6 +7,7 @@
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { decryptSecret, encryptSecret, settingsKeyConfigured, type EncryptedSecretRow } from './crypto.ts'
+import { QUIET_END_KEY, QUIET_START_KEY, quietHoursPairError } from './quiet-hours.ts'
 import { integrationSpecFor, settingSpec, SETTINGS_REGISTRY, type SettingSpec } from './registry.ts'
 
 export class SettingsError extends Error {
@@ -101,7 +102,23 @@ export async function getSetting(q: Queryable, key: string): Promise<string | nu
   return unwrap(rows[0].value)
 }
 
-/** Validated write of one non-secret setting. No-ops (still returns the row) when the value is unchanged. */
+async function writeSetting(q: Queryable, actor: string, key: string, v: string, opts: { via: Via; note?: string }): Promise<SettingRow> {
+  const before = await getSetting(q, key)
+  const { rows } = await q.query<{ key: string; value: unknown; description: string | null; updated_by: string | null; updated_at: string; created_at: string }>(
+    `insert into lp.settings (key, value, updated_by) values ($1, $2::jsonb, $3)
+     on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by
+     returning key, value, description, updated_by, updated_at, created_at`,
+    [key, JSON.stringify(v), actor],
+  )
+  if (before !== v) await audit(q, actor, { key, oldValue: before, newValue: v, via: opts.via, note: opts.note })
+  return { ...rows[0], value: unwrap(rows[0].value) }
+}
+
+/**
+ * Validated write of one non-secret setting. No-ops (still returns the row) when the value is unchanged.
+ * The two quiet-hours keys are one range: a single-key write is refused when the pair it would leave is
+ * half-set or has equal ends (use putQuietHours to set both together).
+ */
 export async function putSetting(db: Db, actor: string, key: string, value: string, opts: { via: Via; note?: string } = { via: 'ui' }): Promise<SettingRow> {
   const spec = requireNonSecretSpec(key)
   const v = value.trim()
@@ -109,15 +126,33 @@ export async function putSetting(db: Db, actor: string, key: string, value: stri
   if (err) throw new SettingsError(err, 400)
   return db.tx(async (q) => {
     await requireCanWriteSettings(q, actor)
-    const before = await getSetting(q, key)
-    const { rows } = await q.query<{ key: string; value: unknown; description: string | null; updated_by: string | null; updated_at: string; created_at: string }>(
-      `insert into lp.settings (key, value, updated_by) values ($1, $2::jsonb, $3)
-       on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by
-       returning key, value, description, updated_by, updated_at, created_at`,
-      [key, JSON.stringify(v), actor],
-    )
-    if (before !== v) await audit(q, actor, { key, oldValue: before, newValue: v, via: opts.via, note: opts.note })
-    return { ...rows[0], value: unwrap(rows[0].value) }
+    if (key === QUIET_START_KEY || key === QUIET_END_KEY) {
+      const other = await getSetting(q, key === QUIET_START_KEY ? QUIET_END_KEY : QUIET_START_KEY)
+      const pairErr = key === QUIET_START_KEY ? quietHoursPairError(v, other) : quietHoursPairError(other, v)
+      if (pairErr) throw new SettingsError(`${pairErr} Save the start and end together (the Quiet hours control, or the put_quiet_hours op).`, 400)
+    }
+    return writeSetting(q, actor, key, v, opts)
+  }, actor)
+}
+
+/** Set quiet hours as one range: both required, 24-hour HH:MM, different. One transaction, so a half-set range is never stored. */
+export async function putQuietHours(
+  db: Db,
+  actor: string,
+  start: string,
+  end: string,
+  opts: { via: Via; note?: string } = { via: 'ui' },
+): Promise<{ start: string; end: string }> {
+  const s = typeof start === 'string' ? start.trim() : ''
+  const e = typeof end === 'string' ? end.trim() : ''
+  if (!s || !e) throw new SettingsError(`Quiet hours need both a start and an end (${QUIET_START_KEY} and ${QUIET_END_KEY}).`, 400)
+  const pairErr = quietHoursPairError(s, e)
+  if (pairErr) throw new SettingsError(pairErr, 400)
+  return db.tx(async (q) => {
+    await requireCanWriteSettings(q, actor)
+    await writeSetting(q, actor, QUIET_START_KEY, s, opts)
+    await writeSetting(q, actor, QUIET_END_KEY, e, opts)
+    return { start: s, end: e }
   }, actor)
 }
 

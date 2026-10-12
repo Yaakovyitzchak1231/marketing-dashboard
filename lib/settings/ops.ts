@@ -8,7 +8,7 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { getSetting, listIntegrationSettings, listSecretStatuses, listSettings, putSetting, secretStatus, SettingsError } from './store.ts'
+import { getSetting, listIntegrationSettings, listSecretStatuses, listSettings, putQuietHours, putSetting, secretStatus, SettingsError } from './store.ts'
 import { settingSpec, settingsByGroup } from './registry.ts'
 
 type Args = Record<string, unknown>
@@ -81,6 +81,10 @@ const RAW: Record<string, Op> = {
   put_setting: {
     args: '{key, value}  -- non-secret settings only; a person only (an agent can propose a value by asking in the activity feed)',
     run: (db, actor, a) => putSetting(db, actor, key(a), String(a.value ?? ''), { via: 'ops_api' }),
+  },
+  put_quiet_hours: {
+    args: '{start, end}  -- workspace quiet hours as one range, 24-hour HH:MM, both required and different; a person only. put_setting on one key is refused when it would leave a half-set range',
+    run: (db, actor, a) => putQuietHours(db, actor, String(a.start ?? ''), String(a.end ?? ''), { via: 'ops_api' }),
   },
   secret_status: {
     args: '{key}  -> {key, set, last4, updated_at, updated_by} — never the secret value',

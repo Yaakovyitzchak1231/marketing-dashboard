@@ -16,7 +16,7 @@ import { listActorKinds, listIntegrationSettings, listSecretStatuses, listSettin
 import { SETTING_GROUP_HELP, SETTINGS_REGISTRY, settingsByGroup } from '@/lib/settings/registry'
 import { needsSetup, settingAnchor, type SetupField } from '@/lib/settings/needs-setup'
 import { settingsKeyConfigured } from '@/lib/settings/crypto'
-import { clearSecretAction, replaceSecretAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
+import { clearSecretAction, replaceSecretAction, saveQuietHoursAction, saveSettingAction, setAgentTakesKindsAction, testSecretAction } from '@/app/actions/settings'
 import Link from 'next/link'
 import { listRetentionPolicies } from '@/lib/retention/store'
 import { RetentionPolicyRow } from '@/components/settings/RetentionPolicyRow'
@@ -210,7 +210,7 @@ export default async function SettingsPage() {
                   end={settingsByKey.get(QUIET_END_KEY)?.value ?? null}
                   anchorStart={settingAnchor(QUIET_START_KEY)}
                   anchorEnd={settingAnchor(QUIET_END_KEY)}
-                  action={saveSettingAction}
+                  action={saveQuietHoursAction}
                 />
               ) : null}
               {secrets.map((spec) => {

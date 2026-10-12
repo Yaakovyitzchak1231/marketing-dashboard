@@ -6,6 +6,8 @@
  * the result. This module does not send.
  */
 
+import { quietHoursPairError } from '../settings/quiet-hours.ts'
+
 const FALLBACK_TZ = 'America/New_York'
 const TZ_RE = /^[A-Za-z0-9_+\-/]{1,64}$/
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
@@ -42,8 +44,11 @@ export interface SendAllowedInput {
    * and sendAllowed checks every field itself. A malformed field holds the send; it never lifts a limit.
    */
   controls?: unknown
-  /** workspace.quiet_hours_start / end, used when the journey sets none. */
-  workspaceQuietHours?: ClockWindow | null
+  /**
+   * workspace.quiet_hours_start / end as stored, used when the journey sets none. A blank value is
+   * unset; a pair that is half-set, not HH:MM, or has equal ends holds the send as 'invalid workspace quiet hours'.
+   */
+  workspaceQuietHours?: { start?: string | null; end?: string | null } | null
 }
 
 /**
@@ -53,7 +58,7 @@ export interface SendAllowedInput {
 type Flags = { timezone_defaulted?: true }
 
 export type HoldReason = 'before launch' | 'quiet hours' | 'send window'
-export type InvalidReason = 'invalid send window' | 'invalid send controls'
+export type InvalidReason = 'invalid send window' | 'invalid send controls' | 'invalid workspace quiet hours'
 
 export type SendDecision =
   | ({ allow: true } & Flags)
@@ -201,8 +206,12 @@ function inspect(raw: unknown, workspace?: unknown): Inspected {
   }
   const c = raw ?? {}
   if (c.quiet_hours != null) out.quiet = checkSpan(c.quiet_hours, 'quiet_hours', 'quiet_hours', problems)
-  else if (isObject(workspace) && !(isBlank(workspace.start) && isBlank(workspace.end))) {
-    out.quiet = checkSpan(workspace, 'workspace_quiet_hours', 'workspace quiet hours', problems)
+  else if (isObject(workspace)) {
+    const pairErr = quietHoursPairError(workspace.start, workspace.end)
+    if (pairErr) problems.push({ field: 'workspace_quiet_hours', message: pairErr })
+    else if (!isBlank(workspace.start)) {
+      out.quiet = { start: minutesOf((workspace.start as string).trim()) ?? 0, end: minutesOf((workspace.end as string).trim()) ?? 0 }
+    }
   }
   if (c.send_window != null) out.window = checkWindow(c.send_window, problems)
   if (c.launch_at != null) out.launch = checkInstant(c.launch_at, 'launch_at', problems)
@@ -349,7 +358,7 @@ export function readSendControls(settings: unknown): unknown {
  * May a send go out at `now`? When it may not, `until` is the first instant at which every control
  * allows it (one minute past the last boundary, so the next look is strictly after it, and always
  * after `now`). Past active-until is a skip, not a wait. Malformed controls hold the send for an
- * hour ('invalid send window' / 'invalid send controls'): fail closed, never "no limit".
+ * hour ('invalid send window' / 'invalid send controls' / 'invalid workspace quiet hours'): fail closed, never "no limit".
  * Never throws.
  */
 export function sendAllowed(now: Date, input: SendAllowedInput): SendDecision {
@@ -373,7 +382,11 @@ export function sendAllowed(now: Date, input: SendAllowedInput): SendDecision {
     return {
       allow: false,
       until: new Date(nowMs + INVALID_RETRY_MS),
-      reason: blocking.some((p) => p.field === 'send_window') ? 'invalid send window' : 'invalid send controls',
+      reason: blocking.some((p) => p.field === 'send_window')
+        ? 'invalid send window'
+        : blocking.some((p) => p.field !== 'workspace_quiet_hours')
+          ? 'invalid send controls'
+          : 'invalid workspace quiet hours',
       errors: blocking.map((p) => p.message),
       ...flag,
     }

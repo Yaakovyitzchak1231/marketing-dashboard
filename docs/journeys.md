@@ -169,11 +169,24 @@ read a malformed control as "no limit". It holds the send:
 `{ allow: false, until: now + 1 hour, reason: "invalid send window", errors }` when the
 send window is malformed, and `reason: "invalid send controls"` for any other
 malformed field (quiet hours, `launch_at`, `active_until`, or `send_controls`
-itself). The hour is only how long the runner waits before looking again, in case
+itself). A bad stored workspace quiet-hours pair (see below) holds with its own
+reason, `"invalid workspace quiet hours"`, and `errors` names
+`workspace.quiet_hours_start` and `workspace.quiet_hours_end`. The hour is only how long the runner waits before looking again, in case
 the journey was fixed. A past `active_until` still skips first.
 
+**Workspace quiet hours are one range, saved as a pair.** `workspace.quiet_hours_start`
+and `workspace.quiet_hours_end` are both set (24-hour `HH:MM`, different) or both
+blank. Saving enforces it on every path: the Quiet hours control on Settings and the
+`put_quiet_hours {start, end}` op (owner only) write both in one transaction, and
+`put_setting` on a single quiet-hours key is refused (400, naming both keys) if it would
+leave one end unset or the two equal. Pre-existing data that breaks the rule (half-set,
+equal, or not `HH:MM`) is not guessed at: while a journey has no quiet hours of its
+own, every send for it holds with `reason: "invalid workspace quiet hours"` until the
+pair is fixed on Settings. A journey that sets its own `quiet_hours` never reads the
+workspace pair.
+
 `sendAllowed` returns `{ allow: true }`, a hold `{ allow: false, until, reason }`
-(`before launch`, `quiet hours`, `send window`), the invalid hold above, or
+(`before launch`, `quiet hours`, `send window`), the invalid holds above, or
 `{ allow: false, until: null, reason: "past active-until" }` which skips the send.
 
 When several controls hold, `until` is the first instant at which all of them

@@ -62,7 +62,7 @@ export const OWNER_OPS: ReadonlySet<string> = new Set([
   'upsert_score_model', 'recompute_scores',
   'rename_tag', 'merge_tags', 'set_tag_style',
   // settings, integrations, jobs
-  'put_setting',
+  'put_setting', 'put_quiet_hours',
   'put_integration', 'report_integration_health', 'put_integration_snapshots',
   'put_job', 'set_job_enabled', 'run_job_now', 'claim_jobs', 'finish_job_run', 'reap_stale_jobs',
   'instantly_reconcile_run',

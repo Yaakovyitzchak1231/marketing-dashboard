@@ -53,10 +53,10 @@ describe('QuietHoursField', () => {
     expect(screen.getByLabelText('Quiet hours end')).toHaveValue('08:00')
   })
 
-  it('unset: "Not set" badge, and Save writes both keys through the single-setting action', async () => {
+  it('unset: "Not set" badge, and Save sends start and end together in one call', async () => {
     const calls: [string, string][] = []
     const action = async (_p: FormResult | null, f: FormData): Promise<FormResult> => {
-      calls.push([String(f.get('key')), String(f.get('value'))])
+      calls.push([String(f.get('start')), String(f.get('end'))])
       return { ok: true }
     }
     render(<QuietHoursField start={null} end={null} action={action} />)
@@ -65,10 +65,7 @@ describe('QuietHoursField', () => {
     fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '07:30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText(/Saved: no emails from 22:00 to 07:30/)).toBeInTheDocument()
-    expect(calls).toEqual([
-      ['workspace.quiet_hours_start', '22:00'],
-      ['workspace.quiet_hours_end', '07:30'],
-    ])
+    expect(calls).toEqual([['22:00', '07:30']])
   })
 })
 

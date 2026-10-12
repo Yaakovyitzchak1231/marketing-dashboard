@@ -15,6 +15,7 @@ import { requireRole } from '@/lib/auth/roles'
 import {
   clearSecret,
   listActorKinds,
+  putQuietHours,
   putSecret,
   putSetting,
   secretStatus,
@@ -52,6 +53,18 @@ export async function saveSettingAction(_prev: FormResult | null, f: FormData): 
     await putSetting(db(), await currentActorId(), key, s(f, 'value'), { via: 'ui' })
     revalidatePath('/settings')
     return { ok: true, message: 'Saved.' }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
+/** Quiet hours are one range, saved together (start and end in a single transaction). */
+export async function saveQuietHoursAction(_prev: FormResult | null, f: FormData): Promise<FormResult> {
+  try {
+    requireRole(await currentRole(), 'owner')
+    const r = await putQuietHours(db(), await currentActorId(), s(f, 'start'), s(f, 'end'), { via: 'ui' })
+    revalidatePath('/settings')
+    return { ok: true, message: `Saved: no emails from ${r.start} to ${r.end}.` }
   } catch (e) {
     return fail(e)
   }

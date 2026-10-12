@@ -213,6 +213,53 @@ describe('sendAllowed (plan 3.10)', () => {
   })
 })
 
+describe('stored workspace quiet hours that are bad are visible (plan 3.10)', () => {
+  const NOW = at('2026-10-14T01:30:00Z') // Tuesday 21:30 EDT, inside the usual quiet window
+  const ny = { companyTimezone: 'America/New_York' }
+
+  it.each([
+    ['only the start set', { start: '21:00', end: null }],
+    ['only the end set', { start: '', end: '08:00' }],
+    ['equal start and end', { start: '09:00', end: '09:00' }],
+    ['a start that is not HH:MM', { start: '9pm', end: '08:00' }],
+  ])('holds with "invalid workspace quiet hours", naming the settings keys, for %s', (_n, workspaceQuietHours) => {
+    const d = sendAllowed(NOW, { ...ny, controls: {}, workspaceQuietHours })
+    expect(d).toMatchObject({ allow: false, reason: 'invalid workspace quiet hours' })
+    if (d.allow === false && 'errors' in d) {
+      expect(d.errors.join(' ')).toMatch(/workspace\.quiet_hours_start/)
+      expect(d.errors.join(' ')).toMatch(/workspace\.quiet_hours_end/)
+      expect(d.until.getTime()).toBeGreaterThan(NOW.getTime())
+    }
+  })
+
+  it('a journey with its own quiet hours does not read the workspace pair', () => {
+    expect(sendAllowed(at('2026-10-14T14:00:00Z'), {
+      ...ny,
+      controls: { quiet_hours: QUIET },
+      workspaceQuietHours: { start: '21:00', end: null },
+    })).toEqual({ allow: true })
+  })
+
+  it('unset workspace hours (null, blank strings, or absent) are not a problem', () => {
+    for (const w of [null, undefined, { start: null, end: null }, { start: '', end: '  ' }]) {
+      expect(sendAllowed(at('2026-10-14T14:00:00Z'), { ...ny, controls: {}, workspaceQuietHours: w })).toEqual({ allow: true })
+    }
+  })
+
+  it('a sound workspace pair still applies, with surrounding spaces tolerated', () => {
+    expect(sendAllowed(NOW, { ...ny, workspaceQuietHours: { start: ' 21:00', end: '08:00 ' } })).toMatchObject({
+      allow: false,
+      reason: 'quiet hours',
+    })
+  })
+
+  it('a bad send window outranks it in the reason, and both are listed', () => {
+    const d = sendAllowed(NOW, { ...ny, controls: { send_window: { days: 'x' } }, workspaceQuietHours: { start: '21:00', end: null } })
+    expect(d).toMatchObject({ allow: false, reason: 'invalid send window' })
+    if (d.allow === false && 'errors' in d) expect(d.errors.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
 describe('malformed send controls fail closed (plan 3.10)', () => {
   const NOW = at('2026-10-17T15:00:00Z') // Saturday 11:00 EDT
   const ny = { companyTimezone: 'America/New_York' }

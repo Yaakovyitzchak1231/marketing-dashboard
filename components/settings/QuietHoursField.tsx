@@ -4,7 +4,6 @@ import { useActionState, useState } from 'react'
 import type { FormResult } from '@/app/actions/settings'
 import { Pill } from '@/components/dashboard/primitives'
 import { inputCls, primaryBtnCls } from '@/components/ops/bits'
-import { QUIET_END_KEY, QUIET_START_KEY } from '@/lib/settings/quiet-hours'
 
 type SaveAction = (prev: FormResult | null, f: FormData) => Promise<FormResult>
 
@@ -12,8 +11,9 @@ const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 /**
  * Quiet hours as one range: "21:00 to 08:00", two time pickers, one Save that
- * writes both settings through the injected single-setting action (start first,
- * then end). Validates HH:MM on the client too, so a half-saved range is unlikely.
+ * writes both settings in one call through the injected pair action (fields
+ * `start` and `end`, one transaction on the server). Validates HH:MM on the
+ * client too.
  */
 export function QuietHoursField({
   start,
@@ -33,17 +33,11 @@ export function QuietHoursField({
   const save = async (_prev: FormResult | null, _f: FormData): Promise<FormResult> => {
     if (!HHMM.test(s) || !HHMM.test(e)) return { ok: false, message: 'Pick both a start and an end time (24-hour HH:MM, e.g. 21:00).' }
     if (s === e) return { ok: false, message: 'Start and end are the same time, so there would be no quiet hours.' }
-    const one = async (key: string, value: string) => {
-      const fd = new FormData()
-      fd.set('key', key)
-      fd.set('value', value)
-      return action(null, fd)
-    }
-    const r1 = await one(QUIET_START_KEY, s)
-    if (!r1.ok) return r1
-    const r2 = await one(QUIET_END_KEY, e)
-    if (!r2.ok) return r2
-    return { ok: true, message: `Saved: no emails from ${s} to ${e}.` }
+    const fd = new FormData()
+    fd.set('start', s)
+    fd.set('end', e)
+    const r = await action(null, fd)
+    return r.ok ? { ok: true, message: `Saved: no emails from ${s} to ${e}.` } : r
   }
   const [state, formAction, pending] = useActionState<FormResult | null, FormData>(save, null)
   const isSet = Boolean(start && end)
