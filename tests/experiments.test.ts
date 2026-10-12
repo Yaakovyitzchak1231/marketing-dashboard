@@ -632,6 +632,7 @@ describe('experiments store, assignment, outcomes and the node (db)', () => {
         node: n,
         graph: { start: 'split', nodes: [] },
         now,
+        idempotencyKey: `journey-run:1:split:${now.getTime()}`,
       }
     }
     async function journey(): Promise<number> {

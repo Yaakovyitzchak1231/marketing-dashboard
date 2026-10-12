@@ -210,8 +210,15 @@ export async function versionApproved(q: Queryable, journeyId: number, version: 
   return !!rows[0]
 }
 
-export async function setJourneyStatus(db: Db, actor: string, journeyId: number, status: string, via: 'ui' | 'ops_api' = 'ops_api'): Promise<Journey> {
+/**
+ * Change a journey's status. `now` is the clock for the pause bookkeeping (paused_at and
+ * the resume shift); callers leave it out, tests pass a fixed time.
+ */
+export async function setJourneyStatus(
+  db: Db, actor: string, journeyId: number, status: string, via: 'ui' | 'ops_api' = 'ops_api', now: Date = new Date(),
+): Promise<Journey> {
   if (!(JOURNEY_STATUSES as readonly string[]).includes(status)) throw new JourneyError(`status must be one of: ${JOURNEY_STATUSES.join(', ')}`)
+  const at = now.toISOString()
   return db.tx(async (q) => {
     const cur = await getJourney(q, journeyId)
     if (!cur) throw new JourneyError('no journey with that id', 404)
@@ -226,9 +233,9 @@ export async function setJourneyStatus(db: Db, actor: string, journeyId: number,
       // Resuming: move every open run's due time forward by the length of the pause, so
       // waits carry on where they were instead of all coming due at once.
       await q.query(
-        `update lp.journey_runs set next_run_at = next_run_at + (now() - $2::timestamptz)
+        `update lp.journey_runs set next_run_at = next_run_at + ($3::timestamptz - $2::timestamptz)
           where journey_id = $1 and status in ('active', 'waiting') and next_run_at is not null`,
-        [journeyId, cur.paused_at],
+        [journeyId, cur.paused_at, at],
       )
     }
     if (status === 'live' && cur.status !== 'live') {
@@ -239,11 +246,14 @@ export async function setJourneyStatus(db: Db, actor: string, journeyId: number,
         [cur.trigger_id, journeyId],
       )
     }
+    // Pausing an already paused journey keeps the original paused_at: the pause is as long as it has been.
     const { rows } = await q.query<Journey>(
       `update lp.journeys set status = $2, updated_by = $3,
-              paused_at = case when $2 = 'paused' then now() else null end
+              paused_at = case when $2 <> 'paused' then null
+                               when $5::boolean then paused_at
+                               else $4::timestamptz end
         where id = $1 returning ${COLS}`,
-      [journeyId, status, actor],
+      [journeyId, status, actor, at, cur.status === 'paused' && cur.paused_at != null],
     )
     if (cur.status !== status) await history(q, journeyId, 'status', cur.status, status, actor, via)
     return rows[0]

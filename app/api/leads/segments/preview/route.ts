@@ -7,6 +7,8 @@
  * come from the same query.
  */
 import { NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
@@ -20,11 +22,19 @@ function tableMissing(e: unknown): boolean {
 }
 
 export async function POST(req: Request) {
+  // A read-only count that happens to be a POST: any signed-in role passes here
+  // (middleware still refuses viewers on every POST).
+  let actor: string
+  try {
+    actor = await actorFor('viewer')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const body = (await req.json().catch(() => null)) as { definition?: unknown } | null
   try {
-    const result = await runOp(db, 'owner', 'segment_preview', { definition: body?.definition })
+    const result = await runOp(db, actor, 'segment_preview', { definition: body?.definition })
     return NextResponse.json(result)
   } catch (e) {
     if (tableMissing(e)) return NextResponse.json({ unavailable: true })

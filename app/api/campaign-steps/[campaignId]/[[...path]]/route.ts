@@ -1,12 +1,11 @@
 /**
- * Campaign email steps, preview and Instantly link, for the signed-in person.
- * Behind the login gate (middleware.ts). Editor or above; the audit log names
- * the real actor (not a hard-coded 'owner'). Contract: lib/campaign-steps/http.ts.
+ * Campaign email steps, preview and Instantly link, for the signed-in person (reads: any role; writes: editor or owner, logged under their own actor id).
+ * Behind the login gate (middleware.ts). Contract: lib/campaign-steps/http.ts.
  */
 import { NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
 import { actorFor } from '@/lib/auth/act'
-import { AuthError } from '@/lib/auth/roles'
+import { authDenied } from '@/lib/auth/http'
+import { getDb } from '@/lib/db'
 import { handleCampaignSteps } from '@/lib/campaign-steps/http'
 
 export const dynamic = 'force-dynamic'
@@ -14,15 +13,17 @@ export const dynamic = 'force-dynamic'
 type Ctx = { params: Promise<{ campaignId: string; path?: string[] }> }
 
 async function handle(req: Request, ctx: Ctx) {
-  const db = getDb()
-  if (!db) return NextResponse.json({ ok: false, error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
+  // Role check first. Reads need any signed-in role; every other method needs
+  // editor or owner, and is logged as the signed-in person.
+  const read = req.method === 'GET' || req.method === 'HEAD'
   let actor: string
   try {
-    actor = await actorFor('editor')
+    actor = await actorFor(read ? 'viewer' : 'editor')
   } catch (e) {
-    if (e instanceof AuthError) return NextResponse.json({ ok: false, error: 'Editor access or above is required.' }, { status: 403 })
-    throw e
+    return authDenied(e, { ok: false })
   }
+  const db = getDb()
+  if (!db) return NextResponse.json({ ok: false, error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const { campaignId, path } = await ctx.params
   return handleCampaignSteps(req, db, actor, campaignId, path ?? [], 'human')
 }

@@ -174,6 +174,7 @@ export default async function SettingsPage() {
           <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
           <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
           <Link href="/settings/pools" className="text-accent hover:underline">Pools — industries a campaign can target</Link>
+          <Link href="/settings/event-types" className="text-accent hover:underline">Data → Event types — register, relabel, switch off</Link>
         </Card>
       </section>
 
