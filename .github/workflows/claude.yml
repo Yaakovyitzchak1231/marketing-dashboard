@@ -28,13 +28,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+
+      # Install deps so Claude can actually run the checks instead of only
+      # reading code. Without this the runner has no node_modules and every
+      # test/lint invocation fails before it starts. Node version and cache
+      # mirror the repo's own CI so results are comparable.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Pin the model: reviews are high-volume, so use the fast/cheap small model.
+                      --allowedTools "Read,Write,Edit,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git rebase:*),Bash(git push:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(npm ci),Bash(npm run check),Bash(npm run build),Bash(npm test),Bash(npm run test:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npm run docs:check),Bash(npx tsc:*),Bash(npx vitest:*),Bash(npx eslint:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh pr checks:*)"
+          # checks. It defaults to read-only tools plus git add/commit, so without
+          # this list it cannot run tests and will (correctly) say so in its review.
+          claude_args: |
+            --model claude-haiku-5-5
+            --allowedTools "Bash(npm ci),Bash(npm test),Bash(npm run test:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npm run docs:check),Bash(npx vitest:*),Bash(npx tsc:*),Bash(npx eslint:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Read,Glob,Grep,LS"
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"

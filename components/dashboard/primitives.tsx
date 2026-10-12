@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { HTMLAttributes } from 'react'
 import { DASH, NOT_REPORTED } from './format'
 
 /** A value that may be unreported. null renders "—" with a tooltip, never 0. */
@@ -24,8 +25,8 @@ export function SectionHeader({ title, meta, id }: { title: string; meta?: React
   )
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-card border border-line bg-surface shadow-card ${className}`}>{children}</div>
+export function Card({ children, className = '', ...props }: { children: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) {
+  return <div className={`rounded-card border border-line bg-surface shadow-card ${className}`} {...props}>{children}</div>
 }
 
 const PILL_TONES = {

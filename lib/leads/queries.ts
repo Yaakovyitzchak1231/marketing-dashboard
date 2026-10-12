@@ -33,6 +33,10 @@ export interface LeadListRow {
   campaign_name: string | null
   last_event_type: string | null
   last_event_at: Date | null
+  /** Highest score across active company models; null when never scored. Filled by attachLeadScores. */
+  score?: number | null
+  score_model?: string | null
+  score_threshold?: string | null
 }
 
 export interface LeadPage {

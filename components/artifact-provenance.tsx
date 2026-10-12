@@ -352,11 +352,11 @@ export function ArtifactProvenance({
                 <div>
                   <p className="text-[11px] text-ink">
                     {a.status === 'approved'
-                      ? COPY.workspace.approvedByActor(a.actor ?? 'agent')
+                      ? COPY.workspace.approvedByActor(a.actor ?? COPY.workspace.authorNotRecorded)
                       : a.status === 'requested'
-                        ? COPY.workspace.requestChangesTo(a.owner ?? 'owner')
+                        ? COPY.workspace.requestChangesTo(a.owner ?? COPY.workspace.ownerNotRecorded)
                         : a.status === 'dismissed'
-                          ? COPY.workspace.dismissedBy(a.actor ?? 'agent')
+                          ? COPY.workspace.dismissedBy(a.actor ?? COPY.workspace.authorNotRecorded)
                           : a.status}
                   </p>
                   {a.reason ? (

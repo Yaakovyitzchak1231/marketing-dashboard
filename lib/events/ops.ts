@@ -7,6 +7,7 @@
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
 import { emitLeadEvent, emitLeadEvents, EventError, type EmitLeadEventInput } from './emit.ts'
+import { evaluateCompositeRules } from './composite'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -59,7 +60,21 @@ const RAW: Record<string, Op> = {
     run: async (db, actor, a) => {
       const input = parseEventInput(a, actor)
       try {
-        return await db.tx((q) => emitLeadEvent(q, input), actor)
+        return await db.tx(async (q) => {
+          const r = await emitLeadEvent(q, input)
+          // Composite rules (e.g. positive_reply) derive from a combination of
+          // events; evaluate after every successful insert.
+          if (r.inserted && r.id != null) {
+            await evaluateCompositeRules(q, {
+              id: r.id,
+              type: r.type,
+              company_id: r.company_id,
+              contact_id: r.contact_id,
+              campaign_id: input.campaign_id ?? null,
+            })
+          }
+          return r
+        }, actor)
       } catch (e) {
         if (e instanceof EventError) throw new OpsError(e.message, e.status)
         throw e
@@ -110,6 +125,18 @@ const RAW: Record<string, Op> = {
           ready.forEach((i, k) => {
             results[i] = { ok: true, ...inserted[k] }
           })
+          for (let k = 0; k < ready.length; k++) {
+            const ins = inserted[k]
+            if (!ins.inserted || ins.id == null) continue
+            const inp = (parsed[ready[k]] as { input: EmitLeadEventInput }).input
+            await evaluateCompositeRules(q, {
+              id: ins.id,
+              type: ins.type,
+              company_id: ins.company_id,
+              contact_id: ins.contact_id,
+              campaign_id: inp.campaign_id ?? null,
+            })
+          }
         }
       }, actor)
       return results
