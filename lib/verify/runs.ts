@@ -86,6 +86,21 @@ export function verifyEnvFromProcess(env: Record<string, string | undefined> = p
   }
 }
 
+/** Settings-aware env: MillionVerifier/ZeroBounce keys resolve through the
+ * settings store (DB first, env fallback) the same way lib/instantly/client.ts
+ * and lib/notify/mail.ts do, so a key saved on /settings takes effect at once. */
+export async function verifyEnvFromConfig(env: Record<string, string | undefined> = process.env): Promise<VerifyEnv> {
+  const { resolveConfig } = await import('../settings/store.ts')
+  const [{ value: mv }, { value: zb }] = await Promise.all([
+    resolveConfig('millionverifier.api_key', env),
+    resolveConfig('zerobounce.api_key', env),
+  ])
+  return {
+    keys: { millionverifier: mv || null, zerobounce: zb || null },
+    pricing: getPricing(env),
+  }
+}
+
 const RUN_COLUMNS = `id, status, requested_by, approved_by, contact_ids, contact_count, precheck_pass, est_mv_checks,
   est_zb_checks, est_cost_usd, max_cost_usd, spent_usd, processed, summary, created_at, approved_at, finished_at`
 

@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db'
 import { listRuns, getRun, runVerdictCount, type RunRow } from '@/lib/verify/runs'
-import { providerBalances, verificationCounts, VERIFICATION_STATUSES } from '@/lib/verify/overview'
+import { providerBalancesAsync, verificationCounts, VERIFICATION_STATUSES } from '@/lib/verify/overview'
 import { getPricing } from '@/lib/verify/pricing'
 import type { LeadFilter } from '@/lib/verify/select'
 import type { ProviderBalance } from '@/lib/verify/types'
@@ -42,7 +42,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
     if (v) filter[k] = v
   }
 
-  const providersP = providerBalances()
+  const providersP = providerBalancesAsync()
   let counts: Awaited<ReturnType<typeof verificationCounts>> | null = null
   let runs: RunRow[] = []
   let resume: RunRow | null = null
