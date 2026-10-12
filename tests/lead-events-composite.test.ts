@@ -174,6 +174,40 @@ describe('site emitters: page_visited / form_submitted', () => {
     )
     expect(rows[0].props).toMatchObject({ form_id: 'demo-request', url: 'https://tapdash.co/demo' })
   })
+
+  it('prefixes a client-supplied dedupe_key server-side', async () => {
+    const r = await emitPageVisited(db, { contact_id: contact, dedupe_key: 'visitor-1', url: 'https://tapdash.co/' })
+    expect(r.inserted).toBe(true)
+    const { rows } = await db.query<{ dedupe_key: string | null }>(
+      "select dedupe_key from lp.lead_events where type = 'page_visited' order by id desc limit 1",
+    )
+    expect(rows[0].dedupe_key).toBe('site:page_visited:visitor-1')
+  })
+
+  it('the same client key on a different type does not collide', async () => {
+    const a = await emitPageVisited(db, { contact_id: contact, dedupe_key: 'same-key', url: 'https://tapdash.co/' })
+    const b = await emitFormSubmitted(db, { contact_id: contact, dedupe_key: 'same-key', form_id: 'demo', url: 'https://tapdash.co/' })
+    expect(a.inserted).toBe(true)
+    expect(b.inserted).toBe(true)
+    const { rows } = await db.query<{ dedupe_key: string }>(
+      "select dedupe_key from lp.lead_events where dedupe_key like '%:same-key' order by id",
+    )
+    expect(rows.map((r) => r.dedupe_key).sort()).toEqual(['site:form_submitted:same-key', 'site:page_visited:same-key'])
+  })
+
+  it('query strings and fragments are stripped from stored url/referrer (PII)', async () => {
+    const r = await emitPageVisited(db, {
+      contact_id: contact,
+      url: 'https://tapdash.co/pricing?email=owner@gemco.example&utm_source=x#frag',
+      referrer: 'https://www.google.com/?q=tapdash',
+    })
+    expect(r.inserted).toBe(true)
+    const { rows } = await db.query<{ props: Record<string, unknown> }>(
+      "select props from lp.lead_events where type = 'page_visited' order by id desc limit 1",
+    )
+    expect(rows[0].props).toMatchObject({ url: 'https://tapdash.co/pricing', referrer: 'https://www.google.com/' })
+    expect(JSON.stringify(rows[0].props)).not.toContain('email=')
+  })
 })
 
 describe('POST /api/webhooks/site-events', () => {
@@ -214,6 +248,44 @@ describe('POST /api/webhooks/site-events', () => {
     const body = await res.json()
     expect(body).toMatchObject({ ok: true, inserted: true, type: 'page_visited' })
     expect(await typesFor(db, contact)).toContain('page_visited')
+  })
+
+  it('rejects a wrong secret with 401', async () => {
+    const { POST } = await import('@/app/api/webhooks/site-events/route')
+    const { NextRequest } = await import('next/server')
+    const res = await POST(new NextRequest('http://localhost/api/webhooks/site-events', {
+      method: 'POST',
+      headers: { authorization: 'Bearer definitely-not-the-secret' },
+      body: JSON.stringify({ type: 'page_visited', email: 'owner@gemco.example' }),
+    }))
+    expect(res.status).toBe(401)
+  })
+
+  it('prefixes the client dedupe_key and strips query strings at the route', async () => {
+    const prev = process.env.SITE_EVENTS_SECRET
+    process.env.SITE_EVENTS_SECRET = 'route-test-secret'
+    try {
+      const { POST } = await import('@/app/api/webhooks/site-events/route')
+      const { NextRequest } = await import('next/server')
+      const res = await POST(new NextRequest('http://localhost/api/webhooks/site-events', {
+        method: 'POST',
+        headers: { authorization: 'Bearer route-test-secret' },
+        body: JSON.stringify({
+          type: 'page_visited',
+          email: 'owner@gemco.example',
+          url: 'https://tapdash.co/a?email=owner@gemco.example',
+          dedupe_key: 'route-key',
+        }),
+      }))
+      expect(res.status).toBe(200)
+      const { rows } = await db.query<{ dedupe_key: string | null; props: Record<string, unknown> }>(
+        "select dedupe_key, props from lp.lead_events where type = 'page_visited' order by id desc limit 1",
+      )
+      expect(rows[0].dedupe_key).toBe('site:page_visited:route-key')
+      expect(rows[0].props).toMatchObject({ url: 'https://tapdash.co/a' })
+    } finally {
+      process.env.SITE_EVENTS_SECRET = prev
+    }
   })
 
   it('rejects an unknown type with 400', async () => {

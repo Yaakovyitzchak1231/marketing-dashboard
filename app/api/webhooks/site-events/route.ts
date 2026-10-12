@@ -2,14 +2,20 @@
  * POST /api/webhooks/site-events
  *
  * Site tracking endpoint: records page_visited / form_submitted lead events
- * (lib/events/web.ts). The site's tracking snippet (or a server-side
- * integration) posts here; the lead is resolved by email, company_id or
+ * (lib/events/web.ts). The lead is resolved by email, company_id or
  * contact_id, exactly like every other emitter.
  *
- * Authenticated by a shared secret, SITE_EVENTS_SECRET, sent as
- * `Authorization: Bearer <secret>` (or `x-webhook-secret`) — the same shape
- * as the Instantly webhook. The login gate lets /api/webhooks/* through;
- * this route rejects anything without the secret.
+ * SERVER-TO-SERVER ONLY. Authenticated by a shared secret, SITE_EVENTS_SECRET,
+ * sent as `Authorization: Bearer <secret>` (or `x-webhook-secret`) — the same
+ * shape as the Instantly webhook. The secret must NEVER be embedded in
+ * client-side JavaScript: anything shipped to a browser is public, and anyone
+ * holding the secret can forge page_visited / form_submitted events (which
+ * feed scoring and segments). If you need browser tracking, the site's own
+ * tracking snippet must post to the site's OWN backend first; that backend
+ * holds the secret and posts here server-side.
+ *
+ * The login gate lets /api/webhooks/* through; this route rejects anything
+ * without the secret with a 401.
  *
  * Body (JSON): { type: 'page_visited' | 'form_submitted',
  *   email? | company_id? | contact_id?, url?, page_title?, referrer?,
