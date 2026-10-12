@@ -270,6 +270,19 @@ describe('every mutating API route authenticates', () => {
     }
   })
 
+  it("no route passes the literal 'owner' as an actor (it hides who really acted)", () => {
+    const offenders: string[] = []
+    for (const f of files) {
+      const lines = readFileSync(f, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        const code = line.replace(/\/\/.*$/, '')
+        const cleaned = code.replace(/actorFor\('owner'\)/g, '').replace(/===\s*'owner'/g, '')
+        if (/['"]owner['"]/.test(cleaned)) offenders.push(`${rel(f)}:${i + 1}`)
+      })
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('actorFor in a verify mutating route is the first awaited call in the handler', () => {
     for (const r of ['verify/preview/route.ts', 'verify/runs/[id]/approve/route.ts', 'verify/runs/[id]/step/route.ts', 'verify/runs/[id]/cancel/route.ts']) {
       const src = stripNoise(readFileSync(path.join(API_DIR, r), 'utf8'))

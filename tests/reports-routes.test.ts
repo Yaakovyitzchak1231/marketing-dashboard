@@ -6,6 +6,7 @@ import { counts } from './helpers/report-fixtures'
 const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown } }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db, dbConfigured: () => Boolean(holder.db) }))
+vi.mock('@/lib/auth/session', () => ({ currentRole: async () => 'owner', currentActorId: async () => 'owner', currentEmail: async () => null }))
 vi.mock('@/lib/reports/load', async () => {
   const { buildWeeklyReport } = await import('@/lib/reports/weekly')
   return {
