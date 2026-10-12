@@ -15,6 +15,7 @@
 import { createPgDb } from '../lib/db/pg.ts'
 import { claimTask, createTask } from '../lib/ops/core.ts'
 import { normalizeFindParams, findJobTitle } from './params.ts'
+import { recordFindJob } from './findJobRecord.ts'
 import { computeCounters } from './store.ts'
 import { opsApiFromEnv, runWorkerApi, runWorkerDb, workTaskDb, ENGINE_KINDS } from './worker.ts'
 
@@ -68,7 +69,18 @@ async function main() {
       concurrency: { maps: arg(args, 'maps-conc'), crawl: arg(args, 'crawl-conc') },
     })
     const db = createPgDb(url)
-    const task = await createTask(db, agent, { kind: 'find_leads', title: findJobTitle(params), assigned_to: agent, payload: params as unknown as Record<string, unknown>, max_attempts: 5 })
+    const poolLabel = (await db.query<{ label: string }>('select label from lp.pools where id = $1', [params.segment])).rows[0]?.label ?? null
+    if (!poolLabel) throw new Error(`No pool "${params.segment}". Create it in Settings > Pools first.`)
+    const task = await createTask(db, agent, { kind: 'find_leads', title: findJobTitle(params, poolLabel), assigned_to: agent, payload: params as unknown as Record<string, unknown>, max_attempts: 5 })
+    await recordFindJob(db, {
+      task_id: task.id,
+      campaign_id: params.campaign_id,
+      pool: params.segment,
+      title: task.title,
+      params: params as unknown as Record<string, unknown>,
+      config_source: params.config_source,
+      created_by: agent,
+    })
     const claimed = await claimTask(db, agent, { kinds: ['find_leads'], task_id: task.id, lease_seconds: 600 })
     if (!claimed) throw new Error(`could not claim task ${task.id}`)
     console.log(`find_leads task #${task.id}: ${task.title}`)

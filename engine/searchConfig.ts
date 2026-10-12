@@ -13,6 +13,8 @@ export interface ResolvedSearchConfig {
   /** "profile" or "built-in default for pool <slug>" — logged on the run. */
   source: string
   campaign_id: number | null
+  /** The campaign's pool slug (lp.campaigns.pool): the pool default for the run when no explicit segment is given. */
+  pool: string | null
 }
 
 /**
@@ -56,8 +58,8 @@ export async function resolveCampaignSearchConfig(q: Queryable, campaignId: numb
   ])
   const hasProfile = search_phrases.length > 0 || place_categories.length > 0 || negative_keywords.length > 0
   if (hasProfile) {
-    return { config: { search_phrases, place_categories, negative_keywords }, source: 'profile', campaign_id: campaignId }
+    return { config: { search_phrases, place_categories, negative_keywords }, source: 'profile', campaign_id: campaignId, pool }
   }
   const def = (pool && defaultSearchConfigFor(pool)) || { search_phrases: [], place_categories: [], negative_keywords: [] }
-  return { config: def, source: `built-in default for pool ${pool ?? 'unknown'}`, campaign_id: campaignId }
+  return { config: def, source: `built-in default for pool ${pool ?? 'unknown'}`, campaign_id: campaignId, pool }
 }
