@@ -4,10 +4,22 @@
  * resolveSendTime is the seam the journey scheduler (plan 3.1) calls when
  * dispatching a timed step: given the time the step is due, shift it into
  * the lead's optimal window. No window (or no engagement history) means the
- * due time passes through unchanged.
+ * due time passes through unchanged. Two guardrails keep the shift sane:
+ * sends never leave business hours (8:00-18:00 lead-local) and never move
+ * more than MAX_SHIFT_HOURS out — beyond that the due time wins.
  */
 import type { Db } from '../db/types.ts'
 import { getSendWindow, leadKey, recomputeSendWindow, type SendWindow } from './analyze.ts'
+
+/** Never shift a send more than this far out; beyond it the due time wins. */
+export const MAX_SHIFT_HOURS = 48
+
+/**
+ * Business-hours clamp, lead-local. A learned best_hour outside 8:00-18:00
+ * is pulled to the nearest edge rather than sending at 3am.
+ */
+export const QUIET_HOURS_START = 8
+export const QUIET_HOURS_END = 18
 
 /** Minutes to add to a UTC instant to get wall time in tz (DST-aware). */
 function offsetMinutes(tz: string, date: Date): number {
@@ -38,11 +50,13 @@ function offsetMinutes(tz: string, date: Date): number {
  * Date. Pure (no database), so the scheduler and tests share it.
  */
 export function optimalSendAt(window: SendWindow, from: Date): Date {
+  // Quiet-hours clamp: never schedule outside 8:00-18:00 lead-local.
+  const hour = Math.min(Math.max(window.best_hour, QUIET_HOURS_START), QUIET_HOURS_END)
   const off0 = offsetMinutes(window.timezone, from)
   const wallFrom = from.getTime() + off0 * 60000
   const wf = new Date(wallFrom)
-  // Today at best_hour (wall clock), else tomorrow.
-  let cand = Date.UTC(wf.getUTCFullYear(), wf.getUTCMonth(), wf.getUTCDate(), window.best_hour, 0, 0)
+  // Today at the (clamped) best hour (wall clock), else tomorrow.
+  let cand = Date.UTC(wf.getUTCFullYear(), wf.getUTCMonth(), wf.getUTCDate(), hour, 0, 0)
   if (cand <= wallFrom) cand += 86400000
   // Prefer the best day of week, but never push more than a week out.
   if (window.best_dow != null) {
@@ -51,7 +65,11 @@ export function optimalSendAt(window: SendWindow, from: Date): Date {
   // Back to absolute time (re-derive the offset at the candidate for DST edges).
   const abs = cand - offsetMinutes(window.timezone, new Date(cand - off0 * 60000)) * 60000
   const out = new Date(abs)
-  return out.getTime() < from.getTime() ? from : out
+  if (out.getTime() < from.getTime()) return from
+  // Fall back to the due time when the shift is too large: a "perfect" window
+  // eight days out is worse than sending on time.
+  if (out.getTime() - from.getTime() > MAX_SHIFT_HOURS * 3600000) return from
+  return out
 }
 
 export interface ResolveOpts {

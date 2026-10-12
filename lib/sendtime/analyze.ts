@@ -2,11 +2,13 @@
  * Per-lead send-time optimisation — plan 3.11 (analysis half).
  *
  * Each lead's optimal send window is learned from its engagement history in
- * lp.lead_events (opens, clicks, replies): the hour of day (lead-local) and
- * day of week the lead engages most. Windows are stored in
- * lp.lead_send_windows; lib/sendtime/schedule.ts turns a window into an
- * actual send time, which is the seam the journey scheduler (plan 3.1)
- * calls when dispatching timed steps.
+ * lp.lead_events (opens, clicks, replies): the hour of day and day of week
+ * the lead engages most, bucketed in the lead's timezone. That timezone
+ * defaults to America/New_York (ET) until a lead-specific one is known, so
+ * "lead-local" below means "in the stored timezone, ET by default".
+ * Windows are stored in lp.lead_send_windows; lib/sendtime/schedule.ts
+ * turns a window into an actual send time, which is the seam the journey
+ * scheduler (plan 3.1) calls when dispatching timed steps.
  */
 import type { Db, Queryable } from '../db/types.ts'
 
@@ -25,6 +27,7 @@ export const ENGAGEMENT_TYPES = ['email_opened', 'email_link_clicked', 'reply_re
 /** Minimum engagement events before a window is trusted. */
 export const MIN_SAMPLE = 5
 
+/** Fallback timezone (ET) until a lead-specific one is known. */
 export const DEFAULT_TIMEZONE = 'America/New_York'
 
 export interface SendWindow {
@@ -153,29 +156,41 @@ export async function recomputeSendWindows(
   opts: { campaign_id?: number | null; limit?: number } = {},
 ): Promise<{ recomputed: number; skipped: number }> {
   const limit = Math.min(Math.max(Math.floor(Number(opts.limit) || 500), 1), 5000)
-  const params: unknown[] = [ENGAGEMENT_TYPES, limit]
+  const params: unknown[] = [ENGAGEMENT_TYPES]
   let campaignJoin = ''
   if (opts.campaign_id != null) {
-    campaignJoin = 'join lp.campaign_leads cl on cl.company_id = e.company_id and cl.campaign_id = $3'
+    campaignJoin = 'join lp.campaign_leads cl on cl.company_id = e.company_id and cl.campaign_id = $2'
     params.push(opts.campaign_id)
   }
-  const r = await db.query<{ lead_key: string }>(
-    `select distinct
-       case when e.contact_id is not null then 'contact:' || e.contact_id else 'company:' || e.company_id end as lead_key
-     from lp.lead_events e
-     ${campaignJoin}
-     where e.type = any($1)
-       and e.occurred_at > now() - interval '90 days'
-       and e.company_id is not null
-     limit $2`,
-    params,
-  )
+  // Most-recently-engaged leads first (deterministic order), in pages: an
+  // unordered DISTINCT ... LIMIT could starve leads forever.
+  const PAGE = 500
   let recomputed = 0
   let skipped = 0
-  for (const { lead_key } of r.rows) {
-    const w = await recomputeSendWindow(db, lead_key)
-    if (w) recomputed++
-    else skipped++
+  let done = 0
+  for (;;) {
+    const r = await db.query<{ lead_key: string }>(
+      `select
+         case when e.contact_id is not null then 'contact:' || e.contact_id else 'company:' || e.company_id end as lead_key,
+         max(e.occurred_at) as last_engagement
+       from lp.lead_events e
+       ${campaignJoin}
+       where e.type = any($1)
+         and e.occurred_at > now() - interval '90 days'
+         and e.company_id is not null
+       group by 1
+       order by last_engagement desc
+       limit ${PAGE} offset ${done}`,
+      params,
+    )
+    if (!r.rows.length) break
+    for (const { lead_key } of r.rows) {
+      const w = await recomputeSendWindow(db, lead_key)
+      if (w) recomputed++
+      else skipped++
+    }
+    done += r.rows.length
+    if (done >= limit || r.rows.length < PAGE) break
   }
   return { recomputed, skipped }
 }

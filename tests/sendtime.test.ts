@@ -100,6 +100,21 @@ describe('optimalSendAt (pure date math)', () => {
     const out = optimalSendAt(win({ best_hour: 23 }), MON_11AM_EDT)
     expect(out.getTime()).toBeGreaterThanOrEqual(MON_11AM_EDT.getTime())
   })
+  it('clamps a 3am best hour into business hours (8am local)', () => {
+    // Monday 11 AM EDT, best_hour 3 -> clamped to 8 AM; 8 AM already passed, so Tue 8 AM EDT = 12:00 UTC
+    const out = optimalSendAt(win({ best_hour: 3 }), MON_11AM_EDT)
+    expect(out.toISOString()).toBe('2026-10-13T12:00:00.000Z')
+  })
+  it('clamps a late-night best hour to 6pm local', () => {
+    // Monday 11 AM EDT, best_hour 23 -> clamped to 18:00 EDT today = 22:00 UTC
+    const out = optimalSendAt(win({ best_hour: 23 }), MON_11AM_EDT)
+    expect(out.toISOString()).toBe('2026-10-12T22:00:00.000Z')
+  })
+  it('falls back to the due time when the shift exceeds 48 hours', () => {
+    // best_dow = Sunday (0); Monday 11 AM -> Sunday 10 AM is ~6 days out, over the cap
+    const out = optimalSendAt(win({ best_dow: 0 }), MON_11AM_EDT)
+    expect(out.getTime()).toBe(MON_11AM_EDT.getTime())
+  })
 })
 
 describe('send windows (db)', () => {
