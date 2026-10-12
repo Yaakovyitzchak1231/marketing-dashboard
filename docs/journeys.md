@@ -58,8 +58,46 @@ checks shape, unique ids, known kinds, each kind's own config, that every edge
 points at a node, and that every node is reachable. Loops are allowed.
 
 Built-in kinds (`lib/journeys/nodes.ts`): `wait` ({minutes, hours, days},
-measured from `node_entered_at`), `exit` ({reason}; ends as `exited`), and
-`note` (does nothing; moves on). `branch` above is an example of a kind 3.5 adds.
+measured from `node_entered_at`), `exit` ({reason}; ends as `exited`),
+`note` (does nothing; moves on), and `branch` (3.5, below).
+
+## Branch nodes (plan 3.5)
+
+A `branch` picks one of its labelled `paths`; it never uses `next`. Config:
+`{ if?, since? }`. Path labels are matched ignoring case, and the graph is
+rejected at publish (and by `journey_validate`) when the labels a mode needs are
+missing. A branch never falls through to "some other path".
+
+`since` is `journey` (default: events from the lead's entry into the journey) or
+`node` (events from when the run arrived at this branch). Anything else is
+rejected. Events are measured on `occurred_at` (when it happened), not
+`recorded_at` (when we stored it), so an open from before entry that a backfill
+stores later does not count.
+
+**Open/click** (no `if`): paths `clicked` and/or `opened`, plus a fallback
+`no-open` (or `no open`, `else`, `no`). A lead with an `email_link_clicked` takes
+`clicked` (or `opened` if there is no `clicked` path); one with only an
+`email_opened` takes `opened`; if the graph has no path for what happened, or
+nothing happened, the lead takes the fallback (`else` preferred for the former).
+
+**If/else** (`if` set): paths `yes` (or `true`) and `no` (or `else`). Two forms:
+
+- `{ "event": "reply_received" }` — yes when that event type happened since `since`.
+- `{ "entity": "company"|"contact", "field": "...", "equals": ... }` — yes when the
+  field equals the value. Fields: company `stage`, `city`, `state`, `country`;
+  contact `status`, `verification_status`. `equals` is required, and compared as text.
+
+NULL is "unknown", never `''`: a missing row or a NULL column is `no`, unless
+`equals` is explicitly `null`, which matches only a NULL column. Unknown `if`
+keys, an unknown entity, a non-whitelisted field, or an empty `if` are rejected.
+
+```json
+{ "id": "gate", "kind": "branch", "config": { "if": { "event": "reply_received" }, "since": "node" },
+  "paths": [ { "label": "yes", "to": "thanks" }, { "label": "no", "to": "nudge" } ] }
+```
+
+Graphs are validated by `publishVersion` before anything is stored (the only
+writer of `lp.journey_versions`); `journey_upsert` stores no graph.
 
 ## Adding a node kind (3.4, 3.5, 3.7, 3.8, 3.9)
 
@@ -122,6 +160,6 @@ are not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
-- Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
+- Node kinds beyond wait/exit/note/branch: split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
 - Human approval before a send-capable journey goes live (lands with 3.9, when a send kind exists).
 - A journeys page and the builder (3.13). There is no UI in 3.1.
