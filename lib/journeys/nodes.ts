@@ -235,8 +235,6 @@ const CONTACT_FIELDS = ['status', 'verification_status'] as const
 export const BRANCH_SINCE = ['journey', 'node'] as const
 const BRANCH_CONFIG_KEYS = ['if', 'since']
 const IF_KEYS = ['event', 'entity', 'field', 'equals']
-const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
-
 // Path labels each branch mode routes to. Matching ignores case; the first label
 // in a list that the node has wins.
 const YES_LABELS = ['yes', 'true']
@@ -280,7 +278,7 @@ function validateIf(spec: Record<string, unknown>): string[] {
     return errs
   }
   if (hasEvent) {
-    if (typeof spec.event !== 'string' || !EVENT_RE.test(spec.event.trim())) errs.push('if.event must be an event type such as reply_received')
+    if (typeof spec.event !== 'string' || !EVENT_TYPE_KEY_RE.test(spec.event.trim())) errs.push('if.event must be an event type such as reply_received')
     return errs
   }
   if (!hasField) {
@@ -346,7 +344,7 @@ const goalHandler: NodeHandler = {
   kind: 'goal',
   validate(node) {
     const event = node.config.event
-    if (event != null && (typeof event !== 'string' || !EVENT_RE.test(event))) return ['event must be an event type, like meeting_booked']
+    if (event != null && (typeof event !== 'string' || !EVENT_TYPE_KEY_RE.test(event))) return ['event must be an event type, like meeting_booked']
     return []
   },
   async run({ q, run, node, now }) {

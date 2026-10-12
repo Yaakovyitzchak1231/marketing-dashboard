@@ -231,6 +231,8 @@ describe('branch nodes (plan 3.5)', () => {
 
     it('accepts the documented shapes', () => {
       expect(errorsOf(g({ if: { event: 'reply_received' } }, YN))).toEqual([])
+      // Dotted event type keys are valid lp.event_types keys (same shape as the wait node's drop_if).
+      expect(errorsOf(g({ if: { event: 'review.posted' } }, YN))).toEqual([])
       expect(errorsOf(g({ if: { entity: 'contact', field: 'status', equals: null } }, [{ label: 'true', to: 'a' }, { label: 'else', to: 'b' }]))).toEqual([])
       expect(errorsOf(g({ since: 'node' }, [{ label: 'opened', to: 'a' }, { label: 'else', to: 'b' }]))).toEqual([])
       expect(errorsOf(g(undefined, [{ label: 'clicked', to: 'a' }, { label: 'no-open', to: 'b' }]))).toEqual([])
