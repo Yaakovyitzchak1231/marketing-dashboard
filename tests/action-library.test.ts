@@ -131,7 +131,7 @@ describe('runAction role guards (db)', () => {
 
   it('refuses suppression.add and lead.update for agent keys (403)', async () => {
     await expect(
-      runAction(db, 'tab', 'suppression.add', { email: 'a@b.c', reason: 'x' }, ctx()),
+      runAction(db, 'tab', 'suppression.add', { email: 'a@b.c', reason: 'bounced' }, ctx()),
     ).rejects.toThrow(/agent keys get 403/)
     await expect(
       runAction(db, 'tab', 'lead.update', { type: 'company', id: companyId, field: 'city', value: 'X' }, ctx()),
@@ -141,7 +141,7 @@ describe('runAction role guards (db)', () => {
   })
 
   it('lets the system runner and owner run restricted actions', async () => {
-    const s = await runAction(db, 'system', 'suppression.add', { email: 'sys@example.com', reason: 'x' }, ctx())
+    const s = await runAction(db, 'system', 'suppression.add', { email: 'sys@example.com', reason: 'bounced' }, ctx())
     expect(s.status).toBe('ok')
     const o = await runAction(db, 'owner', 'lead.update', { type: 'company', id: companyId, field: 'city', value: 'Y' }, ctx())
     expect(o.status).toBe('ok')
