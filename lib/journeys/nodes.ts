@@ -7,6 +7,14 @@
  *              3.4 extends it (wait until a date/slot or a condition, drop-if-replied).
  *  - `exit`  — end the run now with status `exited`: config {reason?}.
  *  - `note`  — do nothing and move on (a label in the graph; handy in tests).
+ *  - `goal`  — end the run as `goal` (3.7): config {event?}. With an event, the run waits
+ *              (re-checking each minute) until that event happened for the lead since the
+ *              run entered, then finishes as `goal`; without one it finishes at once.
+ *  - `goto`  — jump to another node (3.7): config {to}, the target node id (trimmed when the
+ *              graph is validated). The graph counts it as an edge, so the target is reachable.
+ *
+ * The journey's own `goal.exit_event` and `settings.entry_cap` (3.7) are not nodes; they live
+ * in the runner (applyExitCriteria, enrollLead). See docs/journeys.md.
  *
  * Adding a kind (3.5 branch, 3.7 goal/go-to, 3.8 action, 3.9 send): write a
  * handler and call registerNodeHandler (or add it to BUILT_IN). The handler
@@ -73,6 +81,8 @@ export interface NodeHandler {
   sends?: boolean
   /** Problems with this node's config/paths, as plain sentences. Empty when fine. */
   validate(node: GraphNode): string[]
+  /** Optional: return the node with its config in canonical form (e.g. trimmed ids). Called before validate. */
+  normalize?(node: GraphNode): GraphNode
   run(ctx: NodeContext): Promise<NodeOutcome>
 }
 
@@ -134,7 +144,66 @@ const noteHandler: NodeHandler = {
   },
 }
 
-const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler]
+const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
+
+const goalHandler: NodeHandler = {
+  kind: 'goal',
+  validate(node) {
+    const event = node.config.event
+    if (event != null && (typeof event !== 'string' || !EVENT_RE.test(event))) return ['event must be an event type, like meeting_booked']
+    return []
+  },
+  async run({ q, run, node, now }) {
+    const event = typeof node.config.event === 'string' ? node.config.event : ''
+    if (event) {
+      const hit = await seenSince(q, run, [event], run.entered_at)
+      if (!hit.has(event)) {
+        return { type: 'wait', until: new Date(now.getTime() + 60_000), result: { waiting_for: event } }
+      }
+    }
+    return { type: 'finish', status: 'goal', result: event ? { event } : {} }
+  },
+}
+
+const gotoHandler: NodeHandler = {
+  kind: 'goto',
+  validate(node) {
+    const to = typeof node.config.to === 'string' ? node.config.to.trim() : ''
+    if (!to) return ['goto needs config.to, the node id to jump to']
+    return []
+  },
+  normalize(node) {
+    return typeof node.config.to === 'string' ? { ...node, config: { ...node.config, to: node.config.to.trim() } } : node
+  },
+  async run({ node }) {
+    // Trim here too: versions published before normalisation may hold a padded id.
+    const to = String(node.config.to).trim()
+    return { type: 'next', to, result: { to } }
+  },
+}
+
+/**
+ * Which of `types` happened for this run's lead since `since` (by `occurred_at`).
+ * Identity is scoped to the run: a contact run matches events for that contact,
+ * a company run matches events for that company.
+ */
+async function seenSince(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
+  if (!types.length || (run.company_id == null && run.contact_id == null)) return new Set()
+  const { rows } = await q.query<{ type: string }>(
+    `select distinct type from lp.lead_events
+      where type = any($1::text[])
+        and occurred_at >= $2
+        and (
+          case when $4::bigint is not null then contact_id = $4 else company_id = $3 end
+        )`,
+    [types, since.toISOString(), run.company_id, run.contact_id],
+  )
+  return new Set(rows.map((r) => r.type))
+}
+
+export { seenSince }
+
+const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, goalHandler, gotoHandler]
 const REGISTRY = new Map<string, NodeHandler>(BUILT_IN.map((h) => [h.kind, h]))
 
 export function registerNodeHandler(handler: NodeHandler): void {
