@@ -8,6 +8,7 @@ import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { VerifyButton } from '@/components/verify/VerifyButton'
 import Link from 'next/link'
 import { fetchRole, useRole } from '@/components/auth/useRole'
+import { BULK_FIELD_CHOICES } from '@/lib/edit/bulk-fields'
 import { VIEW_ONLY_DIM, VIEW_ONLY_PROPS, announceViewOnly, failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 export interface Selected {
@@ -25,6 +26,9 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   const [lists, setLists] = useState<{ id: number; name: string }[]>([])
   const [listChoice, setListChoice] = useState('')
   const [newListName, setNewListName] = useState('')
+  const [editField, setEditField] = useState('')
+  const [editValue, setEditValue] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const viewer = useRole() === 'viewer'
 
   useEffect(() => {
@@ -100,6 +104,41 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
     }
   }
 
+  /** One field, one value, every selected lead; each change goes through the inline-edit path and is logged. */
+  /** "Apply to N" only asks; Confirm sends (no bulk change without a confirm that shows the count). */
+  function askApplyField() {
+    if (viewOnly() || !editField) return
+    setNote(null)
+    setConfirming(true)
+  }
+
+  async function applyField() {
+    if (viewOnly() || !editField) return
+    setConfirming(false)
+    setBusy(true)
+    setNote(null)
+    try {
+      const res = await fetch('/api/leads/bulk-edit', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ company_ids: selected.companyIds, field: editField, value: editValue.trim() === '' ? null : editValue, confirm: true }),
+      })
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+      if (!res.ok) setNote({ tone: 'bad', text: failedWriteText(res.status, body?.error, `Couldn\u2019t edit the leads (${res.status}).`, await fetchRole()) })
+      else {
+        const failed = Array.isArray(body?.failed) ? body.failed.length : 0
+        setNote({ tone: failed ? 'bad' : 'good', text: typeof body?.message === 'string' ? body.message : 'Saved.' })
+        setEditValue('')
+        onDone()
+        router.refresh?.()
+      }
+    } catch (err) {
+      setNote({ tone: 'bad', text: thrownWriteText(err, await fetchRole()) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function addToList() {
     if (viewOnly() || (!listChoice && !newListName.trim())) return
     setBusy(true)
@@ -131,6 +170,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   }
 
   const verifyIds = selected.unverifiedContactIds
+  const fieldLabel = BULK_FIELD_CHOICES.find((f) => f.value === editField)?.label ?? editField
   return (
     <div
       role="region"
@@ -210,6 +250,62 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
           Apply
         </button>
       </span>
+      <span className="flex items-center gap-1">
+        <label className="sr-only" htmlFor="bulk-field">
+          Edit field
+        </label>
+        <select
+          id="bulk-field"
+          value={editField}
+          onChange={(e) => {
+            setEditField(e.target.value)
+            setConfirming(false)
+          }}
+          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+        >
+          <option value="">Edit field…</option>
+          {BULK_FIELD_CHOICES.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+        {editField ? (
+          <>
+            <label className="sr-only" htmlFor="bulk-value">
+              New value
+            </label>
+            <input
+              id="bulk-value"
+              value={editValue}
+              onChange={(e) => {
+                setEditValue(e.target.value)
+                setConfirming(false)
+              }}
+              placeholder="Empty clears it"
+              className="w-32 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+            />
+          </>
+        ) : null}
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || !editField)} onClick={askApplyField} {...(viewer ? VIEW_ONLY_PROPS : {})}>
+          Apply to {n}
+        </button>
+      </span>
+      {confirming && editField && !viewer ? (
+        <span role="group" aria-label="Confirm bulk edit" className="flex w-full flex-wrap items-center gap-2 border-t border-line-soft pt-2 text-[12px] text-ink">
+          <span className="tabular-nums">
+            {editValue.trim() === ''
+              ? `Clear ${fieldLabel} on ${n} lead${n === 1 ? '' : 's'}?`
+              : `Set ${fieldLabel} to \u201C${editValue.trim()}\u201D on ${n} lead${n === 1 ? '' : 's'}?`}
+          </span>
+          <button type="button" className={BUTTON_PRIMARY} disabled={busy} onClick={applyField}>
+            Confirm
+          </button>
+          <button type="button" className={BUTTON} onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </span>
+      ) : null}
       <button type="button" className="ml-auto text-[12px] text-ink-faint hover:text-ink" onClick={onDone}>
         Clear
       </button>

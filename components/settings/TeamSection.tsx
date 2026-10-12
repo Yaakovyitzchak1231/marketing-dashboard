@@ -18,7 +18,7 @@ const ROLE_HINT: Record<Role, string> = {
   viewer: 'Read-only',
 }
 
-const selectCls = 'rounded-card border border-line bg-surface px-2 py-1 text-[13px] text-ink focus:border-accent focus:outline-none'
+const selectCls = 'rounded-card border border-line bg-surface px-2 py-1 text-[13px] text-ink focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
 
 function MemberRow({ member, canManage, isOnlyOwner, roleAction, removeAction }: { member: TeamMemberRow; canManage: boolean; isOnlyOwner: boolean; roleAction: RoleAction; removeAction: RemoveAction }) {
   const [roleState, roleFormAction, rolePending] = useActionState<TeamFormResult | null, FormData>(roleAction, null)
@@ -77,11 +77,11 @@ function AddMemberForm({ action }: { action: AddAction }) {
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2 border-t border-line-soft pt-3">
       <div>
         <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-name">Name</label>
-        <input id="team-name" name="display_name" required placeholder="Izzy" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none" />
+        <input id="team-name" name="display_name" required placeholder="Izzy" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
       </div>
       <div>
         <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-email">Email</label>
-        <input id="team-email" name="email" type="email" required placeholder="izzy@tapdash.co" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none" />
+        <input id="team-email" name="email" type="email" required placeholder="izzy@tapdash.co" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
       </div>
       <div>
         <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-role">Role</label>
