@@ -128,7 +128,14 @@ It does not send. Quiet hours and send windows are in the lead's time zone.
 
 Timezone order: contact `timezone`, then company `timezone`
 (`db/migrations/0065_lead_timezone.sql`), then `settings.send_controls.fallback_timezone`,
-then `America/New_York`. A blank or unknown name is skipped.
+then `America/New_York`. A blank or unknown name is skipped and never throws.
+
+House rule for the default: Eastern time is the house default zone (the same one the
+send-time feature uses). It is never silent. When no contact, company or journey
+zone was usable, every decision from `sendAllowed` carries `timezone_defaulted: true`
+(the key is absent when a real zone was used), and `resolveLeadTimezoneDetail`
+returns `{ timezone, defaulted }`. Fill in the lead's zone, or the journey's
+`fallback_timezone`, to turn the flag off.
 
 ```json
 { "send_controls": {
@@ -139,15 +146,43 @@ then `America/New_York`. A blank or unknown name is skipped.
     "active_until": "2026-11-01T00:00:00Z" } }
 ```
 
-Days are 0 = Sunday through 6 = Saturday. A start later than the end wraps
-midnight. If the journey sets no quiet hours, the caller may pass the workspace
-quiet-hours clock. No send window means any time, still subject to quiet hours
-and the launch bounds.
+Days are integers, 0 = Sunday through 6 = Saturday. Times are 24-hour `HH:MM`
+with two digits. A start later than the end wraps midnight (a Friday 22:00 to
+02:00 window is still open at Saturday 01:00); start and end must differ.
+If the journey sets no quiet hours, the caller may pass the workspace quiet-hours
+clock. No send window means any time, still subject to quiet hours and the
+launch bounds. `launch_at` and `active_until` must be ISO date-times with an
+explicit offset or `Z` (`2026-10-14T09:00:00-04:00`); a value with no offset
+would be read in the server's zone, so it is refused.
+
+**Bad config is refused at save.** `journey_upsert` checks `settings.send_controls`
+and rejects it (400, `settings.send_controls is invalid: ...`, every problem
+named) for: a non-object, `days` that is not an array of integers 0 to 6 (a string
+like `"1,2,3"`, numeric strings, an empty list), a clock that is not `HH:MM`
+(`"9:00"`), a zero-length span, an unknown `fallback_timezone`, or a `launch_at`
+or `active_until` that is not an ISO date-time with an offset. Absent or `null`
+fields mean "no such control".
+
+**Bad config fails closed at send time.** Config saved before the check, or edited
+in the database, may still be malformed. `sendAllowed` does not throw and does not
+read a malformed control as "no limit". It holds the send:
+`{ allow: false, until: now + 1 hour, reason: "invalid send window", errors }` when the
+send window is malformed, and `reason: "invalid send controls"` for any other
+malformed field (quiet hours, `launch_at`, `active_until`, or `send_controls`
+itself). The hour is only how long the runner waits before looking again, in case
+the journey was fixed. A past `active_until` still skips first.
 
 `sendAllowed` returns `{ allow: true }`, a hold `{ allow: false, until, reason }`
-(`before launch`, `quiet hours`, `send window`; `until` is one minute past the
-boundary), or `{ allow: false, until: null, reason: "past active-until" }` which
-skips the send. A bad clock or zone is treated as unset. It does not throw.
+(`before launch`, `quiet hours`, `send window`), the invalid hold above, or
+`{ allow: false, until: null, reason: "past active-until" }` which skips the send.
+
+When several controls hold, `until` is the first instant at which all of them
+allow the send (it walks forward until nothing holds), one minute past the last
+boundary, and always after `now`; `reason` names the control that sets it. If that
+instant would be at or after `active_until`, the answer is the skip at once.
+A boundary that falls in a spring-forward gap (a local time that does not exist, such
+as 02:30 on the US change day) resolves to the first instant after the gap; an
+ambiguous autumn time resolves to its first occurrence.
 
 ## Not in 3.1 (left for later rows)
 
