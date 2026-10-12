@@ -261,7 +261,7 @@ export async function exitRuns(
   }, actor)
 }
 
-type RunRow = RunState & { status: string; campaign_id: number | null; journey_status: string }
+type RunRow = RunState & { visit: number; status: string; campaign_id: number | null; journey_status: string }
 
 export interface AdvanceResult {
   run_id: number
@@ -289,7 +289,7 @@ async function advanceOnce(
 ): Promise<StepOutcome> {
   return db.tx(async (q): Promise<StepOutcome> => {
     const { rows } = await q.query<RunRow>(
-      `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at,
+      `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at, r.visit,
               r.context, r.status, j.campaign_id, j.status as journey_status
          from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
         where r.id = $1 and r.status in ${OPEN} and r.next_run_at <= $2
@@ -344,9 +344,10 @@ async function advanceOnce(
     }
     const out: NodeOutcome = await handler.run({
       q, run, node, graph, now,
-      // Stable for one visit to this node (a loop that comes back gets a new key), so a handler can
-      // hand it to an outside service as an idempotency key and a retry does not repeat the effect.
-      idempotencyKey: `journey-run:${run.id}:${node.id}:${run.node_entered_at.getTime()}`,
+      // Stable for one visit to this node (the visit counter only moves when a node move commits, so a
+      // retry reuses it) and new on every later visit, even an instant loop back to this node in the same
+      // tick. A handler hands it to an outside service so a retry does not repeat the effect.
+      idempotencyKey: `journey-run:${run.id}:${node.id}:${Number(row.visit)}`,
     })
     const steps = stepsSoFar + 1
     if ('context' in out && out.context) run.context = { ...run.context, ...out.context }
@@ -391,7 +392,7 @@ async function advanceOnce(
     // Commit the move. The run is due right now, so if this process dies before the next node
     // starts, the next tick picks it up at `to`.
     await q.query(
-      `update lp.journey_runs set status = 'active', attempts = 0, node_id = $2, node_entered_at = $3, next_run_at = $3, context = $4 where id = $1`,
+      `update lp.journey_runs set status = 'active', attempts = 0, node_id = $2, node_entered_at = $3, next_run_at = $3, visit = visit + 1, context = $4 where id = $1`,
       [run.id, to, now.toISOString(), JSON.stringify(run.context)],
     )
     return { kind: 'continue', steps }

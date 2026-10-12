@@ -9,6 +9,7 @@ import type { Db, Queryable } from '../db/types.ts'
 import { decryptSecret, encryptSecret, settingsKeyConfigured, type EncryptedSecretRow } from './crypto.ts'
 import { QUIET_END_KEY, QUIET_START_KEY, quietHoursPairError } from './quiet-hours.ts'
 import { integrationSpecFor, settingSpec, SETTINGS_REGISTRY, type SettingSpec } from './registry.ts'
+import { isOwnerActor } from '../ops/actor-role.ts'
 
 export class SettingsError extends Error {
   readonly status: 400 | 403 | 404
@@ -27,9 +28,13 @@ async function isHuman(q: Queryable, actor: string): Promise<boolean> {
 }
 
 /** put_setting / put a secret are config changes, same bar as other admin-ish ops (pause control, campaign rules): a person only. */
-export async function requireCanWriteSettings(q: Queryable, actor: string): Promise<void> {
+export async function requireCanWriteSettings(q: Queryable, actor: string, key?: string): Promise<void> {
   if (!(await isHuman(q, actor))) {
     throw new SettingsError('Only a person can change settings. An agent can read non-secret settings with its own key.', 403)
+  }
+  // The AI provider settings decide where the server sends requests (and an API key): Owner only, on every path (UI and ops API).
+  if (key?.startsWith('ai.') && !(await isOwnerActor(q, actor))) {
+    throw new SettingsError('Only an Owner can change the AI provider settings.', 403)
   }
 }
 
@@ -125,7 +130,7 @@ export async function putSetting(db: Db, actor: string, key: string, value: stri
   const err = spec.validate?.(v)
   if (err) throw new SettingsError(err, 400)
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     if (key === QUIET_START_KEY || key === QUIET_END_KEY) {
       const other = await getSetting(q, key === QUIET_START_KEY ? QUIET_END_KEY : QUIET_START_KEY)
       const pairErr = key === QUIET_START_KEY ? quietHoursPairError(v, other) : quietHoursPairError(other, v)
@@ -149,7 +154,7 @@ export async function putQuietHours(
   const pairErr = quietHoursPairError(s, e)
   if (pairErr) throw new SettingsError(pairErr, 400)
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, QUIET_START_KEY) // both keys are workspace.*, so one check covers the pair
     await writeSetting(q, actor, QUIET_START_KEY, s, opts)
     await writeSetting(q, actor, QUIET_END_KEY, e, opts)
     return { start: s, end: e }
@@ -199,7 +204,7 @@ export async function putSecret(db: Db, actor: string, key: string, value: strin
   }
   const enc = encryptSecret(value.trim())
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     const before = await secretStatus(q, key)
     await q.query(
       `insert into lp.secrets (key, ciphertext, iv, tag, last4, updated_by) values ($1, $2, $3, $4, $5, $6)
@@ -221,7 +226,7 @@ export async function putSecret(db: Db, actor: string, key: string, value: strin
 export async function clearSecret(db: Db, actor: string, key: string, opts: { via: Via; note?: string } = { via: 'ui' }): Promise<SecretStatus> {
   requireSecretSpec(key)
   return db.tx(async (q) => {
-    await requireCanWriteSettings(q, actor)
+    await requireCanWriteSettings(q, actor, key)
     const before = await secretStatus(q, key)
     if (before.set) {
       await q.query('delete from lp.secrets where key = $1', [key])
