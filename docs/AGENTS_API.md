@@ -163,6 +163,7 @@ the write (`lib/events/emit.ts`'s `emitLeadEvent` / `emitLeadEvents`, used insid
 | `recent_lead_events` | `{company_id? \| contact_id? \| campaign_id?, type?, since?, limit?}` | A lead's (or a campaign's) timeline, newest first. At least one filter is required. |
 | `list_event_types` | `{category?, active_only?}` | The event type registry (for building a UI or picking a type before `track_event`). |
 | `register_event_type` | `{key, label, category, props_schema?}` | Add a new type (slug key, e.g. `review_posted`). Any authenticated actor may register one; it only opens the door for `track_event` to use the key — it never emits an event on its own. |
+| `update_event_type` | `{key, label?, category?, active?}` | Change a custom type's label/category or switch it off (`active:false` makes `track_event` refuse the key). The key never changes. Built-in types (`source` `instantly`/`system`) are refused (409); `register_event_type` on a built-in key is refused too. Editor or Owner for a person's key. Also on the dashboard at Settings → Data → Event types. Each change writes an `lp.events` row (`event_type.registered` / `event_type.updated`). |
 
 A `track_event` worth sending from an agent: a custom milestone (`type: 'custom', props: {instantly_type: '...'}` isn't
 needed outside the Instantly webhook — for your own events, `register_event_type` a real key first,
