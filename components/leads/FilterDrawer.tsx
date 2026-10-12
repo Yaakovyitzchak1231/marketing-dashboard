@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { FilterBadge } from './FilterBadge'
+import { fetchRole } from '@/components/auth/useRole'
+import { failedWriteText, thrownWriteText } from '@/components/auth/viewOnly'
 
 type FieldType = 'text' | 'number' | 'boolean' | 'date' | 'array'
 interface FieldDef { key: string; label: string; table: 'company' | 'contact'; type: FieldType; operators?: readonly string[] }
@@ -167,10 +169,10 @@ export function FilterDrawer({
     try {
       const res = await fetch('/api/leads/segments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: saveName.trim(), definition }) })
       const body = (await res.json().catch(() => null)) as { id?: number; error?: string } | null
-      if (!res.ok || !body?.id) setNote(body?.error ?? `Couldn\u2019t save the segment (${res.status}).`)
+      if (!res.ok || !body?.id) setNote(res.ok ? (body?.error ?? `Couldn\u2019t save the segment (${res.status}).`) : failedWriteText(res.status, body?.error, `Couldn\u2019t save the segment (${res.status}).`, await fetchRole()))
       else navigate({ seg: body.id })
-    } catch {
-      setNote('Couldn\u2019t reach the server.')
+    } catch (err) {
+      setNote(thrownWriteText(err, await fetchRole()))
     } finally {
       setBusy(false)
     }

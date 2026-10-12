@@ -642,10 +642,11 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
         </div>
       ) : null}
 
-      {/* Floating buttons. */}
+      {/* Floating buttons. Hidden while the phone nav drawer is open (AppNav sets
+          data-nav-menu-open on <html>), so the pill never draws over the drawer. */}
       <div
         {...ui}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 print:hidden"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 print:hidden [html[data-nav-menu-open]_&]:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <button

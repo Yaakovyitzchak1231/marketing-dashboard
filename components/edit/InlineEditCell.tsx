@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 import { updateEntityAction } from '@/app/actions/edit'
+import { fetchRole, useRole } from '@/components/auth/useRole'
+import { VIEW_ONLY_PROPS, VIEW_ONLY_TOAST, announceViewOnly, isViewerRefusal, thrownWriteText } from '@/components/auth/viewOnly'
 
 export interface InlineEditOption {
   value: string
@@ -13,6 +15,11 @@ export interface InlineEditOption {
  * select, Enter or blur saves, Esc cancels. Optimistic — the new value shows
  * right away and rolls back if the save fails. Used in the leads table, the
  * lead detail page and the campaign page (plan item 1.3).
+ *
+ * Viewers never enter edit mode: the value is marked view-only (aria-disabled,
+ * like the form buttons ViewOnlyGuard marks) and a click shows the calm
+ * view-only note. If a refused save still slips through (role not loaded yet),
+ * the 403 reads as view-only, not as a network failure.
  */
 export function InlineEditCell({
   type,
@@ -44,8 +51,13 @@ export function InlineEditCell({
   const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const prevRef = useRef(value)
+  const viewer = useRole() === 'viewer'
 
   function open() {
+    if (viewer) {
+      announceViewOnly()
+      return
+    }
     prevRef.current = shown
     setDraft(shown ?? '')
     setError(null)
@@ -73,15 +85,15 @@ export function InlineEditCell({
       if (!r.ok) {
         setShown(prev)
         setState('error')
-        setError(r.error)
+        setError(isViewerRefusal(r.error, null) ? VIEW_ONLY_TOAST : r.error)
         return
       }
       setState('idle')
       onSaved?.(r.to)
-    } catch {
+    } catch (err) {
       setShown(prev)
       setState('error')
-      setError('Couldn’t reach the server. Not saved.')
+      setError(thrownWriteText(err, await fetchRole(), 'Not saved.'))
     }
   }
 
@@ -91,8 +103,9 @@ export function InlineEditCell({
         type="button"
         onClick={open}
         disabled={state === 'saving'}
-        aria-label={`Edit ${label}`}
-        className={`group inline-flex min-h-[1.25rem] items-center gap-1 rounded-[3px] px-1 py-0.5 text-left hover:bg-canvas/70 ${state === 'saving' ? 'opacity-60' : ''} ${className}`}
+        aria-label={viewer ? `${label} (view-only)` : `Edit ${label}`}
+        {...(viewer ? VIEW_ONLY_PROPS : {})}
+        className={`group inline-flex min-h-[1.25rem] items-center gap-1 rounded-[3px] px-1 py-0.5 text-left ${viewer ? 'cursor-not-allowed' : 'hover:bg-canvas/70'} ${state === 'saving' ? 'opacity-60' : ''} ${className}`}
       >
         <span className={shown ? '' : 'text-unavailable'}>{shown ?? placeholder}</span>
         {state === 'saving' ? <span className="text-[10px] text-ink-faint">saving…</span> : null}
