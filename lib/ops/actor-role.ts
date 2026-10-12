@@ -52,6 +52,7 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'list_segments', 'get_segment', 'segment_preview', 'segment_members', 'segment_stats',
   'lead_profile', 'list_traits', 'get_trait', 'trait_preview',
   'list_triggers', 'recent_trigger_fires',
+  'journey_list', 'journey_get', 'journey_runs', 'journey_run_log', 'journey_validate',
 ])
 
 /** Ops only an Owner's key may run (an Editor's key gets 403). */
