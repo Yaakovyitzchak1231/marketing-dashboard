@@ -12,8 +12,12 @@ its configuration from the campaign's profile instead of being written per indus
 
 ## How it works for any new campaign
 
-1. **Create the campaign** (`lp.campaigns`, unchanged from before).
-2. **Open its Profile tab** (`/campaigns/:id/profile`). Step 1: type the industry and
+1. **Create the campaign** (`lp.campaigns`). The guided way is **New campaign** on
+   `/campaigns`, which opens `/campaigns/new`: name, pool, goal, optionally start from a
+   template or copy (same `createCampaignAction` and Editor gate as before; viewers see a
+   view-only note and no form).
+2. **Open its Profile tab** (`/campaigns/:id/profile`) — `/campaigns/new` lands you here
+   automatically (`?new=1` adds a one-line "campaign created" note). Step 1: type the industry and
    who you sell to (business types, geographies, roles, size, exclusions). Pick an
    existing pool or create a new one right there — pools are rows in `lp.pools`, not
    a fixed list, so a brand-new industry is never blocked.
@@ -79,11 +83,24 @@ campaign whose profile is `active`. The signed-in door is
 
 ## AI provider
 
-Free/OSS only: any OpenAI-compatible chat completions endpoint — a local Ollama on
-Yaakov's OVH server, Groq's free tier, OpenRouter's free models, etc. Configured for
-now via `AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars, behind one
-`getAiConfig()` function (`lib/campaign-profiles/suggest.ts`) with a `TODO` to switch
-to the settings store once that PR lands. With nothing configured, `suggest_campaign_profile`
+Free/OSS only: any OpenAI-compatible chat completions endpoint — Groq's free tier, OpenRouter's free models, etc. Configured on
+/settings (AI group: `ai.base_url`, `ai.api_key`, `ai.model`), with the
+`AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars as a fallback, read by
+`getAiConfig()` (`lib/campaign-profiles/suggest.ts`, async: always `await` it) through the settings store's
+`resolveConfig()`. The base URL must be https on a public host, on port 443 (explicit or default)
+(`lib/settings/safe-url.ts`). Refused when saved and again when used: localhost, `*.local`/`*.internal`, and any
+literal address in 0.0.0.0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0.0/24, 192.168/16, 198.18/15,
+224/4, 240/4, `::`, `::1`, fc00::/7, fe80::/10, fec0::/10, ff00::/8, 64:ff9b::/96 and 64:ff9b:1::/48 (NAT64),
+2002::/16 (6to4), `::/96` (IPv4-compatible) and `::ffff:0:0/96` (IPv4-mapped); for the NAT64 / 6to4 / compatible /
+mapped forms the embedded IPv4 is judged too. The connection is made with `node:https` and a custom `lookup`
+that resolves the host, refuses the request if any answer is non-public, and returns the very address it checked,
+so the socket connects to exactly the validated IP (no second DNS resolution, so no DNS-rebinding window). A
+refused URL (saved or env) counts as "not configured", and the person is told why (e.g. "the AI provider base URL
+is not allowed: ..."). Every provider fetch (suggestions, segment "Describe it", the /settings model list) goes
+through `providerFetch()` / `providerRequest()` in `lib/settings/ai-provider.ts`: redirects are never followed,
+there is a timeout and a reply size cap, and errors show only the HTTP status. Loading the model list is Owner-only. Only an Owner can change `ai.*` settings
+(UI and ops API). Provider errors show only the HTTP status; the body is never shown, returned or logged
+(the server log gets the status and a fixed reason code). With nothing configured, `suggest_campaign_profile`
 answers `{configured:false}` and the wizard says "AI suggestions need an AI provider —
 add one in Settings" — manual entry still works either way.
 

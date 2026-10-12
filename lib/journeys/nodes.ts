@@ -47,8 +47,9 @@ export interface NodeContext {
   graph: JourneyGraph
   now: Date
   /**
-   * Stable for one visit of this run to this node: the same on every retry, new when a loop
-   * brings the run back. Hand it to an outside service as its idempotency key.
+   * Stable for one visit of this run to this node: the same on every retry, new on every later
+   * visit, including a loop that comes straight back in the same tick (`lp.journey_runs.visit`
+   * counts committed node entries). Hand it to an outside service as its idempotency key.
    */
   idempotencyKey: string
 }

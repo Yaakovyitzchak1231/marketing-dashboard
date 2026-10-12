@@ -62,16 +62,16 @@ describe('campaign-profiles AI-assisted suggest', () => {
     await db.close()
   })
 
-  it('getAiConfig reads env, and is unset when AI_BASE_URL/AI_MODEL are missing', () => {
+  it('getAiConfig reads env, and is unset when AI_BASE_URL/AI_MODEL are missing', async () => {
     delete process.env.AI_BASE_URL
     delete process.env.AI_MODEL
     delete process.env.AI_API_KEY
-    expect(getAiConfig()).toBeNull()
-    process.env.AI_BASE_URL = 'http://localhost:11434/v1'
+    expect(await getAiConfig()).toBeNull()
+    process.env.AI_BASE_URL = 'https://api.groq.com/openai/v1'
     process.env.AI_MODEL = 'llama3.1'
-    expect(getAiConfig()).toEqual({ baseUrl: 'http://localhost:11434/v1', apiKey: null, model: 'llama3.1' })
+    expect(await getAiConfig()).toEqual({ baseUrl: 'https://api.groq.com/openai/v1', apiKey: null, model: 'llama3.1' })
     process.env.AI_API_KEY = 'sk-free'
-    expect(getAiConfig()?.apiKey).toBe('sk-free')
+    expect((await getAiConfig())?.apiKey).toBe('sk-free')
   })
 
   it('reports {configured:false} when no AI provider is set up, and never touches the DB', async () => {
@@ -85,7 +85,7 @@ describe('campaign-profiles AI-assisted suggest', () => {
   })
 
   it('parses a good JSON reply, saves items as suggested/ai, never auto-approves', async () => {
-    process.env.AI_BASE_URL = 'http://localhost:11434/v1'
+    process.env.AI_BASE_URL = 'https://api.groq.com/openai/v1'
     process.env.AI_MODEL = 'llama3.1'
     const chat = chatReturning(GOOD_JSON)
     const r = await suggestCampaignProfile(db, 'owner', { campaign_id: campaignId, industry: 'Dental clinics' }, { chat, verify: { fetchImpl: mockVerifyFetch() } })
@@ -94,7 +94,10 @@ describe('campaign-profiles AI-assisted suggest', () => {
     expect(r.items_saved).toBe(5)
     expect(r.items_dropped).toBe(0)
     expect(r.model).toBe('llama3.1')
-    expect(r.verified_ok + r.verified_failed + r.not_applicable).toBe(5)
+    // Explicit breakdown of the 5 items (mockVerifyFetch): the feed parses with a fresh item (ok);
+    // the competitor's value "dentrix.com" is not an http(s) URL (failed); keyword, signal_rule and
+    // fingerprint have nothing to fetch (not_applicable).
+    expect({ ok: r.verified_ok, failed: r.verified_failed, not_applicable: r.not_applicable }).toEqual({ ok: 1, failed: 1, not_applicable: 3 })
     const p = await getProfile(db, campaignId)
     expect(p.profile.industry).toBe('Dental clinics')
     expect(p.profile.setup_status).toBe('suggested')
@@ -107,10 +110,13 @@ describe('campaign-profiles AI-assisted suggest', () => {
     }
     const feed = p.items.feed[0]
     expect(feed.config.unverified).toBe(true)
+    expect(p.items.feed[0].verify_status).toBe('ok')
+    expect(p.items.competitor[0].verify_status).toBe('failed')
+    expect([...p.items.keyword, ...p.items.signal_rule, ...p.items.fingerprint].map((i) => i.verify_status)).toEqual(['not_applicable', 'not_applicable', 'not_applicable'])
   })
 
   it('survives a fenced reply (```json ... ```) and surrounding prose', async () => {
-    process.env.AI_BASE_URL = 'http://localhost:11434/v1'
+    process.env.AI_BASE_URL = 'https://api.groq.com/openai/v1'
     process.env.AI_MODEL = 'llama3.1'
     const fenced = 'Sure, here is the setup:\n```json\n' + GOOD_JSON + '\n```\nLet me know if you want more.'
     const c2 = (await createCampaign(db, 'owner', { name: 'Dental Q4 fenced' } as never)).id
@@ -122,7 +128,7 @@ describe('campaign-profiles AI-assisted suggest', () => {
   })
 
   it('survives garbage output: drops invalid items, reports how many were dropped, never throws out the good ones', async () => {
-    process.env.AI_BASE_URL = 'http://localhost:11434/v1'
+    process.env.AI_BASE_URL = 'https://api.groq.com/openai/v1'
     process.env.AI_MODEL = 'llama3.1'
     const garbage = JSON.stringify({
       industry: 'Dental clinics',

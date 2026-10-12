@@ -4,6 +4,8 @@
  * practice (the key never reaches the browser), but these functions are pure
  * apart from the injected fetch, so they are unit-tested directly.
  */
+import { AiProviderError, providerRequest, type Lookup, type ProviderFetch } from './ai-provider.ts'
+import { validatePublicHttpsUrl } from './safe-url.ts'
 
 export type ModelListResult = { ok: true; models: string[] } | { ok: false; message: string }
 
@@ -37,13 +39,14 @@ export function modelsUrl(baseUrl: string): string {
   return `${baseUrl.trim().replace(/\/+$/, '')}/models`
 }
 
-type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal; cache?: 'no-store' }) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
+type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal; cache?: 'no-store'; redirect?: 'manual' }) => Promise<{ ok: boolean; status: number; type?: string; json: () => Promise<unknown> }>
+// (test seam: production uses the pinned transport in ai-provider.ts)
 
 /** Fetch and parse the provider's model list. Never throws; never includes the key in the message. */
 export async function fetchModelList(
   baseUrl: string | null,
   apiKey: string | null,
-  opts: { fetchImpl?: FetchLike; timeoutMs?: number } = {},
+  opts: { fetchImpl?: FetchLike; timeoutMs?: number; lookup?: Lookup } = {},
 ): Promise<ModelListResult> {
   if (!baseUrl?.trim()) return { ok: false, message: 'Set the AI provider base URL first.' }
   let url: string
@@ -53,13 +56,20 @@ export async function fetchModelList(
   } catch {
     return { ok: false, message: 'The AI provider base URL is not a valid URL.' }
   }
-  const fetchImpl = opts.fetchImpl ?? (fetch as unknown as FetchLike)
+  const bad = validatePublicHttpsUrl(url)
+  if (bad) return { ok: false, message: `The AI provider base URL is not allowed: ${bad}` }
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 6000)
   try {
     const headers: Record<string, string> = { accept: 'application/json' }
     if (apiKey?.trim()) headers.authorization = `Bearer ${apiKey.trim()}`
-    const res = await fetchImpl(url, { headers, signal: ctrl.signal, cache: 'no-store' })
+    // The one guarded provider transport (lib/settings/ai-provider.ts): public host only, the
+    // connection pinned to the checked IP, no redirects, status-only errors.
+    const res = await providerRequest(url, { headers, signal: ctrl.signal, cache: 'no-store' }, {
+      fetchImpl: opts.fetchImpl as unknown as ProviderFetch | undefined,
+      lookup: opts.lookup,
+      timeoutMs: opts.timeoutMs ?? 6000,
+    })
     if (res.status === 401 || res.status === 403) return { ok: false, message: 'The provider rejected the API key. Check the AI provider API key.' }
     if (!res.ok) return { ok: false, message: `The provider answered ${res.status} for its model list.` }
     let body: unknown
@@ -73,6 +83,7 @@ export async function fetchModelList(
     return { ok: true, models }
   } catch (e) {
     if ((e as Error)?.name === 'AbortError') return { ok: false, message: 'The provider did not answer in time.' }
+    if (e instanceof AiProviderError) return { ok: false, message: e.message }
     return { ok: false, message: 'Could not reach the provider.' }
   } finally {
     clearTimeout(timer)
