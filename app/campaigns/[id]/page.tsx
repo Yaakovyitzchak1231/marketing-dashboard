@@ -21,6 +21,8 @@ import { listSegments, type Segment } from '@/lib/segments/store'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
 import { isUndefinedTable } from '@/lib/db/errors'
+import { StepLogCard } from '@/components/campaigns/StepLogCard'
+import { listStepLog } from '@/lib/actions/execute'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,7 +57,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   } catch {
     pick = null
   }
-  const [list, statuses, ruleSets, counts, actors, editing, preview, pools, segmentState] = await Promise.all([
+  const [list, statuses, ruleSets, counts, actors, editing, preview, pools, segmentState, stepLog] = await Promise.all([
     listCampaignLeads(db, id, filter),
     listStatuses(db, { includeInactive: false }),
     pickableRuleSets(db, campaign.rule_set_id),
@@ -70,6 +72,10 @@ export default async function CampaignPage({ params, searchParams }: { params: P
         if (isUndefinedTable(e)) return { segments: [] as Segment[], needsMigration: true }
         throw e
       }),
+    listStepLog(db, { campaign_id: id, limit: 20 }).catch((e) => {
+      if (isUndefinedTable(e)) return []
+      throw e
+    }),
   ])
   const { segments, needsMigration: segmentsNeedMigration } = segmentState
   const poolLabel: Record<string, string> = Object.fromEntries(pools.map((p) => [p.id, p.label]))
@@ -239,6 +245,8 @@ export default async function CampaignPage({ params, searchParams }: { params: P
               ) : null}
             </div>
           </section>
+
+          <StepLogCard entries={stepLog} />
         </div>
 
         <aside className="space-y-5">
