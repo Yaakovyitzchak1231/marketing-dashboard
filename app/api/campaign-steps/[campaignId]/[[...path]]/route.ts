@@ -25,7 +25,7 @@ async function handle(req: Request, ctx: Ctx) {
   const db = getDb()
   if (!db) return NextResponse.json({ ok: false, error: 'The lead database is not connected (DATABASE_URL is not set).' }, { status: 503 })
   const { campaignId, path } = await ctx.params
-  return handleCampaignSteps(req, db, actor, campaignId, path ?? [])
+  return handleCampaignSteps(req, db, actor, campaignId, path ?? [], 'human')
 }
 
 export const GET = handle
