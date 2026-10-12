@@ -10,6 +10,7 @@
  */
 import type { Queryable } from '@/lib/db/types'
 import { normalizeEmail } from '@/lib/leads/normalize'
+import { safeMatchEmitted } from '@/lib/triggers/match'
 
 export class EventError extends Error {
   constructor(
@@ -130,6 +131,14 @@ export async function emitLeadEvent(q: Queryable, input: EmitLeadEventInput): Pr
     row(input, type, r),
   )
   if (!rows[0]) return { inserted: false, id: null, type, company_id: r.company_id, contact_id: r.contact_id }
+  await safeMatchEmitted(q, [{
+    id: rows[0].id,
+    type,
+    company_id: r.company_id,
+    contact_id: r.contact_id,
+    campaign_id: input.campaign_id ?? null,
+    props: input.props ?? {},
+  }])
   return { inserted: true, id: rows[0].id, type, company_id: r.company_id, contact_id: r.contact_id }
 }
 
@@ -174,7 +183,7 @@ export async function emitLeadEvents(q: Queryable, inputs: EmitLeadEventInput[])
   // both lists in lockstep, consuming a returned row only when its dedupe_key
   // (null, or a specific key) matches the prepared row we expect next.
   let ptr = 0
-  return prepared.map((p) => {
+  const results = prepared.map((p) => {
     const dk = p.input.dedupe_key?.trim() || null
     const r = rows[ptr]
     if (r && (dk === null ? r.dedupe_key === null : r.dedupe_key === dk)) {
@@ -183,4 +192,18 @@ export async function emitLeadEvents(q: Queryable, inputs: EmitLeadEventInput[])
     }
     return { inserted: false, id: null, type: p.type, company_id: p.resolved.company_id, contact_id: p.resolved.contact_id }
   })
+  const inserted = results.flatMap((r, i) => (
+    r.inserted && r.id != null
+      ? [{
+        id: r.id,
+        type: r.type,
+        company_id: r.company_id,
+        contact_id: r.contact_id,
+        campaign_id: prepared[i].input.campaign_id ?? null,
+        props: prepared[i].input.props ?? {},
+      }]
+      : []
+  ))
+  if (inserted.length) await safeMatchEmitted(q, inserted)
+  return results
 }

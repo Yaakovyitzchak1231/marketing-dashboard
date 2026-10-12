@@ -6,6 +6,7 @@
  * a value, e.g. the segment engine later).
  */
 import type { Db, Queryable } from '../db/types'
+import { safeOnFieldChanged } from '../triggers/match'
 import {
   FIELD_ENTITIES,
   FIELD_KEY_RE,
@@ -243,6 +244,18 @@ export async function writeCustomFieldValue(db: Db, actor: string, input: WriteC
        values ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [input.entityType, input.entityId, fieldName, curText, nextText, actor, input.via, input.note],
     )
+    const companyId = input.entityType === 'company'
+      ? input.entityId
+      : (await q.query<{ company_id: number | null }>('select company_id from lp.contacts where id = $1', [input.entityId])).rows[0]?.company_id ?? null
+    await safeOnFieldChanged(q, {
+      entity: input.entityType,
+      id: input.entityId,
+      field: fieldName,
+      from: curText,
+      to: nextText,
+      company_id: companyId,
+      contact_id: input.entityType === 'contact' ? input.entityId : null,
+    })
     return { changed: true, field: fieldName, from: curText, to: nextText }
   }, actor)
 }

@@ -71,6 +71,7 @@ import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
 import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
 import { MERGE_OPS } from '../merge/ops.ts'
 import { RETENTION_OPS } from '../retention/ops.ts'
+import { TRIGGER_OPS } from '../triggers/ops.ts'
 import { checkOpRole, isOwnerActor } from './actor-role.ts'
 
 type Args = Record<string, unknown>
@@ -522,6 +523,8 @@ export const OPS: Record<string, Op> = {
   ...TRAIT_OPS,
   // Segments as campaign sources/exclusions (plan 2.6): campaign_add_from_segment.
   ...CAMPAIGN_SOURCE_OPS,
+  // Journey triggers (lib/triggers/ops.ts, plan 3.2): definitions + the fire log 3.1 will consume.
+  ...TRIGGER_OPS,
 }
 
 export async function runOp(db: Db, actor: string, op: string, args: Args): Promise<unknown> {
