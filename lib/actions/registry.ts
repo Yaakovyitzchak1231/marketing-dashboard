@@ -27,6 +27,8 @@ export class ActionError extends Error {
   }
 }
 
+export type ActionMinRole = 'viewer' | 'editor' | 'owner'
+
 export interface ActionDef {
   /** Stable key, e.g. 'task.create'. */
   key: string
@@ -36,6 +38,12 @@ export interface ActionDef {
   description: string
   /** Argument documentation (mirrors the ops args style). */
   args: string
+  /**
+   * Minimum HUMAN role required to run this action (default 'viewer').
+   * Agent keys are always refused (403) for actions above 'viewer'; the
+   * built-in 'system' runner is exempt.
+   */
+  min_role?: ActionMinRole
   run: (db: Db, actor: string, args: Record<string, unknown>) => Promise<unknown>
 }
 
@@ -71,8 +79,9 @@ export const ACTIONS: ActionDef[] = [
   {
     key: 'lead.update',
     label: 'Update lead field',
-    description: 'Change one field on a company or contact (audited inline edit).',
+    description: 'Change one field on a company or contact (audited inline edit). Editor or above; agent keys get 403.',
     args: '{type: "company"|"contact", id, field, value, note?}',
+    min_role: 'editor',
     run: (db, actor, a) => {
       const type = String(a.type ?? '')
       if (type !== 'company' && type !== 'contact') throw new ActionError('type must be "company" or "contact".')
@@ -88,8 +97,9 @@ export const ACTIONS: ActionDef[] = [
   {
     key: 'suppression.add',
     label: 'Suppress',
-    description: 'Suppress an email or domain so journeys never send to it.',
+    description: 'Suppress an email or domain so journeys never send to it. Editor or above; agent keys get 403.',
     args: '{email?, domain?, reason, campaign_id?, note?}',
+    min_role: 'editor',
     run: (db, actor, a) => {
       const email = typeof a.email === 'string' && a.email.trim() ? a.email.trim() : null
       const domain = typeof a.domain === 'string' && a.domain.trim() ? a.domain.trim() : null

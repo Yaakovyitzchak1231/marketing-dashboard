@@ -35,7 +35,7 @@ export const ACTION_OPS: Record<string, Op> = {
     run: wrap(async () => listActions()),
   },
   run_action: {
-    args: '{action, args?, campaign_id?, step_key?, company_id?, contact_id?}  -- run one library action on a lead; always writes a step_log row',
+    args: '{action, args?, campaign_id?, step_key?, company_id?, contact_id?, idempotency_key?}  -- run one library action on a lead; always writes a step_log row (idempotency_key replays the earlier ok result instead of re-running)',
     run: wrap((db, actor, a) => {
       if (typeof a.action !== 'string' || !a.action) throw new OpsError('action is required')
       const args = (a.args ?? {}) as Record<string, unknown>
@@ -45,6 +45,7 @@ export const ACTION_OPS: Record<string, Op> = {
         step_key: typeof a.step_key === 'string' ? a.step_key : null,
         company_id: optInt(a.company_id, 'company_id'),
         contact_id: optInt(a.contact_id, 'contact_id'),
+        idempotency_key: typeof a.idempotency_key === 'string' && a.idempotency_key.trim() ? a.idempotency_key.trim() : null,
       })
     }),
   },

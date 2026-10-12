@@ -4,7 +4,33 @@
  * so there is always an audit trail of what a journey step did to a lead.
  */
 import type { Db, Queryable } from '../db/types.ts'
-import { ActionError, getAction } from './registry.ts'
+import { ActionError, getAction, type ActionDef, type ActionMinRole } from './registry.ts'
+
+const ROLE_RANK: Record<ActionMinRole, number> = { viewer: 0, editor: 1, owner: 2 }
+
+/**
+ * Enforce a library action's minimum role, inside runAction so the check
+ * cannot be bypassed by calling run_action (one op) for a restricted action.
+ * Agents are refused outright for anything above 'viewer'; the built-in
+ * 'system' runner and the 'owner' human are exempt. Unknown actors fail closed.
+ */
+async function checkActionRole(db: Db, actor: string, action: ActionDef): Promise<void> {
+  const min = action.min_role ?? 'viewer'
+  if (min === 'viewer') return
+  if (actor === 'system' || actor === 'owner') return
+  const { rows } = await db.query<{ kind: string; role: string | null }>(
+    `select kind, to_jsonb(a)->>'role' as role from lp.actors a where id = $1`,
+    [actor],
+  )
+  const row = rows[0]
+  if (!row || row.kind !== 'human') {
+    throw new ActionError(`Action ${action.key} needs a human with ${min} access or above; agent keys get 403.`, 403)
+  }
+  const rank = row.role != null ? ROLE_RANK[row.role as ActionMinRole] : undefined
+  if (rank === undefined || rank < ROLE_RANK[min]) {
+    throw new ActionError(`Action ${action.key} needs ${min} access or above.`, 403)
+  }
+}
 
 export type StepStatus = 'ok' | 'failed' | 'skipped'
 
@@ -14,6 +40,11 @@ export interface StepContext {
   step_key?: string | null
   company_id?: number | null
   contact_id?: number | null
+  /**
+   * Optional idempotency key: when given, a repeat call with the same key
+   * returns the earlier 'ok' result instead of re-running the action.
+   */
+  idempotency_key?: string | null
 }
 
 export interface StepLogRow {
@@ -86,7 +117,12 @@ export interface RunActionResult {
   action: string
   status: StepStatus
   result: unknown
-  log_id: number
+  /** Null when the action ran but its audit row could not be written. */
+  log_id: number | null
+  /** Set when the audit row failed after the action succeeded. */
+  log_warning?: string
+  /** True when an idempotency key replayed an earlier 'ok' result. */
+  deduped?: boolean
 }
 
 /**
@@ -102,7 +138,9 @@ export async function runAction(
   ctx: StepContext = {},
 ): Promise<RunActionResult> {
   const action = getAction(key) // throws ActionError on unknown keys, before any logging
+  await checkActionRole(db, actor, action)
   const stepKey = (ctx.step_key ?? 'manual').toString().slice(0, 120) || 'manual'
+  const idemKey = (ctx.idempotency_key ?? '').toString().trim() || null
   const base = {
     campaign_id: ctx.campaign_id ?? null,
     step_key: stepKey,
@@ -111,27 +149,70 @@ export async function runAction(
     action: key,
     actor,
   }
+  // Idempotency: a repeat call with the same key returns the earlier 'ok'
+  // result instead of re-running (the key is stored namespaced in the logged
+  // input, so the lookup needs no schema change).
+  if (idemKey) {
+    const prior = await findOkByIdempotencyKey(db, base, idemKey)
+    if (prior) return { action: key, status: 'ok', result: prior.result, log_id: prior.id, deduped: true }
+  }
+  const loggedInput = idemKey ? { ...args, _idempotency_key: idemKey } : args
   // NOTE: no outer db.tx here. The wrapped writers (createTask, updateEntity,
   // addSuppression, addTag/removeTag) each manage their own transaction; nesting
   // a second tx around them deadlocks PGlite and breaks savepoint-less clients.
   // The action runs first, then its audit row is written: success leaves one
-  // 'ok' row, failure leaves one 'failed' row with the error.
+  // 'ok' row, failure leaves one 'failed' row with the error. If the audit row
+  // itself fails after the action succeeded, report honestly ("done but not
+  // logged") instead of a 500 that invites a double-executing retry.
   try {
     const out = await action.run(db, actor, args)
-    const logged = await writeLog(db, {
-      ...base,
-      status: 'ok',
-      input: args,
-      result: (out ?? {}) as Record<string, unknown>,
-      error: null,
-    })
-    return { action: key, status: 'ok', result: out, log_id: logged.id }
+    try {
+      const logged = await writeLog(db, {
+        ...base,
+        status: 'ok',
+        input: loggedInput,
+        result: (out ?? {}) as Record<string, unknown>,
+        error: null,
+      })
+      return { action: key, status: 'ok', result: out, log_id: logged.id }
+    } catch (logErr) {
+      const message = logErr instanceof Error ? logErr.message : String(logErr)
+      return {
+        action: key,
+        status: 'ok',
+        result: out,
+        log_id: null,
+        log_warning: `done but not logged: ${message}`,
+      }
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    const logged = await writeLog(db, { ...base, status: 'failed', input: args, result: {}, error: message })
+    const logged = await writeLog(db, { ...base, status: 'failed', input: loggedInput, result: {}, error: message })
     if (e instanceof ActionError) throw e
     throw new ActionError(`Action ${key} failed: ${message}`)
   }
+}
+
+/** Latest 'ok' step_log row for these coordinates carrying this idempotency key. */
+async function findOkByIdempotencyKey(
+  db: Db,
+  base: { campaign_id: number | null; step_key: string; company_id: number | null; contact_id: number | null; action: string },
+  idemKey: string,
+): Promise<StepLogRow | null> {
+  const { rows } = await db.query<Record<string, unknown>>(
+    `select * from lp.step_log
+      where status = 'ok'
+        and campaign_id is not distinct from $1
+        and step_key = $2
+        and company_id is not distinct from $3
+        and contact_id is not distinct from $4
+        and action = $5
+        and input->>'_idempotency_key' = $6
+      order by id desc
+      limit 1`,
+    [base.campaign_id, base.step_key, base.company_id, base.contact_id, base.action, idemKey],
+  )
+  return rows.length ? logRow(rows[0]) : null
 }
 
 /** Recent step-log rows for a campaign, newest first (the campaign page reads this). */
