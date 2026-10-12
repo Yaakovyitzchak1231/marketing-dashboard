@@ -187,6 +187,11 @@ reach it through the same ops door as everything else (`POST /api/ops {op, ...}`
 | `list_profile_items` | `{kind, status? (default approved), campaign_id?}` — **the op a monitor/connector agent calls**: pass `campaign_id` for one campaign's approved items of a kind, or omit it to get every active campaign's approved items of that kind in one call. |
 | `list_pools` / `create_pool` / `update_pool` | Pools (the industries/audiences a campaign's `pool` can be) are their own ops in `lib/pools/ops.ts` (PR 1.18); the wizard uses the same module. |
 | `recheck_profile_item` | `{id}` — re-run verification on one item (a feed re-parsed, a page re-fetched, robots.txt re-read) and save the result. |
+| `validate_campaign_profile` | `{profile?, items?}` — check a portable document. Writes nothing. Unknown keys refused. A Viewer may call it. |
+| `export_campaign_profile` | `{campaign_id}` → `{exists, profile, items}`. Non-archived items, no ids. Creates nothing. 404 if the campaign is missing. A Viewer may call it. |
+| `import_campaign_profile` | `{campaign_id, profile?, items?}` — merge. Existing live items are left alone. Every new item is `source:'import'` (the caller's source is ignored). Editor or agent; a Viewer gets 403. |
+
+People read the approved profile at `GET /api/campaigns/:id/profile` (`lib/campaigns/profile.ts` `profileFor`). `PATCH` updates the scalar fields and needs editor. `activeProfiles()` is the same read across every non-archived campaign whose profile `setup_status` is `active`. Competitors stay items of kind `competitor`; there is no separate registry table.
 
 
 ## Instantly reconcile & data sources health (P2-D, plan 1.6 + 1.11)
