@@ -176,6 +176,10 @@ Vercel installs with npm (`package-lock.json`; there is no other lockfile).
 `next build`. Preview migrations are off unless explicitly enabled; preview
 runtime connections must also use an isolated database branch (skipping migrations
 does not prevent preview code from writing to a shared production database).
+`vercel.json` also sets `git.deploymentEnabled` so only pushes to `main` deploy;
+pull-request branches get no automatic preview deployment (this keeps the project
+under Vercel's free-tier daily deployment limit). Deploy a branch by hand with
+`vercel` from the CLI when a preview is needed.
 
 Agent delivery readiness and mail settings are visible on `/settings`. Notification
 reliability and scheduler activation: [docs/agent-delivery.md](docs/agent-delivery.md).
