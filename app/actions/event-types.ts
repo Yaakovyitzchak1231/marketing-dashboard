@@ -64,12 +64,14 @@ export async function setEventTypeActiveAction(f: FormData) {
   // Deactivating makes track_event refuse the key, so live agent events of that type are
   // lost until it is switched back on: the form's confirm step must have been passed.
   if (!active && s(f, 'confirm') !== 'yes') back({ error: `Deactivating ${key} needs the confirm step; nothing changed.` })
+  let changed = true
   try {
     const ME = await actorFor('editor')
-    await db().tx((q) => updateEventType(q, ME, key, { active }), ME)
+    const row = await db().tx((q) => updateEventType(q, ME, key, { active }), ME)
+    changed = !row.unchanged
   } catch (e) {
     fail(e)
   }
   revalidatePath('/settings/event-types')
-  back({ saved: `${active ? 'Activated' : 'Deactivated'} ${key}.` })
+  back({ saved: changed ? `${active ? 'Activated' : 'Deactivated'} ${key}.` : `${key} was already ${active ? 'active' : 'inactive'}; nothing changed.` })
 }

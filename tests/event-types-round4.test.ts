@@ -102,4 +102,14 @@ describe('event types round 4 (PR #101 review: schema on relabel, deactivate con
     expect((await run(setEventTypeActiveAction, { key: 'conf_t', active: 'true' })).get('saved')).toBe('Activated conf_t.')
     expect((await stored('conf_t')).active).toBe(true)
   })
+
+  it('switching a type to the state it is already in says nothing changed and writes no audit row', async () => {
+    await registerEventType(db, 'owner', { key: 'noop_t', label: 'Noop T', category: 'custom' })
+    const before = (await audits('noop_t')).length
+    expect((await run(setEventTypeActiveAction, { key: 'noop_t', active: 'true' })).get('saved')).toBe('noop_t was already active; nothing changed.')
+    expect((await audits('noop_t')).length).toBe(before)
+    await run(setEventTypeActiveAction, { key: 'noop_t', active: 'false', confirm: 'yes' })
+    expect((await run(setEventTypeActiveAction, { key: 'noop_t', active: 'false', confirm: 'yes' })).get('saved')).toBe('noop_t was already inactive; nothing changed.')
+    expect((await stored('noop_t')).active).toBe(false)
+  })
 })
