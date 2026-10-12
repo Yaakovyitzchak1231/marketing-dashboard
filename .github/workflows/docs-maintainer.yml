@@ -113,7 +113,7 @@ jobs:
           claude_args: |
             --model claude-haiku-5-5
             --max-turns 40
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git ls-files:*),Bash(grep:*),Bash(find:*),Bash(ls:*),Bash(test:*),Bash(wc:*),Bash(npm run docs:check),Bash(node scripts/check-docs.mjs)"
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git ls-files:*),Bash(grep:*),Bash(ls:*),Bash(test:*),Bash(wc:*),Bash(npm run docs:check),Bash(node scripts/check-docs.mjs)"
           prompt: |
             You are the post-merge Docs Maintainer for ${{ github.repository }}.
             Commit ${{ steps.target.outputs.sha }} just landed on main${{ steps.target.outputs.pr != '' && format(' (from PR #{0})', steps.target.outputs.pr) || ' (a direct push)' }}.
