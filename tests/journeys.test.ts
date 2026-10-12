@@ -384,6 +384,45 @@ describe('journeys: model, versions and the runner (plan 3.1)', () => {
     expect(log.steps.map((x) => `${x.node_id}:${x.action}`)).toEqual(['a:entered', 'a:effect_test', 'b:retry', 'b:then_boom_test'])
   })
 
+  it('the idempotency key is new on every visit, even an instant loop back to a node in one tick, and the same on a retry of one visit', async () => {
+    const keys: string[] = []
+    let calls = 0
+    let failSecondVisitOnce = true
+    registerNodeHandler({
+      kind: 'loop_key_test',
+      validate: () => [],
+      run: async ({ idempotencyKey }) => {
+        keys.push(idempotencyKey)
+        calls++
+        if (calls === 2 && failSecondVisitOnce) {
+          failSecondVisitOnce = false
+          throw new Error('second visit fails once')
+        }
+        return calls >= 3 ? { type: 'finish', status: 'done' } : { type: 'next' }
+      },
+    })
+    const c = await addCompany(db, { name: 'Loop Co', domain: 'loop.example' })
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Instant loop' }) as { id: number }
+    await runOp(db, 'owner', 'journey_publish', {
+      journey_id: j.id, graph: { start: 'a', nodes: [{ id: 'a', kind: 'loop_key_test', next: 'b' }, { id: 'b', kind: 'note', next: 'a' }] },
+    })
+    await runOp(db, 'owner', 'journey_set_status', { journey_id: j.id, status: 'live' })
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: j.id, company_id: c }) as { results: { run_id: number }[] }
+    const id = en.results[0].run_id
+    const T = Date.now() + 110 * day
+    // One tick: visit 1 of A -> B -> visit 2 of A (throws). Same `now` throughout, yet different keys.
+    await runDueJourneys(db, { now: new Date(T) })
+    expect(await run(id)).toMatchObject({ status: 'active', node_id: 'a', last_error: 'second visit fails once' })
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+    expect(keys.map((k) => k.replace(/^journey-run:\d+:/, ''))).toEqual(['a:1', 'a:3'])
+    // The retry of visit 2 reuses its key (the failed node committed nothing); visit 3 is new.
+    await runDueJourneys(db, { now: new Date(T + minute) })
+    expect(await run(id)).toMatchObject({ status: 'done' })
+    expect(keys).toHaveLength(3)
+    expect(keys[2]).toBe(keys[1])
+  })
+
   it('resuming a paused journey moves its waits forward by exactly the pause; fires from the pause are not replayed', async () => {
     const trig = await runOp(db, 'owner', 'upsert_trigger', { name: 'Resume (journey)', kind: 'event', config: { event_type: 'custom' } }) as { id: number }
     const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Pausable', trigger_id: trig.id, entry_mode: 'multiple' }) as { id: number }
