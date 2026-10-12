@@ -132,7 +132,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
               {d ? (
                 <div className="mt-3 border-t border-line pt-2">
                   <table className="w-full text-[12px]">
-                    <thead><tr className="text-left text-ink-muted"><th>Variant</th><th>Sends</th><th>Replies</th><th>Reply rate</th></tr></thead>
+                    <thead><tr className="text-left text-ink-muted"><th>Variant</th><th>Sends</th><th>Positive replies</th><th>Reply rate</th></tr></thead>
                     <tbody>
                       {d.outcomes.map((o) => (
                         <tr key={o.variant}>
@@ -155,7 +155,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                       <label className={LABEL}>Sends<input className={INPUT} inputMode="numeric"
                         value={(oc[e.id] ?? { sends: '' }).sends}
                         onChange={(e2) => setOc((o) => ({ ...o, [e.id]: { ...(o[e.id] ?? { variant: 'A', replies: '' }), sends: e2.target.value } }))} /></label>
-                      <label className={LABEL}>Replies<input className={INPUT} inputMode="numeric"
+                      <label className={LABEL}>Positive replies<input className={INPUT} inputMode="numeric"
                         value={(oc[e.id] ?? { replies: '' }).replies}
                         onChange={(e2) => setOc((o) => ({ ...o, [e.id]: { ...(o[e.id] ?? { variant: 'A', sends: '' }), replies: e2.target.value } }))} /></label>
                       <button type="button" className={BUTTON} disabled={busy} onClick={() => record(e.id)}>Record</button>

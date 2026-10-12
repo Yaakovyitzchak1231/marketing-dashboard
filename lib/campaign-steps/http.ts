@@ -1,7 +1,9 @@
 /**
  * One handler, two doors (same contract):
- *   people:  /api/campaign-steps/:campaignId/...      (behind the login gate, actor 'owner')
- *   agents:  /api/ops/campaign-steps/:campaignId/...  (ops Bearer <redacted> via opsGate, actor = the agent)
+ *   people:  /api/campaign-steps/:campaignId/...      (behind the login gate, signed-in actor, editor or above;
+ *                                                      /outcome needs the owner)
+ *   agents:  /api/ops/campaign-steps/:campaignId/...  (ops Bearer <redacted> via opsGate, actor = the agent;
+ *                                                      status changes and /outcome need owner-or-system)
  *
  *   GET    /                         -> {campaign, steps (each with copy warnings), fields, push_requests}
  *   POST   /            {subject, body, delay_days?, variant?, step_number?}  -> {step}
@@ -19,7 +21,7 @@
  *   PATCH  /experiments/:id {name?, status?, config?}                -> {experiment}
  *   POST   /experiments/:id/evaluate                                 -> auto-winner evaluation
  *   POST   /experiments/:id/assign {company_id, contact_id?}         -> the lead's variant (idempotent)
- *   POST   /experiments/:id/outcome {variant, sends?, replies?}      -> updated counters
+ *   POST   /experiments/:id/outcome {variant, sends?, replies?, idempotency_key?}  -> updated counters (owner-only; replies = positive replies only)
  * Every write is in the activity log with the actor and old -> new.
  */
 import { NextResponse } from 'next/server'
@@ -28,6 +30,10 @@ import { fieldsForCampaign, getCampaign, loadCampaignLeads } from './adapter.ts'
 import { cancelPush, linkInstantly, listPushRequests, requestPush } from './instantly.ts'
 import { previewLead, templateWarnings } from './preview.ts'
 import { createStep, deleteStep, listSteps, parseStepInput, reorderSteps, StepsError, updateStep } from './store.ts'
+import { actorFor } from '../auth/act.ts'
+import { AuthError } from '../auth/roles.ts'
+import { requireOwnerOrSystem } from '../ops/actor-role.ts'
+import { OpsError } from '../ops/core.ts'
 import { assignVariant } from '../experiments/assign.ts'
 import {
   createExperiment,
@@ -67,6 +73,7 @@ async function handleExperiments(
   id: string | undefined,
   sub: string | undefined,
   body: () => Promise<Record<string, unknown> | null>,
+  door: 'human' | 'ops',
 ): Promise<NextResponse | null> {
   if (id === undefined) {
     if (method === 'GET') return json({ ok: true, experiments: await listExperiments(db, campaignId) })
@@ -92,12 +99,17 @@ async function handleExperiments(
     }
     if (method === 'PATCH') {
       const bd = (await body()) ?? {}
+      // Campaign check BEFORE any mutation: a mismatched id must not write.
+      const detail = await getExperimentDetail(db, expId)
+      if (!detail || detail.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
+      if (door === 'ops' && bd.status !== undefined) {
+        await requireOwnerOrSystem(db, actor, 'Changing an experiment status needs the owner (or the system runner).')
+      }
       const exp = await updateExperiment(db, actor, expId, {
         name: bd.name as string | undefined,
         status: bd.status as 'draft' | 'running' | 'paused' | undefined,
         config: bd.config,
       })
-      if (exp.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
       return json({ ok: true, experiment: exp })
     }
     return null
@@ -122,9 +134,21 @@ async function handleExperiments(
     const detail = await getExperimentDetail(db, expId)
     if (!detail || detail.campaign_id !== campaignId) return json({ ok: false, error: `No experiment ${expId} on this campaign.` }, 404)
     if (typeof bd.variant !== 'string' || !bd.variant) return json({ ok: false, error: 'Body needs {variant, sends?, replies?}.' }, 400)
+    // Owner-only: the human door needs the signed-in owner (not just editor);
+    // the ops door needs owner-or-system. The posting actor is logged with the delta.
+    const outcomeActor = door === 'human' ? await actorFor('owner') : actor
+    if (door === 'ops') {
+      await requireOwnerOrSystem(db, actor, 'Posting experiment outcomes needs the owner (or the system runner).')
+    }
     return json({
       ok: true,
-      outcome: await recordOutcome(db, expId, bd.variant, { sends: bd.sends as number | undefined, replies: bd.replies as number | undefined }),
+      outcome: await recordOutcome(db, outcomeActor, expId, bd.variant, {
+        sends: bd.sends as number | undefined,
+        // Positive replies only: auto-replies, unsubscribes, and negative
+        // replies must not be posted here (they would count as wins).
+        replies: bd.replies as number | undefined,
+        idempotency_key: typeof bd.idempotency_key === 'string' ? bd.idempotency_key : undefined,
+      }),
     })
   }
   return null
@@ -136,6 +160,7 @@ export async function handleCampaignSteps(
   actor: string,
   campaignIdRaw: string,
   path: string[],
+  door: 'human' | 'ops',
 ): Promise<NextResponse> {
   const campaignId = posInt(campaignIdRaw)
   if (!campaignId) return json({ ok: false, error: 'No campaign with that id.' }, 404)
@@ -158,7 +183,7 @@ export async function handleCampaignSteps(
       return json({ ok: true, preview: await previewLead(db, campaignId, lead) })
     }
     if (path.length >= 1 && a === 'experiments') {
-      const r = await handleExperiments(db, actor, campaignId, method, b, c, body as () => Promise<Record<string, unknown> | null>)
+      const r = await handleExperiments(db, actor, campaignId, method, b, c, body as () => Promise<Record<string, unknown> | null>, door)
       if (r) return r
     }
     if (path.length === 1 && a === 'instantly' && method === 'PUT') {
@@ -182,7 +207,10 @@ export async function handleCampaignSteps(
     }
     return json({ ok: false, error: `No route for ${method} ${['', ...path].join('/') || '/'}. See the comment at the top of lib/campaign-steps/http.ts.` }, 404)
   } catch (e) {
-    if (e instanceof StepsError || e instanceof ExperimentsError) return json({ ok: false, error: e.message }, e.status)
+    if (e instanceof StepsError || e instanceof ExperimentsError || e instanceof OpsError) {
+      return json({ ok: false, error: e.message }, e.status)
+    }
+    if (e instanceof AuthError) return json({ ok: false, error: 'Not allowed for your role.' }, 403)
     throw e
   }
 }

@@ -174,18 +174,18 @@ describe('experiments store + node (db)', () => {
 
   it('accumulates outcomes with upserts', async () => {
     const exp = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 1, name: 'Out' })
-    await recordOutcome(db, exp.id, 'A', { sends: 100, replies: 10 })
-    await recordOutcome(db, exp.id, 'A', { sends: 50, replies: 5 })
+    await recordOutcome(db, 'owner', exp.id, 'A', { sends: 100, replies: 10 })
+    await recordOutcome(db, 'owner', exp.id, 'A', { sends: 50, replies: 5 })
     const detail = await getExperimentDetail(db, exp.id)
     expect(detail?.outcomes).toMatchObject([{ variant: 'A', sends: 150, replies: 15 }])
-    await expect(recordOutcome(db, exp.id, 'B', { sends: 10, replies: 11 })).rejects.toThrow(/sends >= replies/)
+    await expect(recordOutcome(db, 'owner', exp.id, 'B', { sends: 10, replies: 11 })).rejects.toThrow(/sends >= replies/)
   })
 
   it('auto-decides a significant experiment and reports a close one as not ready', async () => {
     const exp = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 1, name: 'Auto' })
     await updateExperiment(db, ACTOR, exp.id, { status: 'running' })
-    await recordOutcome(db, exp.id, 'A', { sends: 1000, replies: 120 })
-    await recordOutcome(db, exp.id, 'B', { sends: 1000, replies: 80 })
+    await recordOutcome(db, 'owner', exp.id, 'A', { sends: 1000, replies: 120 })
+    await recordOutcome(db, 'owner', exp.id, 'B', { sends: 1000, replies: 80 })
     const ev = await evaluateExperiment(db, ACTOR, exp.id)
     expect(ev.decided).toBe(true)
     expect(ev.pick?.winner).toBe('A')
@@ -195,11 +195,37 @@ describe('experiments store + node (db)', () => {
 
     const exp2 = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 2, name: 'Close' })
     await updateExperiment(db, ACTOR, exp2.id, { status: 'running' })
-    await recordOutcome(db, exp2.id, 'A', { sends: 1000, replies: 100 })
-    await recordOutcome(db, exp2.id, 'B', { sends: 1000, replies: 95 })
+    await recordOutcome(db, 'owner', exp2.id, 'A', { sends: 1000, replies: 100 })
+    await recordOutcome(db, 'owner', exp2.id, 'B', { sends: 1000, replies: 95 })
     const ev2 = await evaluateExperiment(db, ACTOR, exp2.id)
     expect(ev2.decided).toBe(false)
     expect(ev2.eligible).toBe(false)
+  })
+
+  it('logs each outcome delta with the posting actor', async () => {
+    const exp = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 1, name: 'Logged' })
+    await recordOutcome(db, 'tab', exp.id, 'A', { sends: 40, replies: 4 })
+    const { rows } = await db.query<{ actor: string; kind: string; summary: string }>(
+      `select actor, kind, summary from lp.events where kind = 'experiment.outcome' and entity_id = $1 order by id desc limit 1`,
+      [String(exp.id)],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].actor).toBe('tab')
+    expect(rows[0].summary).toContain('+40 sends')
+    expect(rows[0].summary).toContain('+4 positive replies')
+  })
+
+  it('dedupes a repeated outcome post with the same idempotency key', async () => {
+    const exp = await createExperiment(db, ACTOR, { campaign_id: campaignId, step_number: 1, name: 'Idem' })
+    const first = await recordOutcome(db, 'owner', exp.id, 'A', { sends: 100, replies: 10, idempotency_key: 'post-1' })
+    const second = await recordOutcome(db, 'owner', exp.id, 'A', { sends: 100, replies: 10, idempotency_key: 'post-1' })
+    expect(second).toMatchObject({ sends: first.sends, replies: first.replies })
+    const detail = await getExperimentDetail(db, exp.id)
+    expect(detail?.outcomes).toMatchObject([{ variant: 'A', sends: 100, replies: 10 }])
+    // ...but a different key applies again.
+    await recordOutcome(db, 'owner', exp.id, 'A', { sends: 100, replies: 10, idempotency_key: 'post-2' })
+    const detail2 = await getExperimentDetail(db, exp.id)
+    expect(detail2?.outcomes).toMatchObject([{ variant: 'A', sends: 200, replies: 20 }])
   })
 
   it('exposes ab_split through the journey node registry', async () => {

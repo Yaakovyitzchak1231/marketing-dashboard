@@ -230,36 +230,86 @@ export async function updateExperiment(
   }, actor)
 }
 
-/** Add sends/replies counters for one variant (upsert; counters only grow). */
+export interface OutcomeDelta {
+  sends?: number
+  /**
+   * Positive replies ONLY. Auto-replies, unsubscribe requests, and negative
+   * replies must never be posted here: the auto-winner treats every reply as
+   * a win, so non-positive replies would corrupt winner selection.
+   */
+  replies?: number
+  /**
+   * Optional idempotency key: a repeat post with the same key returns the
+   * current counters without re-applying the delta.
+   */
+  idempotency_key?: string
+}
+
+/**
+ * Add sends/replies counters for one variant (upsert; counters only grow).
+ * Every accepted delta is written to the activity log with the posting actor.
+ */
 export async function recordOutcome(
   db: Db,
+  actor: string,
   experimentId: number,
   variant: string,
-  delta: { sends?: number; replies?: number },
+  delta: OutcomeDelta,
 ): Promise<ExperimentOutcome> {
   const sends = Math.floor(Number(delta.sends ?? 0))
   const replies = Math.floor(Number(delta.replies ?? 0))
   if (sends < 0 || replies < 0 || replies > sends) {
     throw new ExperimentsError('Outcome deltas need sends >= replies >= 0.')
   }
-  try {
-    const r = await db.query<Record<string, unknown>>(
-      `insert into lp.experiment_outcomes (experiment_id, variant, sends, replies)
-       values ($1, $2, $3, $4)
-       on conflict (experiment_id, variant) do update
-         set sends = lp.experiment_outcomes.sends + excluded.sends,
-             replies = lp.experiment_outcomes.replies + excluded.replies,
-             updated_at = now()
-       returning *`,
-      [experimentId, variant, sends, replies],
-    )
-    return outcomeRow(experimentId, r.rows[0])
-  } catch (e) {
-    if (e instanceof Error && /foreign key|violates/i.test(e.message)) {
-      throw new ExperimentsError(`No experiment ${experimentId}.`, 404)
+  const idemKey = (delta.idempotency_key ?? '').trim()
+  return db.tx(async (q) => {
+    if (idemKey) {
+      // Idempotency: a retried post replays the current counters instead of
+      // adding the delta twice. Scoped to experiment + variant + key.
+      const seen = await q.query(
+        `select 1 from lp.events
+          where kind = 'experiment.outcome' and entity_type = 'experiment' and entity_id = $1
+            and data->>'variant' = $2 and data->>'idempotency_key' = $3
+          limit 1`,
+        [String(experimentId), variant, idemKey],
+      )
+      if (seen.rows.length) {
+        const cur = await q.query<Record<string, unknown>>(
+          'select * from lp.experiment_outcomes where experiment_id = $1 and variant = $2',
+          [experimentId, variant],
+        )
+        if (!cur.rows.length) throw new ExperimentsError(`No outcome row for variant "${variant}" on experiment ${experimentId}.`, 404)
+        return outcomeRow(experimentId, cur.rows[0])
+      }
     }
-    throw e
-  }
+    try {
+      const r = await q.query<Record<string, unknown>>(
+        `insert into lp.experiment_outcomes (experiment_id, variant, sends, replies)
+         values ($1, $2, $3, $4)
+         on conflict (experiment_id, variant) do update
+           set sends = lp.experiment_outcomes.sends + excluded.sends,
+               replies = lp.experiment_outcomes.replies + excluded.replies,
+               updated_at = now()
+         returning *`,
+        [experimentId, variant, sends, replies],
+      )
+      const outcome = outcomeRow(experimentId, r.rows[0])
+      await logEvent(q, {
+        actor,
+        kind: 'experiment.outcome',
+        summary: `${actor} recorded outcome on experiment ${experimentId} variant "${variant}": +${sends} sends, +${replies} positive replies`,
+        entity_type: 'experiment',
+        entity_id: String(experimentId),
+        data: { variant, sends, replies, ...(idemKey ? { idempotency_key: idemKey } : {}) },
+      })
+      return outcome
+    } catch (e) {
+      if (e instanceof Error && /foreign key|violates/i.test(e.message)) {
+        throw new ExperimentsError(`No experiment ${experimentId}.`, 404)
+      }
+      throw e
+    }
+  }, actor)
 }
 
 export async function listOutcomes(q: Queryable, experimentId: number): Promise<ExperimentOutcome[]> {
