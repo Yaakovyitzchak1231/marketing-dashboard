@@ -314,7 +314,7 @@ export function AppNav() {
                           prefetch={false}
                           aria-current={isOn ? 'page' : undefined}
                           onClick={() => setMoreOpen(false)}
-                          className={`flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-canvas focus-visible:bg-canvas focus-visible:outline-none ${
+                          className={`flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-canvas focus-visible:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted ${
                             isOn ? 'font-medium text-ink' : 'text-ink-muted hover:text-ink'
                           }`}
                         >
