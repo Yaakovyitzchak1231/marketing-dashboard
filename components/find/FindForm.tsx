@@ -54,6 +54,7 @@ export function FindForm({
   const [proxies, setProxies] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null)
+  const poolHasDefaultQueries = (pools.find((p) => p.id === segment)?.queries ?? []).length > 0
 
   function pickSegment(s: string) {
     setSegment(s)
@@ -132,9 +133,9 @@ export function FindForm({
         Searches
         <input className={input} value={queries} onChange={(e) => setQueries(e.target.value)} />
         <span className="mt-1 block text-[11.5px] font-normal text-ink-faint">
-          {segment === 'jeweler'
-            ? 'The set that found the Oct 6 list (7 searches per city).'
-            : 'A starting set for this pool; edit it, or set the campaign\'s approved search phrases in its Profile so every run uses them.'}
+          {poolHasDefaultQueries
+            ? 'This pool ships with a built-in default search set. Edit it, or set the campaign\'s approved search phrases in its Profile so every run uses them.'
+            : 'No built-in default searches for this pool yet — add some here, or set the campaign\'s approved search phrases in its Profile so every run uses them.'}
         </span>
       </label>
 

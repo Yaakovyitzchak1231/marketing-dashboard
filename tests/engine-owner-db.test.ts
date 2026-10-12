@@ -83,7 +83,7 @@ describe('extra owner stages end to end (PGlite)', () => {
     const calls: string[] = []
     const queries: string[] = []
     const task = await createTask(db, 'owner', { kind: 'find_leads', title: 'extras', assigned_to: 'tab', payload: {} })
-    const out = await runFindLeads(db, task.id, normalizeFindParams({ states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet(calls), search: fakeSearch(queries) }))
+    const out = await runFindLeads(db, task.id, normalizeFindParams({ segment: 'jeweler', states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet(calls), search: fakeSearch(queries) }))
     expect(out.status).toBe('done')
     expect(out.counters).toMatchObject({ kept: 2, built: 2, extras_checked: 2, extra_names: 1, facebook_emails: 1, pattern_guesses: 1 })
     // Gem Co's owner was already high from its own site: no reviews/yelp calls spent on it
@@ -110,7 +110,7 @@ describe('extra owner stages end to end (PGlite)', () => {
     const db2 = await createTestDb()
     try {
       const t1 = await createTask(db2, 'owner', { kind: 'find_leads', title: 'x', assigned_to: 'tab', payload: {} })
-      const out1 = await runFindLeads(db2, t1.id, normalizeFindParams({ states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet([]), search: fakeSearch([], false) }))
+      const out1 = await runFindLeads(db2, t1.id, normalizeFindParams({ segment: 'jeweler', states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet([]), search: fakeSearch([], false) }))
       expect(out1.status).toBe('done')
       const notes1 = (await db2.query<{ notes: unknown }>('select notes from lp.engine_runs where task_id = $1', [t1.id])).rows[0]
       expect(JSON.stringify(notes1)).toMatch(/Skipped Maps reviews: the searxng search provider has no reviews endpoint/)
@@ -121,7 +121,7 @@ describe('extra owner stages end to end (PGlite)', () => {
     const db3 = await createTestDb() // fresh: the first run already put both stores in Leads
     try {
       const t2 = await createTask(db3, 'owner', { kind: 'find_leads', title: 'y', assigned_to: 'tab', payload: {} })
-      const out2 = await runFindLeads(db3, t2.id, normalizeFindParams({ states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet([]), search: null }))
+      const out2 = await runFindLeads(db3, t2.id, normalizeFindParams({ segment: 'jeweler', states: ['MD'], queries: ['jewelry store'], max_businesses: 5, stages: ALL }), deps({ fetch: fakeNet([]), search: null }))
       expect(out2.status).toBe('done')
       const notes2 = (await db3.query<{ notes: unknown }>('select notes from lp.engine_runs where task_id = $1', [t2.id])).rows[0]
       expect(JSON.stringify(notes2)).toMatch(/Skipped reviews, yelp, firstlast, facebook: no search provider/)

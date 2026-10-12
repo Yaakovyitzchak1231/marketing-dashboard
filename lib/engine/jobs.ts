@@ -3,11 +3,18 @@
  * create / list / cancel find_leads jobs, and queue research_company tasks.
  * The work itself runs in the engine worker (engine/worker.ts) on a server,
  * never inside a request.
+ *
+ * Every find_leads task also gets a row in lp.find_jobs (migration 0053):
+ * the durable per-run record — pool as a real FK into lp.pools, campaign,
+ * resolved params, config source, lifecycle status and counters. The Find
+ * leads history does not depend on task-table internals.
  */
 import type { Db, Queryable } from '@/lib/db/types'
 import { createTask, OpsError, updateTask } from '@/lib/ops/core'
 import { findJobTitle, normalizeFindParams, type FindLeadsParams } from '@/engine/params'
 import { resolveCampaignSearchConfig } from '@/engine/searchConfig'
+import { markFindJob, recordFindJob } from '@/engine/findJobRecord'
+import { getPool } from '@/lib/pools/store'
 
 export interface FindJob {
   id: number
@@ -62,13 +69,27 @@ export async function createFindJob(db: Db, actor: string, raw: unknown): Promis
   // behavior (explicit queries, else the pool's built-in default).
   const resolved = campaignId ? await resolveCampaignSearchConfig(db, campaignId) : undefined
   const params = normalizeFindParams(raw, resolved)
+  // Pools are rows in lp.pools, not a hard-coded list: an unknown pool is a
+  // 400 with a pointer to Settings > Pools, not a silent default.
+  const pool = await getPool(db, params.segment)
+  if (!pool) throw new OpsError(`No pool "${params.segment}". Create it in Settings > Pools first.`, 400)
   const assigned = typeof o.assigned_to === 'string' && o.assigned_to.trim() ? o.assigned_to.trim() : 'tab'
+  const title = findJobTitle(params, pool.label)
   const t = await createTask(db, actor, {
     kind: 'find_leads',
-    title: findJobTitle(params),
+    title,
     assigned_to: assigned,
     payload: params as unknown as Record<string, unknown>,
     max_attempts: 5,
+  })
+  await recordFindJob(db, {
+    task_id: t.id,
+    campaign_id: params.campaign_id,
+    pool: params.segment,
+    title,
+    params: params as unknown as Record<string, unknown>,
+    config_source: params.config_source,
+    created_by: actor,
   })
   return (await getFindJob(db, t.id)) as FindJob
 }
@@ -78,6 +99,7 @@ export async function cancelFindJob(db: Db, actor: string, id: number): Promise<
   if (!job) return null
   if (['done', 'failed', 'cancelled'].includes(job.status)) throw new OpsError(`this job is already ${job.status}`, 409)
   await updateTask(db, actor, id, { status: 'cancelled' })
+  await markFindJob(db, id, { status: 'cancelled' })
   return getFindJob(db, id)
 }
 

@@ -17,12 +17,12 @@ describe('find jobs', () => {
 
   it('creates a find_leads task assigned to Tab with validated params, lists and cancels it', async () => {
     const job = await createFindJob(db, 'owner', { segment: 'jeweler', states: ['md'], max_businesses: 40 })
-    expect(job).toMatchObject({ status: 'queued', assigned_to: 'tab', created_by: 'owner', title: 'Find 40 jewelers in MD', run: null })
+    expect(job).toMatchObject({ status: 'queued', assigned_to: 'tab', created_by: 'owner', title: 'Find 40 Jewelers in MD', run: null })
     expect(job.params.queries).toHaveLength(7)
     await expect(createFindJob(db, 'owner', { states: [] })).rejects.toBeInstanceOf(ParamsError)
     expect((await listFindJobs(db)).map((j) => j.id)).toEqual([job.id])
     const ev = await db.query<{ summary: string }>("select summary from lp.events where kind = 'task.created'")
-    expect(ev.rows[0].summary).toMatch(/assigned "Find 40 jewelers in MD" to Tab/)
+    expect(ev.rows[0].summary).toMatch(/assigned "Find 40 Jewelers in MD" to Tab/)
     const c = await cancelFindJob(db, 'owner', job.id)
     expect(c?.status).toBe('cancelled')
     await expect(cancelFindJob(db, 'owner', job.id)).rejects.toThrow(/already cancelled/)
@@ -30,7 +30,7 @@ describe('find jobs', () => {
   })
 
   it('a cancelled job cannot be claimed', async () => {
-    const job = await createFindJob(db, 'owner', { states: ['VA'], max_businesses: 5 })
+    const job = await createFindJob(db, 'owner', { segment: 'jeweler', states: ['VA'], max_businesses: 5 })
     await cancelFindJob(db, 'owner', job.id)
     expect(await claimTask(db, 'tab', { kinds: ['find_leads'] })).toBeNull()
   })

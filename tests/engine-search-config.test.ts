@@ -78,7 +78,7 @@ describe('engine search config resolution (campaign-agnostic find-leads)', () =>
   })
 
   it('a run with no campaign_id keeps today\'s behavior: explicit queries, else the pool default', () => {
-    const p1 = normalizeFindParams({ states: ['MD'], queries: ['custom search'] })
+    const p1 = normalizeFindParams({ segment: 'other', states: ['MD'], queries: ['custom search'] })
     expect(p1.queries).toEqual(['custom search'])
     expect(p1.config_source).toMatch(/built-in default/)
     const p2 = normalizeFindParams({ states: ['MD'], segment: 'ai_agency' })
