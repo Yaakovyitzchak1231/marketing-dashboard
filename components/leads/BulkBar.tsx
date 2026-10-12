@@ -43,7 +43,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
     ) : null
   }
 
-  /** Viewers can select and look; the write buttons only say so. */
+  /** Viewers can select and look; the write buttons only say so (never natively disabled for them, so a click always gets the note). */
   function viewOnly(): boolean {
     if (!viewer) return false
     announceViewOnly()
@@ -77,7 +77,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   }
 
   async function applyStage() {
-    if (!stage || viewOnly()) return
+    if (viewOnly() || !stage) return
     setBusy(true)
     setNote(null)
     try {
@@ -101,7 +101,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   }
 
   async function addToList() {
-    if ((!listChoice && !newListName.trim()) || viewOnly()) return
+    if (viewOnly() || (!listChoice && !newListName.trim())) return
     setBusy(true)
     setNote(null)
     try {
@@ -138,7 +138,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
       className="sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 shadow-card"
     >
       <span className="mr-1 text-[12px] font-medium tabular-nums text-ink">{n} selected</span>
-      <button type="button" className={`${BUTTON_PRIMARY} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy} onClick={research} {...(viewer ? VIEW_ONLY_PROPS : {})}>
+      <button type="button" className={`${BUTTON_PRIMARY} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && busy} onClick={research} {...(viewer ? VIEW_ONLY_PROPS : {})}>
         Research selected
       </button>
       {verifyIds.length ? (
@@ -177,7 +177,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             className="w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
           />
         ) : null}
-        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy || (!listChoice && !newListName.trim())} onClick={addToList} {...(viewer ? VIEW_ONLY_PROPS : {})}>
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || (!listChoice && !newListName.trim()))} onClick={addToList} {...(viewer ? VIEW_ONLY_PROPS : {})}>
           Add
         </button>
       </span>
@@ -206,7 +206,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             </option>
           ))}
         </select>
-        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={busy || !stage} onClick={applyStage} {...(viewer ? VIEW_ONLY_PROPS : {})}>
+        <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || !stage)} onClick={applyStage} {...(viewer ? VIEW_ONLY_PROPS : {})}>
           Apply
         </button>
       </span>

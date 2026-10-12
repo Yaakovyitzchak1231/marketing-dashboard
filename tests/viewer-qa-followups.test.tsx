@@ -42,11 +42,12 @@ import { EditFields } from '@/components/leads/EditFields'
 import { CommentForm } from '@/components/leads/CommentForm'
 import { BulkBar } from '@/components/leads/BulkBar'
 import { ViewOnlyGuard } from '@/components/auth/ViewOnlyGuard'
-import { AppNav } from '@/components/nav/AppNav'
+import { AppNav, moreLabelFits } from '@/components/nav/AppNav'
 import { updateEntityAction } from '@/app/actions/edit'
 import {
   COULD_NOT_REACH,
   NEXT_UNEXPECTED_ACTION_RESPONSE,
+  NO_PERMISSION,
   VIEW_ONLY_EVENT,
   VIEW_ONLY_TOAST,
   failedWriteText,
@@ -80,10 +81,13 @@ afterEach(() => {
 
 describe('write-failure words', () => {
   it('a 403 is view-only; other errors keep their own words; only network / bare 5xx say "couldn\'t reach"', () => {
+    // View-only words only when we know it's the viewer gate: the body says so, or the role is viewer.
     expect(failedWriteText(403, VIEWER_REFUSAL, 'x', null)).toBe(VIEW_ONLY_TOAST)
-    expect(failedWriteText(403, undefined, 'x', null)).toBe(VIEW_ONLY_TOAST)
+    expect(failedWriteText(403, undefined, 'x', 'viewer')).toBe(VIEW_ONLY_TOAST)
     expect(failedWriteText(403, 'Forbidden: Account not authorized', 'x', 'viewer')).toBe(VIEW_ONLY_TOAST)
-    // An editor hitting an owner-only route keeps the route's own words.
+    // Any other 403: never the viewer note on a guess.
+    expect(failedWriteText(403, undefined, 'x', null)).toBe(NO_PERMISSION)
+    expect(failedWriteText(403, '', 'x', 'editor')).toBe(NO_PERMISSION)
     expect(failedWriteText(403, 'This needs owner access.', 'x', 'editor')).toBe('This needs owner access.')
     expect(failedWriteText(400, 'Name is required.', 'x', 'viewer')).toBe('Name is required.')
     expect(failedWriteText(502, undefined, 'x', 'owner')).toBe(COULD_NOT_REACH)
@@ -94,6 +98,8 @@ describe('write-failure words', () => {
     expect(thrownWriteText(new Error(NEXT_UNEXPECTED_ACTION_RESPONSE), 'viewer', 'Not saved.')).toBe(VIEW_ONLY_TOAST)
     expect(thrownWriteText(new Error(NEXT_UNEXPECTED_ACTION_RESPONSE), 'owner', 'Not saved.')).toBe(`${COULD_NOT_REACH} Not saved.`)
     expect(thrownWriteText(new TypeError('Failed to fetch'), 'viewer')).toBe(COULD_NOT_REACH)
+    expect(thrownWriteText(new Error('Request failed with status 403'), 'editor')).toBe(NO_PERMISSION)
+    expect(NO_PERMISSION).toBe('You don’t have permission to change this.')
   })
 
   it('a client form marked data-write counts as a write form', () => {
@@ -204,26 +210,70 @@ describe('lead edit form, comments and bulk actions', () => {
     fireEvent.click(research)
     expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/research'))).toHaveLength(0)
   })
+
+  it('BulkBar: "Add" and "Apply" are never natively disabled for a viewer, so a click still gets the note', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ lists: [] }, 200)))
+    const heard = vi.fn()
+    window.addEventListener(VIEW_ONLY_EVENT, heard)
+    render(<BulkBar selected={{ companyIds: [1], unverifiedContactIds: [] }} onDone={() => {}} />)
+    const add = screen.getByRole('button', { name: 'Add' }) // no list chosen
+    const apply = screen.getByRole('button', { name: 'Apply' }) // no stage chosen
+    expect(add).not.toBeDisabled()
+    expect(apply).not.toBeDisabled()
+    fireEvent.click(add)
+    fireEvent.click(apply)
+    expect(heard).toHaveBeenCalledTimes(2)
+    window.removeEventListener(VIEW_ONLY_EVENT, heard)
+  })
 })
 
 describe('nav: Inbox badge vs "More · Settings"', () => {
-  it('drops the screen name next to More while the Inbox badge shows', () => {
+  it('moreLabelFits: drops the name only when it would crowd the badge (numbers measured at 1440/1366)', () => {
+    // "· Settings" takes 66px (62 + the button's 4px gap). Prod QA: with "99+" the gap was 7px.
+    expect(moreLabelFits(7, 66, 66)).toBe(false) // shown, 99+ badge -> 7px left: drop it
+    expect(moreLabelFits(73, 0, 66)).toBe(false) // hidden, 99+ badge: showing it would leave 7px: stay hidden
+    expect(moreLabelFits(43, 66, 66)).toBe(true) // no badge: 43px left
+    expect(moreLabelFits(109, 0, 66)).toBe(true) // inbox cleared: it fits again
+    expect(moreLabelFits(73, 0, 30)).toBe(true) // a short name ("· Jobs") fits next to "99+"
+    expect(moreLabelFits(5, 0, 0)).toBe(true) // never measured at a width that shows it: nothing to decide
+  })
+
+  it('AppNav drops "· Settings" when the measured bar would crowd the 99+ badge, and brings it back', () => {
     role.value = 'owner'
     pathname.value = '/settings'
-    render(<AppNav />)
-    const nav = screen.getByRole('navigation', { name: 'Screens' })
-    const more = within(nav).getByRole('button', { name: /More/ })
-    expect(more).toHaveTextContent('· Settings')
-    pushUnread(120)
-    expect(screen.getByRole('link', { name: '120 unread' })).toHaveTextContent('99+')
-    expect(more).not.toHaveTextContent('Settings')
-    pushUnread(0)
-    expect(more).toHaveTextContent('· Settings')
+    // A tiny layout model of the 1440 bar (jsdom has no layout): More ends at 1135 without its
+    // name and 1201 with it; the Inbox link starts at 1244, or 1208 with the "99+" badge.
+    const isLabel = (el: Element) => el.tagName === 'SPAN' && (el.textContent ?? '').trim().startsWith('·')
+    const hasLabel = () => Array.from(document.querySelectorAll('span')).some(isLabel)
+    const badge = () => !!document.querySelector('[data-live-bell] span')
+    const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return isLabel(this) ? 62 : 0
+    })
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const r = (left: number, right: number) => ({ left, right, width: right - left, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
+      if (isLabel(this)) return r(1135, 1197)
+      if (this.hasAttribute('data-live-bell')) return r(badge() ? 1208 : 1244, 1290)
+      if (this.tagName === 'BUTTON' && /More/.test(this.textContent ?? '')) return r(1080, hasLabel() ? 1201 : 1135)
+      return r(0, 0)
+    })
+    try {
+      render(<AppNav />)
+      const more = within(screen.getByRole('navigation', { name: 'Screens' })).getByRole('button', { name: /More/ })
+      expect(more).toHaveTextContent('· Settings')
+      pushUnread(120)
+      expect(screen.getByRole('link', { name: '120 unread' })).toHaveTextContent('99+')
+      expect(more).not.toHaveTextContent('Settings')
+      pushUnread(0)
+      expect(more).toHaveTextContent('· Settings')
+    } finally {
+      width.mockRestore()
+      rect.mockRestore()
+    }
   })
 })
 
 describe('phone drawer vs the comment layer', () => {
-  it('while the drawer is open the bar stacks above the comment layer and <html> says so', () => {
+  it('while the drawer is open the bar stacks above the comment layer (z-[55]) and <html> hides the pill', () => {
     pathname.value = '/campaigns'
     const { container } = render(<AppNav />)
     const bar = container.firstElementChild as HTMLElement
@@ -234,5 +284,28 @@ describe('phone drawer vs the comment layer', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(bar.className).toMatch(/\bz-30\b/)
     expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(false)
+  })
+
+  it('growing to desktop width while the drawer is open closes it (pill and scrolling come back)', () => {
+    let fire: ((e: { matches: boolean }) => void) | null = null
+    const mq = {
+      matches: false,
+      media: '(min-width: 768px)',
+      addEventListener: (_: string, cb: (e: { matches: boolean }) => void) => { fire = cb },
+      removeEventListener: () => { fire = null },
+    }
+    const mm = vi.spyOn(window, 'matchMedia').mockReturnValue(mq as unknown as MediaQueryList)
+    try {
+      pathname.value = '/campaigns'
+      render(<AppNav />)
+      fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+      expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(true)
+      act(() => fire?.({ matches: true }))
+      expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
+      expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(false)
+      expect(document.documentElement.style.overflow).toBe('')
+    } finally {
+      mm.mockRestore()
+    }
   })
 })

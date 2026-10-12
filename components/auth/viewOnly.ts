@@ -30,10 +30,15 @@ export function announceViewOnly(): void {
 export const VIEW_ONLY_PROPS = { 'aria-disabled': true, title: 'View-only access' } as const
 export const VIEW_ONLY_DIM = 'opacity-50 cursor-not-allowed'
 
+/** A 403 that is not the viewer gate (unknown role, or not a viewer) and came with no words. */
+export const NO_PERMISSION = 'You don\u2019t have permission to change this.'
+
 /**
  * The words for a write (fetch) that came back not-ok:
- * - 403 that is the viewer refusal (or any 403 with no words, or any 403 while
- *   we know the person is a viewer) -> the calm view-only note;
+ * - 403 and the person is a known viewer, or the body is the viewer refusal
+ *   -> the calm view-only note;
+ * - any other 403 -> the route's own words, else a neutral "You don't have
+ *   permission to change this." (never the viewer note on a guess);
  * - the server's own words when it sent some;
  * - a 5xx with no words -> "Couldn't reach the server.";
  * - otherwise the caller's fallback (usually "... (status)").
@@ -45,7 +50,10 @@ export function failedWriteText(
   role?: Role | null,
 ): string {
   const err = typeof serverError === 'string' ? serverError.trim() : ''
-  if (status === 403 && (!err || err.includes(VIEWER_REFUSAL) || role === 'viewer')) return VIEW_ONLY_TOAST
+  if (status === 403) {
+    if (role === 'viewer' || err.includes(VIEWER_REFUSAL)) return VIEW_ONLY_TOAST
+    return err || NO_PERMISSION
+  }
   if (err) return err
   if (status >= 500) return COULD_NOT_REACH
   return fallback
@@ -54,10 +62,13 @@ export function failedWriteText(
 /**
  * The words for a write that threw (a server action whose POST the middleware
  * refused, or a fetch that never got an answer): the view-only note when it is
- * the viewer gate, else "Couldn't reach the server." plus an optional suffix.
+ * the viewer gate, a neutral no-permission line for any other visible 403, else
+ * "Couldn't reach the server." plus an optional suffix.
  */
 export function thrownWriteText(reason: unknown, role: Role | null | undefined, suffix = ''): string {
   if (isViewerRefusal(reason, role)) return VIEW_ONLY_TOAST
+  // A refusal we can see (a 403 in the error) that isn't the viewer gate: say so neutrally.
+  if (/\b403\b/.test(messageOf(reason))) return NO_PERMISSION
   return suffix ? `${COULD_NOT_REACH} ${suffix}` : COULD_NOT_REACH
 }
 

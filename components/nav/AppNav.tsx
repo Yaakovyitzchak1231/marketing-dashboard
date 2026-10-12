@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { LiveBell, useUnread } from '@/components/ops/LiveBell'
 
 /**
@@ -106,6 +106,21 @@ function useDismiss(open: boolean, close: () => void, box: RefObject<HTMLElement
   }, [open, close, box, button])
 }
 
+/** The space the bar keeps between More and the Inbox link (the row's md:gap-4). */
+export const MORE_LABEL_MIN_GAP = 16
+
+/**
+ * Whether More's "· Settings"-style name fits beside the Inbox link (badge included).
+ * gap: px between More's right edge and the Inbox link right now; shownWidth: the name's
+ * width as rendered now (0 when it is not shown); labelWidth: what the name takes when
+ * shown (its width plus the button's 4px gap; 0 = never measured at a width that shows it).
+ */
+export function moreLabelFits(gap: number, shownWidth: number, labelWidth: number, minGap = MORE_LABEL_MIN_GAP): boolean {
+  if (labelWidth <= 0) return true
+  const gapWithoutLabel = gap + shownWidth
+  return gapWithoutLabel - labelWidth >= minGap
+}
+
 const UNDERLINE = 'after:absolute after:inset-x-2.5 after:bottom-[-1px] after:h-[2px] after:bg-accent'
 
 export function AppNav() {
@@ -117,9 +132,12 @@ export function AppNav() {
   const menuBox = useRef<HTMLDivElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
   const menuPanel = useRef<HTMLElement>(null)
-  // Shares LiveBell's one live connection. When the Inbox badge shows, More drops the
-  // "· Settings"-style name so the bar never crowds the badge at xl (1280-1535px).
+  // Shares LiveBell's one live connection; a new count can widen the badge, so the fit is re-checked.
   const unread = useUnread()
+  const row = useRef<HTMLDivElement>(null)
+  const moreLabel = useRef<HTMLSpanElement>(null)
+  const moreLabelWidth = useRef(0)
+  const [labelFits, setLabelFits] = useState(true)
 
   // Any route change closes both panels (adjusting state during render, not in an effect).
   const [lastPath, setLastPath] = useState(pathname)
@@ -133,6 +151,22 @@ export function AppNav() {
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   useDismiss(moreOpen, closeMore, moreBox, moreButton)
   useDismiss(menuOpen, closeMenu, menuBox, menuButton)
+
+  // The drawer is phone-only (md:hidden). If the window grows to md while it is open (rotate,
+  // resize), close it, so the scroll lock and the hidden comments pill don't outlive it.
+  useEffect(() => {
+    if (!menuOpen || typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(min-width: 768px)')
+    if (mq.matches) {
+      setMenuOpen(false)
+      return
+    }
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false)
+    }
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [menuOpen])
 
   // Phone drawer: the page behind it doesn't scroll while it's open, and focus moves into it
   // (the current screen's tile, else the first) and comes back to the Menu button on close.
@@ -157,6 +191,40 @@ export function AppNav() {
     }
   }, [menuOpen])
 
+  // More's "· Settings"-style name shows only where it fits beside the Inbox link and its badge
+  // (xl only, by CSS). With a wide badge ("99+") at 1280-1535px it would leave ~7px, so it is
+  // dropped then; the underline still marks More as the current place. Measured, not guessed:
+  // a short name ("· Jobs") or a small count keeps the name.
+  const activeNeverLabel = (() => {
+    const a = NAV_ITEMS.find((i) => isActive(pathname, i.href))
+    return a && tierOf(a.href) === 'never' ? a.label : null
+  })()
+  useLayoutEffect(() => {
+    moreLabelWidth.current = 0
+    setLabelFits(true)
+  }, [activeNeverLabel])
+  useLayoutEffect(() => {
+    const bar = row.current
+    if (!activeNeverLabel || !bar) return
+    const measure = () => {
+      const more = moreButton.current
+      const bell = bar.querySelector<HTMLElement>('[data-live-bell]')
+      if (!more || !bell) return
+      const label = moreLabel.current
+      const shown = label && label.offsetWidth > 0 ? label.getBoundingClientRect().width : 0
+      if (shown > 0) moreLabelWidth.current = shown + 4 // + the button's gap-1
+      const gap = bell.getBoundingClientRect().left - more.getBoundingClientRect().right
+      setLabelFits(moreLabelFits(gap, shown > 0 ? shown + 4 : 0, moreLabelWidth.current))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(bar)
+    const bell = bar.querySelector<HTMLElement>('[data-live-bell]')
+    if (bell) ro.observe(bell)
+    return () => ro.disconnect()
+  }, [activeNeverLabel, unread, labelFits])
+
   if (pathname === '/login') return null
 
   const active = NAV_ITEMS.find((i) => isActive(pathname, i.href))
@@ -171,7 +239,7 @@ export function AppNav() {
       ref={menuBox}
       className={`sticky top-0 ${menuOpen ? 'z-[55]' : 'z-30'} print:hidden border-b border-line bg-canvas/95 backdrop-blur supports-[backdrop-filter]:bg-canvas/85`}
     >
-      <div className="mx-auto flex max-w-shell items-center gap-2 px-4 sm:px-6 md:gap-4">
+      <div ref={row} className="mx-auto flex max-w-shell items-center gap-2 px-4 sm:px-6 md:gap-4">
         <Link href="/" prefetch={false} className="shrink-0 py-3 text-[13px] font-semibold tracking-[-0.01em] text-ink">
           TapDash
         </Link>
@@ -217,11 +285,12 @@ export function AppNav() {
                 More
                 {active && activeInMoreAtSomeWidth ? (
                   <>
-                    {/* The name only where there is room for it: xl, where More holds the short admin names,
-                        and only while the Inbox has no unread badge (with "99+" the bar has ~7px left at
-                        1280-1535px). The underline still marks More as the current place. */}
-                    {tierOf(active.href) === 'never' && !unread ? (
-                      <span className="hidden font-medium text-ink xl:inline">· {active.label}</span>
+                    {/* The name only where there is room for it: xl (where More holds the short admin
+                        names), and only while it fits beside the Inbox badge (measured above). */}
+                    {tierOf(active.href) === 'never' && labelFits ? (
+                      <span ref={moreLabel} className="hidden font-medium text-ink xl:inline">
+                        · {active.label}
+                      </span>
                     ) : null}
                     <span aria-hidden="true" className={`absolute inset-x-2.5 bottom-[-1px] h-[2px] bg-accent ${activeMoreClass}`} />
                   </>

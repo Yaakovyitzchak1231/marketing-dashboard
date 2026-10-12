@@ -18,6 +18,7 @@ export function LiveBell() {
     <Link
       href="/agents/owner"
       prefetch={false}
+      data-live-bell=""
       aria-label={unread ? `${unread} unread` : 'Inbox'}
       className="relative shrink-0 rounded-md px-2 py-1.5 text-[13px] text-ink-muted hover:text-ink"
     >
