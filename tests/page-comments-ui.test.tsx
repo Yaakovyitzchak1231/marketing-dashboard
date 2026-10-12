@@ -4,6 +4,7 @@ import { CommentLayer, type CommentActions } from '@/components/comments/Comment
 import { anchorFor, describe as describeEl, selectorFor, spotFor } from '@/lib/page-comments/anchor'
 import { STORE_KEY, loadLocal, merge, putLocal, type LocalDraft } from '@/lib/page-comments/drafts'
 import type { PageCommentView } from '@/lib/page-comments/core'
+import { setPathname } from './mock-navigation'
 
 afterEach(() => {
   cleanup()
@@ -108,6 +109,20 @@ function fakeActions(over: Partial<CommentActions> = {}) {
 describe('the comment layer', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
+  })
+
+  it('reserves room for the fixed bar under the page only where the bar renders (not on /login)', async () => {
+    const { a } = fakeActions()
+    const { container, unmount } = render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    expect(container.querySelector('[data-comment-bar-spacer]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeInTheDocument()
+    unmount()
+    setPathname('/login')
+    const login = render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    expect(login.container.querySelector('[data-comment-bar-spacer]')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Comment' })).toBeNull()
   })
 
   it('Comment -> tap an element -> type: saved on this device at once and to the server after a pause', async () => {

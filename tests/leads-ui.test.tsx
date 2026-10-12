@@ -48,7 +48,8 @@ describe('AppNav', () => {
     const nav = screen.getByRole('navigation', { name: 'Screens' })
     const more = within(nav).getByRole('button', { name: /More/ })
     expect(more).toHaveAttribute('aria-expanded', 'false')
-    expect(more).toHaveAttribute('aria-haspopup')
+    // A plain list of links, not an ARIA menu, so no aria-haspopup.
+    expect(more).not.toHaveAttribute('aria-haspopup')
     expect(more).toHaveTextContent('Settings')
     fireEvent.click(more)
     expect(more).toHaveAttribute('aria-expanded', 'true')
@@ -81,8 +82,13 @@ describe('AppNav', () => {
     const labels = within(menu).getAllByRole('link').map((a) => a.textContent)
     expect([...labels].sort()).toEqual(NAV_ITEMS.map((i) => i.label).sort())
     expect(within(menu).getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
+    // Focus moves into the drawer (the current screen) and the page behind it stops scrolling.
+    expect(within(menu).getByRole('link', { name: 'Jobs' })).toHaveFocus()
+    expect(document.documentElement.style.overflow).toBe('hidden')
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
+    expect(document.documentElement.style.overflow).toBe('')
+    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     fireEvent.click(within(screen.getByRole('navigation', { name: 'All screens' })).getByRole('link', { name: 'Leads' }))
     expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()

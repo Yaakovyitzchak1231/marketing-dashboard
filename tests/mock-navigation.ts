@@ -24,6 +24,11 @@ export function setSearchParams(queryString: string): void {
   store.params = new URLSearchParams(queryString)
 }
 
+/** What usePathname() returns until the next test starts (default '/'). */
+export function setPathname(path: string): void {
+  pathnameMock.mockReturnValue(path)
+}
+
 export function currentSearchParams(): URLSearchParams {
   return store.params
 }

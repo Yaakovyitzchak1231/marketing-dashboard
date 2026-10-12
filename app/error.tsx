@@ -28,7 +28,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">View-only access</p>
           <h1 className="mt-1.5 text-[18px] font-semibold text-ink">You can look, not change</h1>
           <p className="mt-2 text-[14px] leading-relaxed text-ink-muted">
-            Your account can look but not change things. Nothing was changed.
+            Nothing was changed. To edit, ask an owner to make you an Editor in Settings.
           </p>
           <button
             type="button"

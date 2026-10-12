@@ -465,6 +465,11 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
 
   return (
     <>
+      {/* Room under the last row of the page for the fixed comment bar below (bottom-4, ~44px
+          tall), so it never sits on top of content. Rendered here, not as body padding, so pages
+          without the bar (/login) don't get an empty scroll at the bottom. */}
+      <div {...ui} aria-hidden="true" data-comment-bar-spacer="" className="h-[calc(4.5rem_+_env(safe-area-inset-bottom))] print:hidden" />
+
       {/* Pins, in page coordinates so they scroll with the page. */}
       {showPins ? (
         <div {...ui} className="pointer-events-none absolute left-0 top-0 z-40 h-0 w-0 print:hidden" aria-label="Comment pins">

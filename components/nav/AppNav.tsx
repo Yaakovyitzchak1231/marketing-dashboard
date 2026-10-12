@@ -116,6 +116,7 @@ export function AppNav() {
   const moreButton = useRef<HTMLButtonElement>(null)
   const menuBox = useRef<HTMLDivElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
+  const menuPanel = useRef<HTMLElement>(null)
 
   // Any route change closes both panels (adjusting state during render, not in an effect).
   const [lastPath, setLastPath] = useState(pathname)
@@ -129,6 +130,26 @@ export function AppNav() {
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   useDismiss(moreOpen, closeMore, moreBox, moreButton)
   useDismiss(menuOpen, closeMenu, menuBox, menuButton)
+
+  // Phone drawer: the page behind it doesn't scroll while it's open, and focus moves into it
+  // (the current screen's tile, else the first) and comes back to the Menu button on close.
+  useEffect(() => {
+    if (!menuOpen) return
+    const root = document.documentElement
+    const prevOverflow = root.style.overflow
+    root.style.overflow = 'hidden'
+    const panel = menuPanel.current
+    const target = panel?.querySelector<HTMLElement>('a[aria-current="page"]') ?? panel?.querySelector<HTMLElement>('a')
+    target?.focus({ preventScroll: true })
+    const button = menuButton.current
+    return () => {
+      root.style.overflow = prevOverflow
+      // Only pull focus back if it was left nowhere (inside the now-closed drawer), not if the
+      // close came from a tap somewhere else on the page.
+      const at = document.activeElement
+      if (!at || at === document.body || (panel && panel.contains(at))) button?.focus({ preventScroll: true })
+    }
+  }, [menuOpen])
 
   if (pathname === '/login') return null
 
@@ -175,7 +196,6 @@ export function AppNav() {
               <button
                 ref={moreButton}
                 type="button"
-                aria-haspopup="true"
                 aria-expanded={moreOpen}
                 aria-controls="nav-more"
                 onClick={() => setMoreOpen((o) => !o)}
@@ -249,6 +269,7 @@ export function AppNav() {
 
       {menuOpen ? (
         <nav
+          ref={menuPanel}
           id="nav-menu"
           aria-label="All screens"
           className="absolute inset-x-0 top-full max-h-[calc(100dvh_-_100%)] overflow-y-auto overscroll-contain border-b border-line bg-canvas px-4 pb-4 pt-2 shadow-card sm:px-6 md:hidden"
