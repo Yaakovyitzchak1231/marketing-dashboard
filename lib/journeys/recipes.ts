@@ -5,9 +5,15 @@
  * creation. Instantiating a recipe creates a campaign with the recipe's
  * goal and its steps, ready to edit. This is separate from the existing
  * user-saved campaign copies (is_template): recipes ship with the product.
+ *
+ * Deliverability note: the seeded step copy carries no unsubscribe footer.
+ * The sending platform (Instantly) appends its own unsubscribe +
+ * sender-identification footer at send time, so do not add one to the
+ * recipe copy or leads will get two.
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { createCampaign } from '../campaigns/store.ts'
+import { poolExists } from '../pools/store.ts'
 import type { Campaign } from '../campaigns/types.ts'
 import { createStep, type StepRow } from '../campaign-steps/store.ts'
 import { goalLabel } from './goals.ts'
@@ -79,6 +85,7 @@ export interface InstantiateInput {
   key: string
   /** Campaign name; defaults to the recipe name. */
   name?: string | null
+  /** Required: which pool the campaign belongs to (no hard-coded default). */
   pool?: string | null
   /** Overrides the recipe's goal (a goal key, label, or custom text). */
   goal?: string | null
@@ -87,6 +94,12 @@ export interface InstantiateInput {
 /**
  * Build a campaign from a recipe: the campaign carries the recipe's goal
  * (unless overridden) and gets one campaign step per recipe step.
+ *
+ * One transaction for the campaign and all its steps: a failed step rolls
+ * everything back, so a retry never creates a second campaign. The inner
+ * writers (createCampaign, createStep) each call .tx(); those nested calls
+ * are flattened onto this transaction's client (PGlite deadlocks on real
+ * nesting).
  */
 export async function instantiateRecipe(
   db: Db,
@@ -98,24 +111,31 @@ export async function instantiateRecipe(
   if (!recipe.active) throw new RecipeError(`Recipe "${recipe.name}" is not active.`, 400)
   const name = (input.name ?? '').trim() || recipe.name
   if (name.length > 120) throw new RecipeError('Name is too long (max 120 characters).')
+  const pool = (input.pool ?? '').trim()
+  if (!pool) throw new RecipeError('A pool is required: pick which pool this campaign belongs to.')
+  if (!(await poolExists(db, pool))) throw new RecipeError(`Unknown pool "${pool}". Create it first (Pools), or pick an existing one.`)
   const goal = input.goal != null && input.goal !== '' ? input.goal : (goalLabel(recipe.goal_key) ?? recipe.goal_key)
-  const campaign = await createCampaign(
-    db,
-    actor,
-    { name, pool: input.pool ?? 'jeweler', goal } as { name: string; pool?: string; goal?: string },
-    { via: 'recipe' },
-  )
-  const steps: StepRow[] = []
-  for (const rs of recipe.steps) {
-    steps.push(
-      await createStep(db, actor, campaign.id, {
-        step_number: rs.step_number,
-        variant: rs.variant,
-        subject: rs.subject,
-        body: rs.body,
-        delay_days: rs.delay_days,
-      }),
+  return db.tx(async (q) => {
+    const tx = { tx: <T>(fn: (qq: Queryable) => Promise<T>) => fn(q) }
+    const campaign = await createCampaign(
+      tx,
+      actor,
+      { name, pool, goal } as { name: string; pool?: string; goal?: string },
+      { via: 'recipe' },
     )
-  }
-  return { campaign, steps, recipe }
+    const dbOnTx = { query: q.query.bind(q), tx: tx.tx } as Db
+    const steps: StepRow[] = []
+    for (const rs of recipe.steps) {
+      steps.push(
+        await createStep(dbOnTx, actor, campaign.id, {
+          step_number: rs.step_number,
+          variant: rs.variant,
+          subject: rs.subject,
+          body: rs.body,
+          delay_days: rs.delay_days,
+        }),
+      )
+    }
+    return { campaign, steps, recipe }
+  }, actor)
 }

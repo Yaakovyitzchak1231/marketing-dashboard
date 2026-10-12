@@ -45,7 +45,7 @@ describe('journey recipes (db)', () => {
   })
 
   it('instantiates a recipe into a campaign with its goal and steps', async () => {
-    const { campaign, steps, recipe } = await instantiateRecipe(db, ACTOR, { key: 'cold_outreach_3step' })
+    const { campaign, steps, recipe } = await instantiateRecipe(db, ACTOR, { key: 'cold_outreach_3step', pool: 'jeweler' })
     expect(recipe.key).toBe('cold_outreach_3step')
     expect(campaign.name).toBe('Cold outreach (3 steps)')
     expect(campaign.goal).toBe('Book meetings')
@@ -64,6 +64,7 @@ describe('journey recipes (db)', () => {
       key: 'breakup_last_touch',
       name: 'Q4 breakup',
       goal: 'Get replies',
+      pool: 'ai_agency',
     })
     expect(campaign.name).toBe('Q4 breakup')
     expect(campaign.goal).toBe('Get replies')
@@ -71,6 +72,31 @@ describe('journey recipes (db)', () => {
   })
 
   it('rejects unknown recipes', async () => {
-    await expect(instantiateRecipe(db, ACTOR, { key: 'nope' })).rejects.toThrow(RecipeError)
+    await expect(instantiateRecipe(db, ACTOR, { key: 'nope', pool: 'jeweler' })).rejects.toThrow(RecipeError)
+  })
+
+  it('requires a pool and validates it exists (no hard-coded default)', async () => {
+    await expect(instantiateRecipe(db, ACTOR, { key: 'cold_outreach_3step' })).rejects.toThrow(/pool is required/i)
+    await expect(instantiateRecipe(db, ACTOR, { key: 'cold_outreach_3step', pool: 'nope' })).rejects.toThrow(/Unknown pool/i)
+    // ...and the failed attempts leave no campaign behind.
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from lp.campaigns`)
+    expect(rows[0].n).toBe(0)
+  })
+
+  it('rolls back the campaign when a step fails (one transaction)', async () => {
+    // A recipe whose two steps collide on (step_number, variant): the second
+    // insert violates the unique index.
+    await db.query(
+      `insert into lp.journey_recipes (key, name, description, goal_key, steps, sort)
+       values ('bad_recipe', 'Bad', 'd', 'get_replies',
+         '[{"step_number":1,"variant":"A","subject":"one","body":"b","delay_days":0},
+           {"step_number":1,"variant":"A","subject":"two","body":"b","delay_days":0}]'::jsonb, 99)
+       on conflict (key) do nothing`,
+    )
+    await expect(instantiateRecipe(db, ACTOR, { key: 'bad_recipe', pool: 'jeweler' })).rejects.toThrow()
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from lp.campaigns`)
+    expect(rows[0].n).toBe(0)
+    const steps = await db.query(`select 1 from lp.campaign_steps limit 1`)
+    expect(steps.rows).toHaveLength(0)
   })
 })
