@@ -14,7 +14,7 @@
 import type { Db, Queryable } from '../db/types.ts'
 import { emitLeadEvent } from '../events/emit.ts'
 import { findNode, type JourneyGraph } from './graph.ts'
-import { getNodeHandler, type NodeOutcome, type RunState } from './nodes.ts'
+import { getNodeHandler, seenSince, type NodeOutcome, type RunState } from './nodes.ts'
 import { JourneyError, getVersionGraph } from './store.ts'
 
 /** Steps one run may take in a single advance, so a loop of instant nodes cannot spin forever. */
@@ -77,8 +77,8 @@ async function resolveLead(q: Queryable, companyId: number | null, contactId: nu
 
 /** Enrol one lead. Call inside a transaction (db.tx) — it writes the run, its first log row and an event. */
 export async function enrollLead(q: Queryable, actor: string, journeyId: number, input: EnrollInput): Promise<EnrollResult> {
-  const { rows: js } = await q.query<{ id: number; status: string; current_version: number | null; entry_mode: string; campaign_id: number | null }>(
-    'select id, status, current_version, entry_mode, campaign_id from lp.journeys where id = $1',
+  const { rows: js } = await q.query<{ id: number; status: string; current_version: number | null; entry_mode: string; campaign_id: number | null; settings: Record<string, unknown> }>(
+    'select id, status, current_version, entry_mode, campaign_id, settings from lp.journeys where id = $1',
     [journeyId],
   )
   const j = js[0]
@@ -98,6 +98,15 @@ export async function enrollLead(q: Queryable, actor: string, journeyId: number,
       [journeyId, lead.company_id, lead.contact_id],
     )
     if (prior.rows[0]) return { enrolled: false, run_id: null, reason: 'already_entered' }
+  }
+  const cap = Number(j.settings?.entry_cap)
+  if (Number.isInteger(cap) && cap >= 1) {
+    const prior = await q.query<{ n: number }>(
+      `select count(*)::int as n from lp.journey_runs
+        where journey_id = $1 and coalesce(company_id, 0) = coalesce($2::bigint, 0) and coalesce(contact_id, 0) = coalesce($3::bigint, 0)`,
+      [journeyId, lead.company_id, lead.contact_id],
+    )
+    if (prior.rows[0].n >= cap) return { enrolled: false, run_id: null, reason: 'already_entered' }
   }
   const { rows } = await q.query<{ id: number }>(
     `insert into lp.journey_runs (journey_id, version, company_id, contact_id, node_id, status, next_run_at, source, trigger_fire_id, context, created_by)
@@ -165,7 +174,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
     return await db.tx(async (q) => {
       const { rows } = await q.query<RunRow>(
         `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at,
-                r.context, r.status, j.campaign_id, j.status as journey_status
+                r.context, r.status, j.campaign_id, j.status as journey_status, j.goal
            from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
           where r.id = $1 and r.status in ${OPEN} and r.next_run_at <= $2
             and j.status in ('live', 'testing', 'sunset')
@@ -181,6 +190,17 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         contact_id: row.contact_id == null ? null : Number(row.contact_id),
         node_entered_at: new Date(row.node_entered_at), entered_at: new Date(row.entered_at),
         context: row.context ?? {},
+      }
+      const goal = (row as { goal?: Record<string, unknown> }).goal ?? {}
+      const exitEvent = typeof goal.exit_event === 'string' ? goal.exit_event : ''
+      if (exitEvent && (await seenSince(q, run, [exitEvent], run.entered_at)).has(exitEvent)) {
+        await q.query(
+          `update lp.journey_runs set status = 'exited', finished_at = $2, next_run_at = null where id = $1`,
+          [run.id, now.toISOString()],
+        )
+        await logStep(q, run, run.node_id, 'exit_criteria', { event: exitEvent }, actor)
+        await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', event: exitEvent })
+        return { run_id: run.id, advanced: true, steps: 1, status: 'exited', node_id: run.node_id }
       }
       const key = `${run.journey_id}:${run.version}`
       if (!graphs.has(key)) graphs.set(key, await getVersionGraph(q, run.journey_id, run.version))
@@ -302,6 +322,50 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
   return out
 }
 
+/** Exit open runs whose journey goal.exit_event has happened, even if the wait is not due yet. */
+async function applyExitCriteria(db: Db, now: Date, actor: string): Promise<void> {
+  const { rows } = await db.query<{
+    id: number
+    journey_id: number
+    version: number
+    company_id: number | null
+    contact_id: number | null
+    node_id: string
+    entered_at: Date
+    campaign_id: number | null
+    goal: { exit_event?: string }
+  }>(
+    `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.entered_at,
+            j.campaign_id, j.goal
+       from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
+      where r.status in ${OPEN}
+        and j.status in ('live', 'testing', 'sunset')
+        and j.goal->>'exit_event' is not null`,
+  )
+  for (const row of rows) {
+    const event = row.goal?.exit_event
+    if (!event) continue
+    const run: RunState = {
+      id: Number(row.id), journey_id: Number(row.journey_id), version: Number(row.version),
+      company_id: row.company_id == null ? null : Number(row.company_id),
+      contact_id: row.contact_id == null ? null : Number(row.contact_id),
+      node_id: row.node_id, node_entered_at: new Date(row.entered_at), entered_at: new Date(row.entered_at),
+      context: {},
+    }
+    if (!(await seenSince(db, run, [event], run.entered_at)).has(event)) continue
+    await db.tx(async (q) => {
+      const updated = await q.query(
+        `update lp.journey_runs set status = 'exited', finished_at = $2, next_run_at = null
+          where id = $1 and status in ${OPEN} returning id`,
+        [run.id, now.toISOString()],
+      )
+      if (!updated.rows[0]) return
+      await logStep(q, run, run.node_id, 'exit_criteria', { event }, actor)
+      await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', event })
+    }, actor)
+  }
+}
+
 /** One runner tick. */
 export async function runDueJourneys(
   db: Db, opts: { limit?: number; now?: Date; actor?: string } = {},
@@ -310,6 +374,7 @@ export async function runDueJourneys(
   const actor = opts.actor ?? 'system'
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000)
   const consumed = await consumeTriggerFires(db, actor)
+  await applyExitCriteria(db, now, actor)
   const { rows } = await db.query<{ id: number }>(
     `select r.id from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
       where r.status in ${OPEN} and r.next_run_at <= $1 and j.status in ('live', 'testing', 'sunset')

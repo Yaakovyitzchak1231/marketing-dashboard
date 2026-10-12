@@ -111,7 +111,57 @@ const noteHandler: NodeHandler = {
   },
 }
 
-const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler]
+const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
+
+const goalHandler: NodeHandler = {
+  kind: 'goal',
+  validate(node) {
+    const event = node.config.event
+    if (event != null && (typeof event !== 'string' || !EVENT_RE.test(event))) return ['event must be an event type, like meeting_booked']
+    return []
+  },
+  async run({ q, run, node, now }) {
+    const event = typeof node.config.event === 'string' ? node.config.event : ''
+    if (event) {
+      const hit = await seenSince(q, run, [event], run.entered_at)
+      if (!hit.has(event)) {
+        return { type: 'wait', until: new Date(now.getTime() + 60_000), result: { waiting_for: event } }
+      }
+    }
+    return { type: 'finish', status: 'goal', result: event ? { event } : {} }
+  },
+}
+
+const gotoHandler: NodeHandler = {
+  kind: 'goto',
+  validate(node) {
+    const to = typeof node.config.to === 'string' ? node.config.to.trim() : ''
+    if (!to) return ['goto needs config.to, the node id to jump to']
+    return []
+  },
+  async run({ node }) {
+    return { type: 'next', to: String(node.config.to), result: { to: node.config.to } }
+  },
+}
+
+async function seenSince(q: Queryable, run: RunState, types: string[], since: Date): Promise<Set<string>> {
+  if (!types.length || (run.company_id == null && run.contact_id == null)) return new Set()
+  const { rows } = await q.query<{ type: string }>(
+    `select distinct type from lp.lead_events
+      where type = any($1::text[])
+        and recorded_at >= $2
+        and (
+          ($3::bigint is not null and company_id = $3)
+          or ($4::bigint is not null and contact_id = $4)
+        )`,
+    [types, since.toISOString(), run.company_id, run.contact_id],
+  )
+  return new Set(rows.map((r) => r.type))
+}
+
+export { seenSince }
+
+const BUILT_IN: NodeHandler[] = [waitHandler, exitHandler, noteHandler, goalHandler, gotoHandler]
 const REGISTRY = new Map<string, NodeHandler>(BUILT_IN.map((h) => [h.kind, h]))
 
 export function registerNodeHandler(handler: NodeHandler): void {
