@@ -9,9 +9,16 @@ import { DEFAULT_FIELDS } from '@/lib/campaign-steps/adapter'
 import { ruleSetForCampaign } from '@/lib/rules/store'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
-const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown } }))
+const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown, role: 'owner' as string | null, actor: 'owner' as string } }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db }))
+// The human door now requires a signed-in editor (actorFor('editor')); fake the session
+// the way the roles-* suites do, instead of weakening the route.
+vi.mock('@/lib/auth/session', () => ({
+  currentRole: async () => holder.role,
+  currentActorId: async () => holder.actor,
+  currentEmail: async () => null,
+}))
 
 import { GET as humanGet, POST as humanPost, PATCH as humanPatch, PUT as humanPut } from '@/app/api/campaign-steps/[campaignId]/[[...path]]/route'
 import { GET as opsGet, POST as opsPost, PUT as opsPut } from '@/app/api/ops/campaign-steps/[campaignId]/[[...path]]/route'

@@ -10,6 +10,8 @@ import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { INPUT, LABEL } from '@/components/campaigns/ui'
 import { call } from './api'
+import { formatPct } from '@/components/dashboard/format'
+import { formatPercent } from '@/components/charts/format'
 
 interface VariantCfg { key: string; weight: number }
 interface Outcome { variant: string; sends: number; replies: number }
@@ -25,7 +27,6 @@ interface Experiment {
 }
 interface Detail extends Experiment { outcomes: Outcome[]; assignments: number }
 
-const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 const tone = (s: Experiment['status']) =>
   s === 'running' ? 'good' : s === 'decided' ? 'accent' : s === 'paused' ? 'warn' : 'neutral'
 
@@ -95,8 +96,12 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
 
   const record = async (id: number) => {
     const f = oc[id] ?? { variant: 'A', sends: '', replies: '' }
+    const toNum = (v: string): number | undefined => {
+      const n = Number(v)
+      return v.trim() === '' || !Number.isFinite(n) ? undefined : n
+    }
     const r = await act(`/experiments/${id}/outcome`, 'POST', {
-      variant: f.variant, sends: Number(f.sends) || 0, replies: Number(f.replies) || 0,
+      variant: f.variant, sends: toNum(f.sends), replies: toNum(f.replies),
     })
     if (r) { setOc((o) => ({ ...o, [id]: { variant: f.variant, sends: '', replies: '' } })); await open(id) }
   }
@@ -126,7 +131,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                 </span>
               </div>
               <p className="mt-1 text-[12px] text-ink-muted">
-                {e.config.variants.map((v) => `${v.key} (${Math.round((v.weight / total) * 100)}%)`).join(' · ')}
+                {e.config.variants.map((v) => `${v.key} (${formatPercent(v.weight / total, 0)})`).join(' · ')}
                 {' '}· auto-winner {e.config.auto_winner ? 'on' : 'off'} · min {e.config.min_sends_per_variant} sends/variant
               </p>
               {d ? (
@@ -138,7 +143,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                         <tr key={o.variant}>
                           <td className="font-semibold">{o.variant}{d.winner_variant === o.variant ? ' ★' : ''}</td>
                           <td>{o.sends.toLocaleString()}</td><td>{o.replies.toLocaleString()}</td>
-                          <td>{o.sends ? pct(o.replies / o.sends) : '—'}</td>
+                          <td>{formatPct(o.sends ? o.replies / o.sends : null)}</td>
                         </tr>
                       ))}
                     </tbody>
