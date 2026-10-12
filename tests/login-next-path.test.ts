@@ -46,6 +46,10 @@ describe('safeNextPath', () => {
     ['/leads\u0000'],
     ['/login'],
     ['/login?next=/leads'],
+    ['/login/'],
+    ['/login#x'],
+    ['/login/x'],
+    ['/api/'],
     ['/api/dashboard'],
     ['/api'],
     ['/' + 'a'.repeat(2048)],
@@ -62,6 +66,13 @@ describe('middleware deep link', () => {
     expect(loc.pathname).toBe('/login')
     expect(loc.origin).toBe('http://localhost')
     expect(loc.searchParams.get('next')).toBe('/leads?x=1')
+  })
+
+  it('strips Next\'s _rsc param from next, keeping the rest of the query', async () => {
+    const res = await middleware(req('/leads?x=1&_rsc=abc123'))
+    expect(new URL(res.headers.get('location')!).searchParams.get('next')).toBe('/leads?x=1')
+    const only = await middleware(req('/leads?_rsc=abc123'))
+    expect(new URL(only.headers.get('location')!).searchParams.get('next')).toBe('/leads')
   })
 
   it('adds no next for the home page', async () => {
@@ -83,6 +94,12 @@ describe('robots.txt and security headers', () => {
     const re = new RegExp('^' + config.matcher[0] + '$')
     expect(re.test('/robots.txt')).toBe(false)
     expect(re.test('/favicon.ico')).toBe(false)
+    // Anchored and escaped: lookalikes and sub-paths stay behind the gate.
+    expect(re.test('/robots.txt/x')).toBe(true)
+    expect(re.test('/robotsXtxt')).toBe(true)
+    expect(re.test('/robots.txtx')).toBe(true)
+    expect(re.test('/favicon.ico/x')).toBe(true)
+    expect(re.test('/faviconXico')).toBe(true)
     expect(re.test('/leads')).toBe(true)
     expect(re.test('/api/dashboard')).toBe(true)
   })

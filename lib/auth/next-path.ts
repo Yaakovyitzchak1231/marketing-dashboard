@@ -15,9 +15,12 @@ export function safeNextPath(raw: string | null | undefined): string | null {
   // Control characters, backslashes, encoded slashes/backslashes/NUL, and any
   // `//` anywhere: each is a way to make a browser treat the value as a host.
   if (/[\u0000-\u001f\u007f\\]/.test(raw) || /%5c|%2f|%00/i.test(raw) || raw.includes('//')) return null
-  const pathOnly = raw.split('?')[0]
+  const pathOnly = raw.split(/[?#]/)[0]
   if (pathOnly.includes(':')) return null
   // Never bounce back to the login page itself (loop) or to an API route.
-  if (pathOnly === '/login' || pathOnly === '/api' || pathOnly.startsWith('/api/')) return null
+  // Trailing slashes and fragments are normalised away first, so `/login/`
+  // and `/login#x` are caught too.
+  const p = pathOnly.replace(/\/+$/, '') || '/'
+  if (p === '/login' || p.startsWith('/login/') || p === '/api' || p.startsWith('/api/')) return null
   return raw
 }
