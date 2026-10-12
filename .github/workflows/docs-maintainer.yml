@@ -1,6 +1,6 @@
 name: Docs maintainer
 
-# Runs on every change that lands on main (a merged PR or a direct push), verifies the
+# Runs on workflow_dispatch (manual or post-merge automation), verifies the
 # docs against the code, refreshes docs/ARCHITECTURE.md, and reports orphans and
 # contradictions. It opens a docs PR only when it changed something, and comments on
 # the source PR when there is one.
@@ -10,10 +10,13 @@ name: Docs maintainer
 #
 # Known limit: a docs PR opened with GITHUB_TOKEN does not trigger CI on its own, so
 # its checks only run after someone pushes to it. Fix with a GitHub App or PAT if needed.
+#
+# The anthropics/claude-code-action v1 does not support `push` events (see
+# https://github.com/anthropics/claude-code-action/blob/main/docs/custom-automations.md).
+# This workflow therefore uses `workflow_dispatch` only. To run the audit after a PR
+# merges, invoke this workflow via `workflow_dispatch` (manually or from automation).
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       pr_number:

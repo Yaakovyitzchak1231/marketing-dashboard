@@ -3,8 +3,18 @@
  * config, and what to do when a run reaches it.
  *
  * Built in here (the minimum a journey needs to run end to end):
- *  - `wait`  — hold the run for a duration: config {minutes?, hours?, days?}.
- *              3.4 extends it (wait until a date/slot or a condition, drop-if-replied).
+ *  - `wait`  — hold the run. config:
+ *                {minutes?, hours?, days?}  a duration from node_entered_at, and/or
+ *                {until?}                   an absolute ISO date-time (a slot); `until` wins when set.
+ *                {drop_if_replied?: boolean} exit the run if a reply_received lands, and
+ *                {drop_if?: string | string[]} other event types that exit it likewise;
+ *                context.cancel_on (a list of event types on the run, e.g. from a 3.3
+ *                trigger) is honoured the same way. A drop looks at the run's own lead events (seenSince:
+ *                a contact run matches that contact only, a company run that company) with
+ *                occurred_at >= the run's journey entry time, so a reply before the lead
+ *                reached this node still drops them. While a drop is configured the wait
+ *                rechecks at most every minute instead of sleeping to the end. A malformed
+ *                or unregistered drop type is an error, never silently ignored.
  *  - `exit`  — end the run now with status `exited`: config {reason?}.
  *  - `note`  — do nothing and move on (a label in the graph; handy in tests).
  *  - `goal`  — end the run as `goal` (3.7): config {event?}. With an event, the run waits
@@ -23,6 +33,7 @@
  * logging the step, scheduling the next tick, emitting events).
  */
 import type { Queryable } from '../db/types.ts'
+import { EVENT_TYPE_KEY_RE } from '../events/type-key.ts'
 import type { GraphNode, JourneyGraph } from './graph.ts'
 
 export interface RunState {
@@ -94,6 +105,54 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : NaN
 }
 
+const DROP_HINT = "an event type like 'reply_received' (lowercase letters, digits, '_' or '.')"
+
+/** Problems with a wait node's drop settings, as plain sentences. Never filters: a bad entry is reported. */
+function dropProblems(config: Record<string, unknown>): string[] {
+  const errs: string[] = []
+  const flag = config.drop_if_replied
+  if (flag != null && typeof flag !== 'boolean') errs.push('drop_if_replied must be true or false')
+  const raw = config.drop_if
+  if (raw == null) return errs
+  const list = Array.isArray(raw) ? raw : [raw]
+  if (Array.isArray(raw) && raw.length === 0 && flag !== true) errs.push(`drop_if is empty; list ${DROP_HINT}, or remove it`)
+  for (const entry of list) {
+    if (typeof entry !== 'string' || !EVENT_TYPE_KEY_RE.test(entry.trim())) {
+      errs.push(`drop_if has '${String(entry)}', which is not ${DROP_HINT}`)
+    }
+  }
+  return errs
+}
+
+/**
+ * Every event type that ends this wait: the node's drop_if, `reply_received`
+ * when drop_if_replied, and the run's context.cancel_on. Builds a new list (the
+ * node config is never touched). Throws on a malformed entry rather than
+ * dropping it, since a silently ignored drop means mailing someone who should
+ * have been dropped.
+ */
+function dropEvents(config: Record<string, unknown>, context: Record<string, unknown>): string[] {
+  const problems = dropProblems(config)
+  if (problems.length) throw new Error(problems[0])
+  const fromConfig = Array.isArray(config.drop_if) ? config.drop_if : config.drop_if != null ? [config.drop_if] : []
+  const fromRun = Array.isArray(context.cancel_on) ? context.cancel_on : context.cancel_on != null ? [context.cancel_on] : []
+  for (const entry of fromRun) {
+    if (typeof entry !== 'string' || !EVENT_TYPE_KEY_RE.test(entry.trim())) {
+      throw new Error(`context.cancel_on has '${String(entry)}', which is not ${DROP_HINT}`)
+    }
+  }
+  const all = [...fromConfig, ...fromRun].map((x) => String(x).trim())
+  if (config.drop_if_replied === true) all.push('reply_received')
+  return [...new Set(all)]
+}
+
+function waitUntil(config: Record<string, unknown>): Date | null {
+  const raw = config.until
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const at = new Date(raw)
+  return Number.isNaN(at.getTime()) ? null : at
+}
+
 export function waitMinutes(config: Record<string, unknown>): number {
   const m = num(config.minutes) ?? 0
   const h = num(config.hours) ?? 0
@@ -110,15 +169,38 @@ const waitHandler: NodeHandler = {
       if (v !== null && (Number.isNaN(v) || v < 0)) errs.push(`${k} must be a number >= 0`)
     }
     if (errs.length) return errs
+    const until = waitUntil(node.config)
     const total = waitMinutes(node.config)
-    if (total <= 0) errs.push('set minutes, hours or days (more than 0)')
+    if (!until && total <= 0) errs.push('set minutes, hours or days (more than 0), or until')
     if (total > MAX_WAIT_MINUTES) errs.push('a wait can be at most 366 days')
+    if (node.config.until != null && !until) errs.push('until must be a date-time')
+    errs.push(...dropProblems(node.config))
     return errs
   },
-  async run({ run, node, now }) {
-    const until = new Date(run.node_entered_at.getTime() + waitMinutes(node.config) * 60_000)
-    if (now.getTime() >= until.getTime()) return { type: 'next', result: { waited_until: until.toISOString() } }
-    return { type: 'wait', until, result: { until: until.toISOString() } }
+  async run({ q, run, node, now }) {
+    const drops = dropEvents(node.config, run.context)
+    if (drops.length) {
+      // An unregistered type can never match, so a typo would be a silent no-drop. Fail loudly.
+      const known = await q.query<{ key: string }>('select key from lp.event_types where key = any($1::text[])', [drops])
+      const missing = drops.filter((d) => !known.rows.some((r) => r.key === d))
+      if (missing.length) throw new Error(`unknown event type(s) to drop on: ${missing.join(', ')}`)
+    }
+    if (drops.length) {
+      // Since the lead entered the journey (not since this node): a reply that came
+      // before they reached the wait still drops them. occurred_at, not recorded_at,
+      // so a backfilled event is placed when it happened. Whose events count is
+      // seenSince's rule, shared with goal nodes: a contact run sees only that
+      // contact's events, a company run only that company's.
+      const seen = await seenSince(q, run, drops, run.entered_at)
+      const hit = drops.find((d) => seen.has(d))
+      if (hit) return { type: 'finish', status: 'exited', result: { dropped: hit } }
+    }
+    const end = waitUntil(node.config)
+      ?? new Date(run.node_entered_at.getTime() + waitMinutes(node.config) * 60_000)
+    if (now.getTime() >= end.getTime()) return { type: 'next', result: { waited_until: end.toISOString() } }
+    // A drop condition has to be seen before the wait ends. Recheck within a minute.
+    const until = drops.length ? new Date(Math.min(end.getTime(), now.getTime() + 60_000)) : end
+    return { type: 'wait', until, result: { until: end.toISOString() } }
   },
 }
 
@@ -153,8 +235,6 @@ const CONTACT_FIELDS = ['status', 'verification_status'] as const
 export const BRANCH_SINCE = ['journey', 'node'] as const
 const BRANCH_CONFIG_KEYS = ['if', 'since']
 const IF_KEYS = ['event', 'entity', 'field', 'equals']
-const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
-
 // Path labels each branch mode routes to. Matching ignores case; the first label
 // in a list that the node has wins.
 const YES_LABELS = ['yes', 'true']
@@ -198,7 +278,7 @@ function validateIf(spec: Record<string, unknown>): string[] {
     return errs
   }
   if (hasEvent) {
-    if (typeof spec.event !== 'string' || !EVENT_RE.test(spec.event.trim())) errs.push('if.event must be an event type such as reply_received')
+    if (typeof spec.event !== 'string' || !EVENT_TYPE_KEY_RE.test(spec.event.trim())) errs.push('if.event must be an event type such as reply_received')
     return errs
   }
   if (!hasField) {
@@ -264,7 +344,7 @@ const goalHandler: NodeHandler = {
   kind: 'goal',
   validate(node) {
     const event = node.config.event
-    if (event != null && (typeof event !== 'string' || !EVENT_RE.test(event))) return ['event must be an event type, like meeting_booked']
+    if (event != null && (typeof event !== 'string' || !EVENT_TYPE_KEY_RE.test(event))) return ['event must be an event type, like meeting_booked']
     return []
   },
   async run({ q, run, node, now }) {

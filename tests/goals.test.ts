@@ -137,6 +137,9 @@ describe('goals, go-to, exit, entry cap (plan 3.7)', () => {
       expect((e as GraphError).errors).toContain("node 'hop' points at unknown node 'nowhere'")
     }
     expect(() => validateGraph({ start: 'hop', nodes: [{ id: 'hop', kind: 'goto', config: {} }] })).toThrow(/goto needs config.to/)
+    // A goal event uses the lp.event_types key shape, dots allowed (like review.posted).
+    expect(() => validateGraph({ start: 'g', nodes: [{ id: 'g', kind: 'goal', config: { event: 'review.posted' } }] })).not.toThrow()
+    expect(() => validateGraph({ start: 'g', nodes: [{ id: 'g', kind: 'goal', config: { event: 'Review Posted' } }] })).toThrow(/event must be an event type/)
   })
 
   it('exit criteria: one bounded set-based pass over many runs, scoped to the run and by occurred_at', async () => {
