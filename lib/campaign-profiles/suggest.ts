@@ -8,11 +8,19 @@
  * approves/rejects it afterward (lib/campaign-profiles/store.ts addItems).
  *
  * Provider: free/OSS only, any OpenAI-compatible chat completions endpoint
- * (a local Ollama on Yaakov's OVH server, Groq's free tier, OpenRouter's free
- * models, ...). Config comes from env for now (AI_BASE_URL, AI_API_KEY,
- * AI_MODEL) behind one getAiConfig(), which reads the /settings values
- * (ai.base_url, ai.api_key, ai.model) through lib/settings/store.ts's
- * resolveConfig() — DB first, env as a fallback.
+ * (Groq's free tier, OpenRouter's free models, a hosted Ollama, ...). The base URL
+ * must be a public https host: localhost / private / link-local addresses and ports
+ * other than 80/443 are refused (lib/settings/safe-url.ts).
+ *
+ * Config is async: getAiConfig() / resolveAiConfig() read the Settings AI values
+ * (ai.base_url, ai.api_key, ai.model) through lib/settings/store.ts's resolveConfig() —
+ * DB first, the AI_BASE_URL / AI_API_KEY / AI_MODEL env vars as a fallback — so always
+ * `await` them. A base URL that fails the guard counts as "not configured" and
+ * resolveAiConfig() says why.
+ *
+ * Every provider call goes through providerFetch() (lib/settings/ai-provider.ts): the
+ * connection is pinned to the DNS answer that was checked, redirects are never followed,
+ * and only the HTTP status of a failure is shown or logged, never the provider's body.
  */
 import 'server-only'
 import type { Db } from '../db/types.ts'

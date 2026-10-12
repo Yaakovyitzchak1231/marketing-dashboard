@@ -94,7 +94,10 @@ describe('campaign-profiles AI-assisted suggest', () => {
     expect(r.items_saved).toBe(5)
     expect(r.items_dropped).toBe(0)
     expect(r.model).toBe('llama3.1')
-    expect(r.verified_ok + r.verified_failed + r.not_applicable).toBe(5)
+    // Explicit breakdown of the 5 items (mockVerifyFetch): the feed parses with a fresh item (ok);
+    // the competitor's value "dentrix.com" is not an http(s) URL (failed); keyword, signal_rule and
+    // fingerprint have nothing to fetch (not_applicable).
+    expect({ ok: r.verified_ok, failed: r.verified_failed, not_applicable: r.not_applicable }).toEqual({ ok: 1, failed: 1, not_applicable: 3 })
     const p = await getProfile(db, campaignId)
     expect(p.profile.industry).toBe('Dental clinics')
     expect(p.profile.setup_status).toBe('suggested')
@@ -107,6 +110,9 @@ describe('campaign-profiles AI-assisted suggest', () => {
     }
     const feed = p.items.feed[0]
     expect(feed.config.unverified).toBe(true)
+    expect(p.items.feed[0].verify_status).toBe('ok')
+    expect(p.items.competitor[0].verify_status).toBe('failed')
+    expect([...p.items.keyword, ...p.items.signal_rule, ...p.items.fingerprint].map((i) => i.verify_status)).toEqual(['not_applicable', 'not_applicable', 'not_applicable'])
   })
 
   it('survives a fenced reply (```json ... ```) and surrounding prose', async () => {

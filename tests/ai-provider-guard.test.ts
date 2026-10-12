@@ -48,11 +48,36 @@ describe('segments "Describe it" uses the guard', () => {
     const e = await segmentChat(cfg, 's', 'u', { fetchImpl: asFetch(fetchImpl), lookup: pub }).catch((x: Error) => x)
     expect((e as Error).message).toBe('The AI provider answered with an error (HTTP 401).')
     expect((e as Error).message).not.toMatch(/sk-secret|acme/)
+    // The server log gets the status and a fixed reason code, never the provider body or the key.
+    expect(err).toHaveBeenCalledWith('AI provider error', { status: 401, reason: 'http_error' })
+    expect(JSON.stringify(err.mock.calls)).not.toMatch(/sk-secret|acme|bad key/)
     err.mockRestore()
   })
   it('does not follow a redirect', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 307, headers: { location: 'https://10.0.0.1/' } }))
     await expect(segmentChat(cfg, 's', 'u', { fetchImpl: asFetch(fetchImpl), lookup: pub })).rejects.toThrow(/not followed/)
+  })
+})
+
+describe('provider errors never reach the log or the client with their text', () => {
+  it('an unreachable host logs only a fixed code, not the (address-bearing) error text', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fetchImpl = vi.fn(async () => {
+      throw Object.assign(new Error('connect ECONNREFUSED 10.1.2.3:443 sk-secret'), { code: 'ECONNREFUSED' })
+    })
+    const e = await providerFetch('https://api.example.com/v1', {}, { fetchImpl, lookup: pub }).catch((x: Error) => x)
+    expect((e as Error).message).toBe('Could not reach the AI provider.')
+    expect(err).toHaveBeenCalledWith('AI provider unreachable', { reason: 'unreachable', code: 'ECONNREFUSED' })
+    expect(JSON.stringify(err.mock.calls)).not.toMatch(/10\.1\.2\.3|sk-secret/)
+    err.mockRestore()
+  })
+  it('a 5xx body is not read into the error, the client message or the log (suggest callChat too)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fetchImpl = vi.fn(async () => new Response('stack trace /srv/app/secret.ts token=abc123', { status: 502 }))
+    const e = await suggestChat(cfg, 's', 'u', { fetchImpl: asFetch(fetchImpl), lookup: pub }).catch((x: Error) => x)
+    expect((e as Error).message).toBe('The AI provider answered with an error (HTTP 502).')
+    expect(JSON.stringify(err.mock.calls)).not.toMatch(/stack trace|abc123|secret\.ts/)
+    err.mockRestore()
   })
 })
 
@@ -102,7 +127,7 @@ describe('model list fetch', () => {
   it('does not follow a redirect', async () => {
     const fetchImpl = vi.fn(async () => ({ ok: false, status: 302, json: async () => ({}) }))
     const r = await fetchModelList('https://models.example.com/v1', 'k', { fetchImpl, lookup: pub })
-    expect(r).toEqual({ ok: false, message: 'The provider redirected; the redirect was not followed.' })
+    expect(r).toEqual({ ok: false, message: 'The AI provider redirected; the redirect was not followed.' })
     expect(fetchImpl).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ redirect: 'manual' }))
   })
 })

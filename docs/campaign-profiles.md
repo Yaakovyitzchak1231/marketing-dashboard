@@ -86,14 +86,21 @@ campaign whose profile is `active`. The signed-in door is
 Free/OSS only: any OpenAI-compatible chat completions endpoint — Groq's free tier, OpenRouter's free models, etc. Configured on
 /settings (AI group: `ai.base_url`, `ai.api_key`, `ai.model`), with the
 `AI_BASE_URL` / `AI_API_KEY` (optional) / `AI_MODEL` env vars as a fallback, read by
-`getAiConfig()` (`lib/campaign-profiles/suggest.ts`) through the settings store's
-`resolveConfig()`. The base URL must be https on a public host
-(`lib/settings/safe-url.ts`): localhost, loopback, private, link-local/metadata, CGNAT
-and IPv6 ULA/link-local addresses are refused when saved and again when used, and the
-host is DNS-resolved right before each call and refused if it resolves privately. A
-refused URL (saved or env) counts as "not configured". Every provider fetch (suggestions, segment "Describe it", the /settings model list) goes through `providerFetch()` in `lib/settings/ai-provider.ts`: redirects are never followed, and errors show only the HTTP status. Loading the model list is Owner-only. Only an Owner can change `ai.*` settings
-(UI and ops API). Provider errors show only the HTTP status; the body is logged
-server-side, never shown. With nothing configured, `suggest_campaign_profile`
+`getAiConfig()` (`lib/campaign-profiles/suggest.ts`, async: always `await` it) through the settings store's
+`resolveConfig()`. The base URL must be https on a public host, on port 80 or 443 (explicit or default)
+(`lib/settings/safe-url.ts`). Refused when saved and again when used: localhost, `*.local`/`*.internal`, and any
+literal address in 0.0.0.0/8, 10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.0.0.0/24, 192.168/16, 198.18/15,
+224/4, 240/4, `::`, `::1`, fc00::/7, fe80::/10, fec0::/10, ff00::/8, 64:ff9b::/96 and 64:ff9b:1::/48 (NAT64),
+2002::/16 (6to4), `::/96` (IPv4-compatible) and `::ffff:0:0/96` (IPv4-mapped); for the NAT64 / 6to4 / compatible /
+mapped forms the embedded IPv4 is judged too. The connection is made with `node:https` and a custom `lookup`
+that resolves the host, refuses the request if any answer is non-public, and returns the very address it checked,
+so the socket connects to exactly the validated IP (no second DNS resolution, so no DNS-rebinding window). A
+refused URL (saved or env) counts as "not configured", and the person is told why (e.g. "the AI provider base URL
+is not allowed: ..."). Every provider fetch (suggestions, segment "Describe it", the /settings model list) goes
+through `providerFetch()` / `providerRequest()` in `lib/settings/ai-provider.ts`: redirects are never followed,
+there is a timeout and a reply size cap, and errors show only the HTTP status. Loading the model list is Owner-only. Only an Owner can change `ai.*` settings
+(UI and ops API). Provider errors show only the HTTP status; the body is never shown, returned or logged
+(the server log gets the status and a fixed reason code). With nothing configured, `suggest_campaign_profile`
 answers `{configured:false}` and the wizard says "AI suggestions need an AI provider —
 add one in Settings" — manual entry still works either way.
 

@@ -9,9 +9,10 @@ const sources = [{ id: 7, name: 'Fall jewelers', is_template: true }]
 
 describe('/campaigns/new step 1 (NewCampaignForm)', () => {
   it('renders the create form that hands off to the profile wizard', () => {
-    const { container } = render(<NewCampaignForm canEdit pools={pools} sources={sources} action={vi.fn()} />)
+    render(<NewCampaignForm canEdit pools={pools} sources={sources} action={vi.fn()} />)
     expect(screen.getByLabelText('Name')).toBeTruthy()
-    expect(container.querySelector('input[name="flow"]')?.getAttribute('value')).toBe('wizard')
+    // the hidden flow=wizard field is what sends success to the profile wizard
+    expect((screen.getByDisplayValue('wizard') as HTMLInputElement).name).toBe('flow')
     expect(screen.getByRole('option', { name: 'Dental' })).toBeTruthy()
     expect(screen.getByRole('option', { name: 'Template: Fall jewelers' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Create and set up profile' })).toBeTruthy()
