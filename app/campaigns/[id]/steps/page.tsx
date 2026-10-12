@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db'
 import { DbNotConnected, PageShell } from '@/components/app/PageShell'
 import { EmptyNote } from '@/components/dashboard/primitives'
 import { StepsEditor } from '@/components/campaign-steps/StepsEditor'
+import { ExperimentsPanel } from '@/components/campaign-steps/ExperimentsPanel'
 import { CampaignTabs } from '@/components/campaign-steps/CampaignTabs'
 import { stepsOverview } from '@/lib/campaign-steps/http'
 import { loadCampaignLeads } from '@/lib/campaign-steps/adapter'
@@ -36,6 +37,7 @@ export default async function CampaignStepsPage({ params }: { params: Promise<{ 
     )
   }
   const leads = await loadCampaignLeads(db, campaignId)
+  const stepNumbers = [...new Set(data.steps.map((s) => s.step_number))].sort((a, b) => a - b)
   return (
     <PageShell
       title={`${data.campaign.name}: steps`}
@@ -57,6 +59,7 @@ export default async function CampaignStepsPage({ params }: { params: Promise<{ 
         pushRequests={data.push_requests}
         leads={leads.map((l) => ({ company_id: l.company_id, company_name: l.company_name, email: l.email }))}
       />
+      <ExperimentsPanel campaignId={campaignId} stepNumbers={stepNumbers} />
     </PageShell>
   )
 }

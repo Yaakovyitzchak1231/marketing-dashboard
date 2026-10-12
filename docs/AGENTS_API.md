@@ -553,3 +553,10 @@ and setting a journey `live`. Read with `journey_list`, `journey_get`, `journey_
 (owner or `system`). Tables, graph format, node kinds and how later rows add
 node kinds: [journeys.md](journeys.md).
 
+## A/B experiments (plan 3.6)
+
+Per campaign step, on the campaign-steps route (`/api/ops/campaign-steps/:campaignId/experiments...`):
+create, list, `PATCH` (name, config while draft, status moves), `evaluate`, `assign`, and
+`outcome` (`{variant, sends?, positive_replies?, idempotency_key?}`; positive replies only).
+Status changes, `evaluate` and `outcome` need the owner or `system`. Rules, status
+transitions, the winner statistics and the `ab_split` journey node: [experiments.md](experiments.md).

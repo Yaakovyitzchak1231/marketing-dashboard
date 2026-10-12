@@ -58,8 +58,10 @@ checks shape, unique ids, known kinds, each kind's own config, that every edge
 points at a node, and that every node is reachable. Loops are allowed.
 
 Built-in kinds (`lib/journeys/nodes.ts`): `wait` (3.4, below), `exit` ({reason};
-ends as `exited`), `note` (does nothing; moves on), and `goal` and `goto` (3.7,
-below). `branch` above is an example of a kind 3.5 adds.
+ends as `exited`), `note` (does nothing; moves on), `branch` (3.5, below), `goal` and
+`goto` (3.7, below), and `ab_split` (3.6, `lib/journeys/ab-split.ts`, config
+{experiment_id, variants}), which routes a lead down the path named after its A/B
+variant: [experiments.md](experiments.md).
 
 ### `wait` (3.4)
 
@@ -98,6 +100,49 @@ not sleep to the end), so a reply is seen within about a minute. At run time an
 event type that is not in `lp.event_types` (or a malformed `context.cancel_on`
 entry) fails that node with a clear error instead of silently never matching (the runner retries it after 1 then 5 minutes and marks the run `error` on the third failure, like any failing node; the wait itself reads only and has no side effect to repeat);
 publish can only check the key's format, since validation has no database access.
+
+## Branch nodes (plan 3.5)
+
+A `branch` picks one of its labelled `paths`; it never uses `next`. Config:
+`{ if?, since? }`. Path labels are matched ignoring case, and the graph is
+rejected at publish (and by `journey_validate`) when the labels a mode needs are
+missing. A branch never falls through to "some other path".
+
+`since` is `journey` (default: events from the lead's entry into the journey) or
+`node` (events from when the run arrived at this branch). Anything else is
+rejected. Events are measured on `occurred_at` (when it happened), not
+`recorded_at` (when we stored it), so an open from before entry that a backfill
+stores later does not count.
+
+Whose events count follows the 3.7 rule: a branch on a contact's run counts only
+that contact's events, and a branch on a company's run counts that company's. A
+colleague at the same company opening, clicking or replying does not move a
+contact's run.
+
+**Open/click** (no `if`): paths `clicked` and/or `opened`, plus a fallback
+`no-open` (or `no open`, `else`, `no`). A lead with an `email_link_clicked` takes
+`clicked` (or `opened` if there is no `clicked` path); one with only an
+`email_opened` takes `opened`; if the graph has no path for what happened, or
+nothing happened, the lead takes the fallback (`else` preferred for the former).
+
+**If/else** (`if` set): paths `yes` (or `true`) and `no` (or `else`). Two forms:
+
+- `{ "event": "reply_received" }` — yes when that event type happened since `since`.
+- `{ "entity": "company"|"contact", "field": "...", "equals": ... }` — yes when the
+  field equals the value. Fields: company `stage`, `city`, `state`, `country`;
+  contact `status`, `verification_status`. `equals` is required, and compared as text.
+
+NULL is "unknown", never `''`: a missing row or a NULL column is `no`, unless
+`equals` is explicitly `null`, which matches only a NULL column. Unknown `if`
+keys, an unknown entity, a non-whitelisted field, or an empty `if` are rejected.
+
+```json
+{ "id": "gate", "kind": "branch", "config": { "if": { "event": "reply_received" }, "since": "node" },
+  "paths": [ { "label": "yes", "to": "thanks" }, { "label": "no", "to": "nudge" } ] }
+```
+
+Graphs are validated by `publishVersion` before anything is stored (the only
+writer of `lp.journey_versions`); `journey_upsert` stores no graph.
 
 ## Goals, go-to, exits and the entry cap (3.7)
 
@@ -304,6 +349,44 @@ Agent keys are otherwise not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
-- Node kinds beyond wait/exit/note/goal/goto: branch (3.5), split (3.6), actions (3.8), send (3.9).
+- Node kinds beyond wait/exit/note/branch/goal/goto/ab_split: actions (3.8), send (3.9).
+- A delayed trigger (3.3) is a trigger kind, not a node; see "Delayed triggers" below. It writes `lp.trigger_fires` with `cancel_on`; enrolment copies that list onto `run.context.cancel_on`.
 - Journey-level approval UI (the builder, 3.13). The approval gate itself is in place now.
 - A journeys page and the builder (3.13). There is no UI in 3.1.
+
+## Delayed triggers (3.3)
+
+A `delayed` trigger fires N days after event X unless event Y happens first:
+`config = {after_event: X, days: 1..365, unless_event: Y}` (or `unless_events: [Y1, Y2]`).
+Y must differ from X; a config where X also cancels itself is rejected.
+
+- X arms a row in `lp.trigger_delays` (`status` pending | fired | cancelled). The
+  `trigger_scan` job fires the due ones, writing one `lp.trigger_fires` row
+  (`dedupe_key = delay:<id>`, payload `{delay_id, cancel_on}`).
+- **Timing windows use `occurred_at`, never `recorded_at`.** `source_at` is X's
+  `occurred_at`; `due_at = source_at + N days`. A backfilled X starts its clock when
+  it happened, so it can be due the moment it is stored. Y cancels only if its
+  `occurred_at` is in `[source_at, due_at]`: a Y from before X, or one that
+  happened after the delay was already owed, does not cancel it. This holds
+  at emit time and in the scan, so a late-recorded Y or a backlog never cancels an owed fire.
+- **Identity.** A delay armed for a contact is answered only by a Y for that same
+  contact (not by a company-level Y, not by another contact at the company). A
+  company-level delay (X had no contact) is answered by any Y at that company.
+- Order. In one batch of events, each event is handled in order: arm any delay it
+  starts, then cancel any pending delay it answers. At emit time only rows not yet
+  due are cancelled; a past-due row is decided by the scan with the full window check.
+- **Disabled triggers.** Disabling a delayed trigger cancels its pending delays in the
+  same statement: a database trigger on `lp.triggers` (`enabled` true -> false) marks
+  them `cancelled`, so every write path (`set_trigger_enabled`, `upsert_trigger` with
+  `enabled: false`, raw SQL) is covered and disable-then-re-enable between two scans
+  cannot keep them. The scan repeats the sweep as a backstop and never fires a
+  disabled trigger's row. Re-enabling does not bring cancelled delays back; a new X
+  arms a new delay. A fire the delayed trigger had already written before it was disabled
+  is not enrolled either: the runner skips fires of disabled triggers (see above). The
+  two guards are complementary.
+- Concurrency. The scan locks the due rows (`FOR UPDATE ... SKIP LOCKED`) inside one
+  transaction, so overlapping scans never take the same row; the unique
+  `dedupe_key` on the fire is the second guard.
+- Migration 0069 replaces the `triggers_kind_check` constraint from 0053 (the name
+  Postgres gives that inline column check). The drop is `if exists`, the add is not
+  guarded: it fails loudly if a stored kind is outside the list.
