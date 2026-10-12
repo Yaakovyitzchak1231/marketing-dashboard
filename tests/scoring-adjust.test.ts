@@ -112,6 +112,70 @@ describe('adjustScore', () => {
   })
 })
 
+describe('adjustScore idempotency', () => {
+  let db: TestDb
+  let companyId: number
+  let modelId: number
+  beforeAll(async () => {
+    db = await createTestDb()
+    companyId = await addCompany(db, { name: 'Idem Co' })
+    modelId = await engagementModelId(db)
+  })
+  afterAll(async () => db.close())
+
+  async function manualPointsRows(co: number): Promise<number> {
+    const { rows } = await db.query<{ n: number }>(
+      `select count(*)::int as n from lp.score_points where model_id = $1 and company_id = $2 and rule_key = $3`,
+      [modelId, co, MANUAL_ADJUSTMENT_RULE_KEY],
+    )
+    return rows[0].n
+  }
+
+  it('the same idempotency key twice inserts one points row and returns the original adjustment_id', async () => {
+    const first = await adjustScore(db, 'owner', { model_id: modelId, company_id: companyId, points: 5, reason: 'Manual bump', idempotency_key: 'req-1' })
+    const second = await adjustScore(db, 'owner', { model_id: modelId, company_id: companyId, points: 5, reason: 'Manual bump', idempotency_key: 'req-1' })
+    expect(second.adjustment_id).toBe(first.adjustment_id)
+    expect(second.score).toBe(first.score)
+    expect(second.previous_score).toBe(first.score) // replay: nothing new applied
+    expect(await manualPointsRows(companyId)).toBe(1)
+  })
+
+  it('the key is stored in the score_adjusted event props', async () => {
+    const { rows } = await db.query<{ props: Record<string, unknown> }>(
+      `select props from lp.lead_events where type = 'score_adjusted' and company_id = $1 order by id desc limit 1`,
+      [companyId],
+    )
+    expect(rows[0].props).toMatchObject({ idempotency_key: 'req-1' })
+  })
+
+  it('a replay with different points still returns the original (first write wins)', async () => {
+    const before = (await leadScores(db, companyId)).find((s) => s.model.id === modelId)?.score
+    const again = await adjustScore(db, 'owner', { model_id: modelId, company_id: companyId, points: 999, reason: 'Different', idempotency_key: 'req-1' })
+    expect(again.score).toBe(before)
+    expect(await manualPointsRows(companyId)).toBe(1)
+  })
+
+  it('different keys insert two rows', async () => {
+    await adjustScore(db, 'owner', { model_id: modelId, company_id: companyId, points: 5, reason: 'Second key', idempotency_key: 'req-2' })
+    expect(await manualPointsRows(companyId)).toBe(2)
+  })
+
+  it('the same key on a different lead is a new adjustment', async () => {
+    const other = await addCompany(db, { name: 'Idem Other' })
+    const r = await adjustScore(db, 'owner', { model_id: modelId, company_id: other, points: 5, reason: 'Same key, other lead', idempotency_key: 'req-1' })
+    expect(r.adjustment_id).toBeGreaterThan(0)
+    expect(await manualPointsRows(companyId)).toBe(2)
+    expect(await manualPointsRows(other)).toBe(1)
+  })
+
+  it('the adjust_score op accepts and replays an idempotency key', async () => {
+    const a = (await runOp(db, 'owner', 'adjust_score', { model_id: modelId, company_id: companyId, points: 4, reason: 'op key', idempotency_key: 'op-1' })) as { adjustment_id: number; score: number }
+    const b = (await runOp(db, 'owner', 'adjust_score', { model_id: modelId, company_id: companyId, points: 4, reason: 'op key', idempotency_key: 'op-1' })) as { adjustment_id: number; score: number }
+    expect(b.adjustment_id).toBe(a.adjustment_id)
+    expect(b.score).toBe(a.score)
+  })
+})
+
 describe('adjust_score op', () => {
   let db: TestDb
   let companyId: number
