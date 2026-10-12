@@ -177,7 +177,7 @@ function ProviderCard({ name, env, b, perCheck, note }: { name: string; env: str
             <span className="text-ink-muted">Balance unavailable{b.error ? `: ${b.error}` : ''}</span>
           )
         ) : (
-          <span className="text-ink-muted">Add {env} in Vercel to enable this tier.</span>
+          <span className="text-ink-muted">Save the key on <a href="/settings" className="underline">Settings</a> (or set {env} in Vercel) to enable this tier.</span>
         )}
       </p>
       <p className="mt-1 text-[11px] text-ink-faint">

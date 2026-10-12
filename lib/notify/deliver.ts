@@ -18,7 +18,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { Db, Queryable } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { mailConfiguredAsync, sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
+import { sendMail, MAIL_NOT_CONFIGURED, type FetchLike } from './mail.ts'
 import { shabbosEndsAt } from './shabbos.ts'
 
 export const CHANNEL_KINDS = ['webhook', 'ntfy', 'email', 'stream', 'pull', 'mcp', 'relay'] as const
@@ -301,8 +301,10 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
       return
     }
     if (r.kind === 'email') {
-      if (!(await mailConfiguredAsync(opts.env))) {
-        // Not a failure: hold it without spending an attempt; it goes out once MAIL_* exist.
+      const to = String(r.config.to ?? '')
+      const m = await sendMail({ to, subject: `[Dashboard] ${ev.summary}`, text: mailText(ev) }, fetchImpl, opts.env)
+      if (!m.ok && m.unconfigured) {
+        // Not a failure: hold it without spending an attempt; it goes out once mail settings exist.
         await db.query(
           `update lp.deliveries set status = 'held', attempts = greatest(attempts - 1, 0), last_error = $3,
                   next_attempt_at = $2::timestamptz + ($4 || ' seconds')::interval, updated_at = now() where id = $1 and delivered_at is null`,
@@ -311,8 +313,6 @@ export async function dispatchDue(db: Db, opts: { fetchImpl?: FetchLike; now?: D
         out.held++
         return
       }
-      const to = String(r.config.to ?? '')
-      const m = await sendMail({ to, subject: `[Dashboard] ${ev.summary}`, text: mailText(ev) }, fetchImpl, opts.env)
       if (m.ok) {
         await settle(db, r.id, r.channel_id, { status: 'sent' }, now)
         out.sent++

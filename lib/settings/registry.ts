@@ -12,7 +12,7 @@ export const SETTING_GROUPS: SettingGroup[] = ['Workspace', 'Email sending', 'Se
 /** One plain line under a group's heading on /settings, where the group needs explaining. */
 export const SETTING_GROUP_HELP: Partial<Record<SettingGroup, string>> = {
   'Email sending':
-    'The dashboard emails a notice the moment something needs attention, like a new page comment or a task handed to an agent. It sends through a free Resend or Brevo account. Right now sending reads its settings from Vercel, shown under In use now. Until those are set, the emails wait, then go out once they are.',
+    'The dashboard emails a notice the moment something needs attention, like a new page comment or a task handed to an agent. It sends through a free Resend or Brevo account. Settings values are used first, with Vercel environment variables as fallback. Until all three mail settings are available, the emails wait, then go out once they are.'
 }
 
 export interface SettingOption {
