@@ -9,7 +9,8 @@
  *                {drop_if_replied?: boolean} exit the run if a reply_received lands, and
  *                {drop_if?: string | string[]} other event types that exit it likewise;
  *                context.cancel_on (a list of event types on the run, e.g. from a 3.3
- *                trigger) is honoured the same way. A drop looks at lp.lead_events with
+ *                trigger) is honoured the same way. A drop looks at the run's own lead events (seenSince:
+ *                a contact run matches that contact only, a company run that company) with
  *                occurred_at >= the run's journey entry time, so a reply before the lead
  *                reached this node still drops them. While a drop is configured the wait
  *                rechecks at most every minute instead of sleeping to the end. A malformed
@@ -184,25 +185,15 @@ const waitHandler: NodeHandler = {
       const missing = drops.filter((d) => !known.rows.some((r) => r.key === d))
       if (missing.length) throw new Error(`unknown event type(s) to drop on: ${missing.join(', ')}`)
     }
-    if (drops.length && (run.company_id != null || run.contact_id != null)) {
+    if (drops.length) {
       // Since the lead entered the journey (not since this node): a reply that came
       // before they reached the wait still drops them. occurred_at, not recorded_at,
-      // so a backfilled event is placed when it happened.
-      const hit = await q.query<{ type: string }>(
-        `select type from lp.lead_events
-          where type = any($1::text[])
-            and occurred_at >= $2
-            and (
-              ($3::bigint is not null and company_id = $3)
-              or ($4::bigint is not null and contact_id = $4)
-            )
-          order by occurred_at
-          limit 1`,
-        [drops, run.entered_at.toISOString(), run.company_id, run.contact_id],
-      )
-      if (hit.rows[0]) {
-        return { type: 'finish', status: 'exited', result: { dropped: hit.rows[0].type } }
-      }
+      // so a backfilled event is placed when it happened. Whose events count is
+      // seenSince's rule, shared with goal nodes: a contact run sees only that
+      // contact's events, a company run only that company's.
+      const seen = await seenSince(q, run, drops, run.entered_at)
+      const hit = drops.find((d) => seen.has(d))
+      if (hit) return { type: 'finish', status: 'exited', result: { dropped: hit } }
     }
     const end = waitUntil(node.config)
       ?? new Date(run.node_entered_at.getTime() + waitMinutes(node.config) * 60_000)

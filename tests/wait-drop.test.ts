@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { createTestDb } from './helpers/pglite-db'
-import { addCompany } from './helpers/lead-fixtures'
+import { addCompany, addContact } from './helpers/lead-fixtures'
 import { emitLeadEvent } from '@/lib/events/emit'
 import { runOp } from '@/lib/ops/dispatch'
 import { runDueJourneys } from '@/lib/journeys/runner'
@@ -196,5 +196,43 @@ describe('wait and drop if replied (plan 3.4)', () => {
     await runDueJourneys(db, { now: new Date(Date.now() + 60_000) })
     expect((await status(oldRun)).status).toBe('waiting')
     expect((await status(newRun)).status).toBe('exited')
+  })
+
+  it('a contact run is not dropped by a colleague\'s reply, but is dropped by its own contact\'s reply', async () => {
+    const c = await addCompany(db, { name: 'Colleagues', domain: 'colleagues.example', city: 'Towson' })
+    const mine = await addContact(db, c, 'me@colleagues.example')
+    const colleague = await addContact(db, c, 'them@colleagues.example')
+    const { id } = await liveJourney('Contact grain drop', { start: 'w', nodes: [{ id: 'w', kind: 'wait', config: { days: 3, drop_if_replied: true } }] })
+    const en = await runOp(db, 'owner', 'journey_enroll', { journey_id: id, contact_id: mine }) as { results: { run_id: number }[] }
+    const runId = en.results[0].run_id
+    await runDueJourneys(db) // parked on the wait
+
+    // A different contact at the same company replies, reported by email as a webhook does. The
+    // emit path fills company_id on the row, but the run belongs to `mine`, so it must not count.
+    await emitLeadEvent(db, { type: 'reply_received', email: 'them@colleagues.example', source: 'test' })
+    const row = await db.query<{ company_id: number; contact_id: number }>(
+      `select company_id, contact_id from lp.lead_events where type = 'reply_received' and contact_id = $1`, [colleague])
+    expect(row.rows[0]).toMatchObject({ company_id: c, contact_id: colleague })
+    await runDueJourneys(db, { now: new Date(Date.now() + 60_000) })
+    expect((await status(runId)).status).toBe('waiting')
+
+    // The run's own contact replies: now it drops.
+    await emitLeadEvent(db, { type: 'reply_received', email: 'me@colleagues.example', source: 'test' })
+    await runDueJourneys(db, { now: new Date(Date.now() + 2 * 60_000) })
+    expect((await status(runId)).status).toBe('exited')
+    const log = await db.query<{ result: { dropped?: string } }>(
+      `select result from lp.journey_steps_log where run_id = $1 and action = 'wait:exited'`, [runId])
+    expect(log.rows[0].result).toMatchObject({ dropped: 'reply_received' })
+  })
+
+  it('a company run is still dropped by an event for its company', async () => {
+    const c = await addCompany(db, { name: 'Company Grain', domain: 'company-grain.example', city: 'Towson' })
+    await addContact(db, c, 'x@company-grain.example')
+    const { id } = await liveJourney('Company grain drop', { start: 'w', nodes: [{ id: 'w', kind: 'wait', config: { days: 3, drop_if_replied: true } }] })
+    const runId = await enroll(id, c)
+    await runDueJourneys(db)
+    await emitLeadEvent(db, { type: 'reply_received', email: 'x@company-grain.example', source: 'test' })
+    await runDueJourneys(db, { now: new Date(Date.now() + 60_000) })
+    expect((await status(runId)).status).toBe('exited')
   })
 })
