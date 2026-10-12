@@ -15,12 +15,13 @@ import { CronError, nextRun } from '@/lib/jobs/cron'
 import { normalizeEmail } from '@/lib/leads/normalize'
 import { compileSegment, matchingIds } from '@/lib/segments/compile'
 
-export const TRIGGER_KINDS = ['event', 'segment_entry', 'segment_exit', 'field_change', 'date', 'schedule', 'api'] as const
+export const TRIGGER_KINDS = ['event', 'segment_entry', 'segment_exit', 'field_change', 'date', 'schedule', 'api', 'delayed'] as const
 export type TriggerKind = (typeof TRIGGER_KINDS)[number]
 
 const COMPANY_DATE_COLS = ['created_at', 'updated_at', 'last_researched_at'] as const
 const CONTACT_DATE_COLS = ['created_at', 'updated_at', 'verified_at'] as const
 const FIELD_RE = /^[a-z][a-z0-9_]{0,62}$/
+const EVENT_RE = /^[a-z][a-z0-9_]{0,63}$/
 const CUSTOM_FIELD_RE = /^custom\.([a-z][a-z0-9_]{0,62})$/
 const TZ_RE = /^[A-Za-z0-9_+\-/]{1,64}$/
 
@@ -140,7 +141,21 @@ export function validateTriggerConfig(kind: TriggerKind, raw: unknown): Record<s
     }
     return { cron, timezone }
   }
+  if (kind === 'delayed') {
+    const after = typeof c.after_event === 'string' ? c.after_event.trim() : ''
+    if (!EVENT_RE.test(after)) throw new TriggerError('delayed triggers need config.after_event')
+    const days = Number(c.days)
+    if (!Number.isInteger(days) || days < 1 || days > 365) throw new TriggerError('delayed config.days must be an integer from 1 to 365')
+    const unless = unlessEvents(c)
+    if (!unless.length) throw new TriggerError('delayed triggers need config.unless_event (the Y that cancels them)')
+    return { after_event: after, days, unless_events: unless }
+  }
   return {}
+}
+
+function unlessEvents(c: Record<string, unknown>): string[] {
+  const raw = Array.isArray(c.unless_events) ? c.unless_events : c.unless_event != null ? [c.unless_event] : []
+  return [...new Set(raw.map((x) => String(x).trim()).filter((s) => EVENT_RE.test(s)))]
 }
 
 async function campaignOk(
@@ -224,6 +239,8 @@ export async function matchEmittedEvents(q: Queryable, events: EmittedEvent[]): 
       `select id, kind, campaign_id, config from lp.triggers where enabled and kind in ('segment_entry', 'segment_exit')`,
     )).rows.map((r) => ({ ...r, config: cfg(r) }))
     : []
+  await armDelayed(q, events)
+  await cancelDelayed(q, events)
   if (!eventTriggers.length && !segTriggers.length) return 0
   let fired = 0
   for (const e of events) {
@@ -428,12 +445,111 @@ async function scanSchedules(q: Queryable, now: Date): Promise<number> {
   return fired
 }
 
-/** Date, schedule, and segment entry/exit. Called by the trigger_scan job. */
-export async function scanDueTriggers(q: Queryable, now = new Date()): Promise<{ segment: number; date: number; schedule: number }> {
+/** Date, schedule, segment entry/exit, and delayed triggers that are due. Called by the trigger_scan job. */
+export async function scanDueTriggers(q: Queryable, now = new Date()): Promise<{ segment: number; date: number; schedule: number; delayed: number }> {
   const segment = await scanSegments(q)
   const date = await scanDates(q, now)
   const schedule = await scanSchedules(q, now)
-  return { segment, date, schedule }
+  const delayed = await scanDelays(q, now)
+  return { segment, date, schedule, delayed }
+}
+
+async function armDelayed(q: Queryable, events: EmittedEvent[]): Promise<void> {
+  try {
+    const types = [...new Set(events.map((e) => e.type))]
+    if (!types.length) return
+    const triggers = (await q.query<TriggerRow>(
+      `select id, kind, campaign_id, config from lp.triggers
+        where enabled and kind = 'delayed' and config->>'after_event' = any($1::text[])`,
+      [types],
+    )).rows.map((r) => ({ ...r, config: cfg(r) }))
+    if (!triggers.length) return
+    for (const e of events) {
+      if (e.company_id == null && e.contact_id == null) continue
+      for (const t of triggers) {
+        if (t.config.after_event !== e.type) continue
+        if (!(await campaignOk(q, t.campaign_id, e))) continue
+        const unless = Array.isArray(t.config.unless_events) ? t.config.unless_events : []
+        await q.query(
+          `insert into lp.trigger_delays (trigger_id, company_id, contact_id, source_event_id, due_at, unless_events)
+           select $1, $2, $3, le.id, le.recorded_at + make_interval(days => $5::int), $6::text[]
+             from lp.lead_events le where le.id = $4
+           on conflict (trigger_id, source_event_id) where source_event_id is not null do nothing`,
+          [t.id, e.company_id, e.contact_id, e.id, Number(t.config.days), unless],
+        )
+      }
+    }
+  } catch (e) {
+    if (!isUndefinedTable(e)) throw e
+  }
+}
+
+async function cancelDelayed(q: Queryable, events: EmittedEvent[]): Promise<void> {
+  try {
+    for (const e of events) {
+      if (e.company_id == null && e.contact_id == null) continue
+      await q.query(
+        `update lp.trigger_delays
+            set status = 'cancelled'
+          where status = 'pending'
+            and unless_events && array[$1]::text[]
+            and (
+              ($2::bigint is not null and company_id = $2)
+              or ($3::bigint is not null and contact_id = $3)
+            )`,
+        [e.type, e.company_id, e.contact_id],
+      )
+    }
+  } catch (e) {
+    if (!isUndefinedTable(e)) throw e
+  }
+}
+
+async function scanDelays(q: Queryable, now: Date): Promise<number> {
+  try {
+    const due = await q.query<{
+      id: number
+      trigger_id: number
+      company_id: number | null
+      contact_id: number | null
+      unless_events: string[]
+      created_at: string
+    }>(
+      `select id, trigger_id, company_id, contact_id, unless_events, created_at
+         from lp.trigger_delays
+        where status = 'pending' and due_at <= $1
+        order by id
+        limit 200`,
+      [now.toISOString()],
+    )
+    let fired = 0
+    for (const row of due.rows) {
+      const hit = await q.query(
+        `select 1 from lp.lead_events
+          where type = any($1::text[])
+            and recorded_at >= $2
+            and (
+              ($3::bigint is not null and company_id = $3)
+              or ($4::bigint is not null and contact_id = $4)
+            )
+          limit 1`,
+        [row.unless_events, row.created_at, row.company_id, row.contact_id],
+      )
+      if (hit.rows.length) {
+        await q.query(`update lp.trigger_delays set status = 'cancelled' where id = $1 and status = 'pending'`, [row.id])
+        continue
+      }
+      const wrote = await insertFire(q, row.trigger_id, row, {
+        delay_id: row.id, cancel_on: row.unless_events,
+      }, `delay:${row.id}`)
+      await q.query(`update lp.trigger_delays set status = 'fired' where id = $1 and status = 'pending'`, [row.id])
+      if (wrote) fired++
+    }
+    return fired
+  } catch (e) {
+    if (!isUndefinedTable(e)) throw e
+    return 0
+  }
 }
 
 export async function fireApiTrigger(

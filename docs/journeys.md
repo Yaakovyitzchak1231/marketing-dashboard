@@ -123,5 +123,6 @@ are not role-gated, as with every other op.
 ## Not in 3.1 (left for later rows)
 
 - Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
+- A delayed trigger (3.3) is a trigger kind, not a node. It writes `lp.trigger_fires` with `cancel_on`; enrolment copies that list onto `run.context.cancel_on`.
 - Human approval before a send-capable journey goes live (lands with 3.9, when a send kind exists).
 - A journeys page and the builder (3.13). There is no UI in 3.1.

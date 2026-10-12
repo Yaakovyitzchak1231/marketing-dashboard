@@ -39,6 +39,13 @@ export interface EnrollResult {
   reason?: 'already_in' | 'already_entered' | 'duplicate_fire'
 }
 
+/** A delayed trigger (3.3) puts cancel_on on the fire payload. Copy it onto the run so later nodes can read it. */
+function enrollContext(payload: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const body = payload ?? {}
+  const cancel = Array.isArray(body.cancel_on) ? body.cancel_on.filter((x) => typeof x === 'string') : []
+  return cancel.length ? { trigger_payload: body, cancel_on: cancel } : { trigger_payload: body }
+}
+
 async function logStep(q: Queryable, run: { id: number; journey_id: number; version: number }, nodeId: string, action: string, result: Record<string, unknown>, actor: string | null): Promise<void> {
   await q.query(
     `insert into lp.journey_steps_log (run_id, journey_id, version, node_id, action, result, actor) values ($1, $2, $3, $4, $5, $6, $7)`,
@@ -285,7 +292,7 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
           const r = await enrollLead(q, actor, Number(id), {
             company_id: f.company_id == null ? null : Number(f.company_id),
             contact_id: f.contact_id == null ? null : Number(f.contact_id),
-            source: 'trigger', trigger_fire_id: Number(f.id), context: { trigger_payload: f.payload ?? {} },
+            source: 'trigger', trigger_fire_id: Number(f.id), context: enrollContext(f.payload),
           })
           if (r.enrolled) enrolled++
         } catch (e) {
