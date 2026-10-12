@@ -100,7 +100,7 @@ Read it as three paths:
 | `docs/` | Feature notes, runbooks, reviews, and this file | `ARCHITECTURE.md`, `AGENTS_API.md`, `LEAD_PLATFORM.md` |
 | `.github/workflows/` | CI (`ci.yml`) and the post-merge docs bot (`docs-maintainer.yml`) | see §6 |
 | `AGENTS.md` | House rules for every agent working here. Binding. | — |
-| Root config | Build, lint, test, and deploy settings | `package.json`, `next.config.ts`, `vercel.json` (`buildCommand: npm run vercel-build`), `vitest.config.mts`, `tailwind.config.ts`, `.env.example` |
+| Root config | Build, lint, test, and deploy settings | `package.json`, `next.config.ts`, `vercel.json` (`buildCommand: npm run vercel-build`; automatic deploys only from `main`), `vitest.config.mts`, `tailwind.config.ts`, `.env.example` |
 
 ## 4. Key contracts
 
