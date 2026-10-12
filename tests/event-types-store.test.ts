@@ -63,4 +63,29 @@ describe('event type registry core (lib/events/types-store)', () => {
     const r = (await runOp(db, 'owner', 'update_event_type', { key: 'demo_given', label: 'Demo' })) as { label: string }
     expect(r.label).toBe('Demo')
   })
+
+  it('agents: refused by update_event_type (403), 409 on re-registering an existing key, still free to register new keys', async () => {
+    await registerEventType(db, 'owner', { key: 'quote_sent', label: 'Quote sent', category: 'deal' })
+    await expect(runOp(db, 'hermes', 'update_event_type', { key: 'quote_sent', active: false })).rejects.toMatchObject({ status: 403 })
+    await expect(runOp(db, 'hermes', 'register_event_type', { key: 'quote_sent', label: 'Hijack', category: 'custom' })).rejects.toMatchObject({ status: 409 })
+    await expect(runOp(db, 'hermes', 'register_event_type', { key: 'email_sent', label: 'Hijack', category: 'custom' })).rejects.toMatchObject({ status: 409 })
+    const { rows } = await db.query<{ label: string; active: boolean }>("select label, active from lp.event_types where key = 'quote_sent'")
+    expect(rows[0]).toEqual({ label: 'Quote sent', active: true })
+    const t = (await runOp(db, 'hermes', 'register_event_type', { key: 'hermes_new', label: 'New from Hermes', category: 'signal' })) as { key: string; source: string }
+    expect(t).toMatchObject({ key: 'hermes_new', source: 'agent' })
+  })
+
+  it('an editor human may relabel through update_event_type and register_event_type', async () => {
+    await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, email, role, active) values ('nina', 'human', 'Nina', 'nina@example.com', 'editor', true)`), 'owner')
+    const u = (await runOp(db, 'nina', 'update_event_type', { key: 'quote_sent', label: 'Quote emailed' })) as { label: string }
+    expect(u.label).toBe('Quote emailed')
+    const r = (await runOp(db, 'nina', 'register_event_type', { key: 'quote_sent', label: 'Quote out', category: 'deal' })) as { label: string }
+    expect(r.label).toBe('Quote out')
+  })
+
+  it('props_schema must be a JSON object under the size cap', async () => {
+    await expect(registerEventType(db, 'owner', { key: 'ps_a', label: 'x', category: 'custom', props_schema: [1] })).rejects.toThrow(/JSON object/)
+    await expect(registerEventType(db, 'owner', { key: 'ps_b', label: 'x', category: 'custom', props_schema: { big: 'x'.repeat(20000) } })).rejects.toThrow(/too large/)
+    await expect(registerEventType(db, 'owner', { key: 'ps_c', label: 'x', category: 'custom', props_schema: { url: 'string' } })).resolves.toMatchObject({ props_schema: { url: 'string' } })
+  })
 })

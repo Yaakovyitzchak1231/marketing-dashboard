@@ -6,6 +6,7 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
+import { isEditorActor, requireEditorActor } from '../ops/actor-role.ts'
 import { registerEventType, updateEventType, EventTypeError } from './types-store.ts'
 import { emitLeadEvent, emitLeadEvents, EventError, type EmitLeadEventInput } from './emit.ts'
 
@@ -167,16 +168,24 @@ const RAW: Record<string, Op> = {
     },
   },
   register_event_type: {
-    args: '{key (slug), label, category: email|lifecycle|verification|web|social|meeting|deal|signal|custom, props_schema?}  -- any authenticated actor may register a new type; it never auto-approves data, it only opens the door for track_event to use the key',
+    args: '{key (slug), label, category: email|lifecycle|verification|web|social|meeting|deal|signal|custom, props_schema? (JSON object, max 16 KB)}  -- any authenticated actor may register a NEW type; an existing key is 409 for agents (a person, editor or owner, may relabel it), and a built-in key (source instantly/system) is 409 for everyone',
     run: (db, actor, a) =>
-      typeErr(() => db.tx((q) => registerEventType(q, actor, { key: a.key, label: a.label, category: a.category, props_schema: a.props_schema }), actor)),
+      typeErr(() =>
+        db.tx(async (q) => {
+          const canRelabel = await isEditorActor(q, actor)
+          return registerEventType(q, actor, { key: a.key, label: a.label, category: a.category, props_schema: a.props_schema }, { canRelabel })
+        }, actor),
+      ),
   },
   update_event_type: {
-    args: '{key, label?, category?, active?}  -- change a custom type (never its key); built-in types (source instantly/system) are refused. active:false makes track_event refuse the key',
+    args: '{key, label?, category?, active?}  -- people only (editor or owner); agents get 403. Changes a custom type (never its key); built-in types (source instantly/system) are 409. active:false makes track_event refuse the key',
     run: (db, actor, a) => {
       const key = typeof a.key === 'string' ? a.key.trim() : ''
       if (!key) throw new OpsError('key is required')
-      return typeErr(() => db.tx((q) => updateEventType(q, actor, key, { label: a.label, category: a.category, active: a.active }), actor))
+      return typeErr(() => db.tx(async (q) => {
+        await requireEditorActor(q, actor, 'update_event_type is for people (editor or owner); an agent can register new types but not change existing ones')
+        return updateEventType(q, actor, key, { label: a.label, category: a.category, active: a.active })
+      }, actor))
     },
   },
 }

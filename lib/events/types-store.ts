@@ -47,6 +47,17 @@ function cleanCategory(v: unknown): string {
   return c
 }
 
+export const PROPS_SCHEMA_MAX_BYTES = 16_384
+
+/** props_schema must be a JSON object (or absent/null) and at most PROPS_SCHEMA_MAX_BYTES once serialised. */
+function cleanPropsSchema(v: unknown): string | null {
+  if (v === undefined || v === null) return null
+  if (typeof v !== 'object' || Array.isArray(v)) throw new EventTypeError('props_schema must be a JSON object')
+  const json = JSON.stringify(v)
+  if (Buffer.byteLength(json, 'utf8') > PROPS_SCHEMA_MAX_BYTES) throw new EventTypeError(`props_schema is too large (max ${PROPS_SCHEMA_MAX_BYTES} bytes)`)
+  return json
+}
+
 async function audit(q: Queryable, actor: string, kind: string, key: string, summary: string, data: unknown) {
   await q.query(`insert into lp.events (actor, kind, summary, entity_type, entity_id, data) values ($1, $2, $3, 'event_type', $4, $5)`, [actor, kind, summary, key, JSON.stringify(data)])
 }
@@ -60,18 +71,28 @@ export async function registerEventType(
   q: Queryable,
   actor: string,
   input: { key: unknown; label: unknown; category: unknown; props_schema?: unknown; source?: string },
+  opts: { canRelabel?: boolean } = {},
 ): Promise<EventTypeRow> {
   const key = typeof input.key === 'string' ? input.key.trim() : ''
   if (!EVENT_TYPE_SLUG.test(key)) throw new EventTypeError("key must be a lowercase slug, e.g. 'review_posted' (letters, digits, '_' or '.', starting with a letter)")
   const label = cleanLabel(input.label)
   const category = cleanCategory(input.category)
+  const schema = cleanPropsSchema(input.props_schema)
+  const canRelabel = opts.canRelabel !== false
+  if (!canRelabel) {
+    const { rows: ex } = await q.query<{ source: string }>('select source from lp.event_types where key = $1', [key])
+    if (ex[0]) {
+      if (BUILT_IN_SOURCES.has(ex[0].source)) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
+      throw new EventTypeError(`'${key}' is already registered; a person can relabel it in Settings → Event types`, 409)
+    }
+  }
   const { rows } = await q.query<EventTypeRow>(
     `insert into lp.event_types (key, label, category, source, props_schema, created_by)
      values ($1, $2, $3, $4, $5, $6)
      on conflict (key) do update set label = excluded.label, category = excluded.category
        where lp.event_types.source not in ('instantly', 'system')
      returning ${COLS}`,
-    [key, label, category, input.source ?? 'agent', input.props_schema === undefined ? null : JSON.stringify(input.props_schema), actor],
+    [key, label, category, input.source ?? 'agent', schema, actor],
   )
   if (!rows[0]) throw new EventTypeError(`'${key}' is a built-in event type; it can't be changed`, 409)
   await audit(q, actor, 'event_type.registered', key, `Registered event type ${key} (${label})`, { label, category })
