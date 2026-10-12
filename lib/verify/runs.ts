@@ -15,7 +15,7 @@
 import type { Db, Queryable } from '@/lib/db/types'
 import { logEvent } from '@/lib/ops/events'
 import { emitLeadEvent } from '@/lib/events/emit'
-import { createPrechecker, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
+import { createPrecheckerAsync, precheckMany, type DnsResolver, type PrecheckResult } from './precheck'
 import { estimateCost, getPricing, usd4, type CostEstimate, type Pricing } from './pricing'
 import { selectCandidates, cleanFilter, mvPending, type LeadFilter, DEFAULT_RECHECK_DAYS } from './select'
 import { nextContactStatus, precheckStep, runWaterfall, worstCaseCost, type StepRecord, type WaterfallKeys, type WaterfallOutcome } from './waterfall'
@@ -166,7 +166,7 @@ export async function createPreview(db: Db, input: PreviewInput, env: VerifyEnv)
     force: Boolean(input.force),
     recheck_days: recheckDays,
   })
-  const checker = createPrechecker({ resolver: env.resolver })
+  const checker = await createPrecheckerAsync({ resolver: env.resolver })
   const pre = await precheckMany(sel.eligible.map((c) => c.email_norm as string), checker)
 
   const byResult: Record<string, number> = {}
@@ -421,7 +421,7 @@ export async function stepRun(db: Db, id: number, env: VerifyEnv, opts: StepOpti
     )
     const preById = new Map(preRows.map((p) => [Number(p.contact_id), p]))
 
-    const checker = createPrechecker({ resolver: env.resolver })
+    const checker = await createPrecheckerAsync({ resolver: env.resolver })
     const ctx = { prechecker: checker, keys: env.keys, pricing: env.pricing, fetch: env.fetch }
     const worst = worstCaseCost(env.keys, env.pricing)
 
