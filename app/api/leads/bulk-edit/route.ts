@@ -1,5 +1,5 @@
 /**
- * PATCH /api/leads/bulk-edit  {company_ids: number[], field: string, value: string | null}
+ * PATCH /api/leads/bulk-edit  {company_ids: number[], field: string, value: string | null, confirm: true}
  *   -> 200 {field, updated, unchanged, failed: [{id, error}], message}
  *   -> 400 {error} bad body / bad value · 403 {error} not an editor, or over the editor cap · 503 no DATABASE_URL
  * The bulk bar's "Edit field" (plan 1.3). Editors and owners only; each lead is
@@ -24,6 +24,10 @@ export async function PATCH(req: Request) {
   const ids = Array.isArray(body?.company_ids) ? body!.company_ids : null
   if (!ids || ids.length === 0 || ids.length > MAX_BULK_EDIT || !ids.every((x) => Number.isSafeInteger(x) && (x as number) > 0)) {
     return NextResponse.json({ error: `company_ids must be 1 to ${MAX_BULK_EDIT} positive integers.` }, { status: 400 })
+  }
+  // No bulk change without a confirm: the bar shows the count and only its Confirm sends confirm: true.
+  if ((body as { confirm?: unknown } | null)?.confirm !== true) {
+    return NextResponse.json({ error: 'Confirm the change first (confirm: true).' }, { status: 400 })
   }
   if (typeof body?.field !== 'string') return NextResponse.json({ error: 'field is required.' }, { status: 400 })
   try {

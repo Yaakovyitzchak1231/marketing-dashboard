@@ -1,11 +1,14 @@
 /**
  * Which company fields the bulk bar's "Edit field" offers (client-safe; no DB).
  * The inline-edit whitelist in registry.ts, minus stage — the bar's own
- * "Set stage" control already owns that one.
+ * "Set stage" control already owns that one — and minus name: giving many
+ * leads the same name is never what someone means. Website stays: a value
+ * already on another lead fails per row with the duplicate message, and the
+ * rest still save.
  */
 import { REGISTRY } from './registry'
 
-export const BULK_COMPANY_FIELDS: readonly string[] = Object.keys(REGISTRY.company ?? {}).filter((f) => f !== 'stage')
+export const BULK_COMPANY_FIELDS: readonly string[] = Object.keys(REGISTRY.company ?? {}).filter((f) => f !== 'stage' && f !== 'name')
 
 export const BULK_FIELD_CHOICES: readonly { value: string; label: string }[] = BULK_COMPANY_FIELDS.map((f) => ({
   value: f,

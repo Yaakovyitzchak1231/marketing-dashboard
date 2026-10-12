@@ -8,11 +8,13 @@
  * (lp.approvals, "Needs your OK" on Activity) with the field, the stored
  * current value, the proposed value and a reason. No migration: it is an
  * approval of action 'other' whose payload.kind is 'instantly_value_change'.
+ * Only one request per lead + field may be pending at a time, and only an
+ * Owner can decide one (lib/ops/core.ts decideApproval).
  * Approving records the decision (who, when, note) — it does not rewrite the
  * count; the number changes only when Instantly's data does.
  */
 import type { Db } from '../db/types'
-import { requestApproval, type ApprovalRow } from '../ops/core'
+import { requestApprovalIn, type ApprovalRow } from '../ops/core'
 import { RegistryError } from './registry'
 
 export const INSTANTLY_METRICS = {
@@ -89,6 +91,19 @@ export async function requestValueChange(
     reason,
   }
   const summary = `Change ${label} for ${payload.company_name} in ${payload.campaign_name} from ${current} to ${proposed}: ${reason}`
-  const approval = await requestApproval(db, actor, { action: 'other', summary, payload })
+  // One pending request per lead + field. The advisory lock serializes two requests for the same
+  // lead + field, so the check and the insert can't race (no migration, no unique index needed).
+  const approval = await db.tx(async (q) => {
+    await q.query('select pg_advisory_xact_lock(hashtext($1))', [`${VALUE_CHANGE_KIND}:${companyId}:${field}`])
+    const dup = await q.query<{ id: number }>(
+      `select id from lp.approvals
+        where status = 'pending' and (expires_at is null or expires_at > now())
+          and payload->>'kind' = $1 and payload->>'entity_id' = $2 and payload->>'field' = $3
+        limit 1`,
+      [VALUE_CHANGE_KIND, String(companyId), field],
+    )
+    if (dup.rows[0]) throw new RegistryError(`There's already a pending request to change ${label} for this lead.`, 409)
+    return requestApprovalIn(q, actor, { action: 'other', summary, payload })
+  }, actor)
   return { approval, payload }
 }

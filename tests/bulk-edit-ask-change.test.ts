@@ -16,8 +16,10 @@ import { PATCH } from '@/app/api/leads/bulk-edit/route'
 import { bulkEditSentence, bulkUpdateCompanies, BULK_COMPANY_FIELDS, EDITOR_BULK_EDIT_CAP } from '@/lib/edit/bulk'
 import { requestValueChange, isValueChangePayload } from '@/lib/edit/ask-change'
 import { pendingApprovals } from '@/lib/ops/queries'
+import { decideApproval } from '@/lib/ops/core'
 
-const patch = (body: unknown) => PATCH(new Request('http://x/api/leads/bulk-edit', { method: 'PATCH', body: JSON.stringify(body) }))
+const patch = (body: Record<string, unknown>, confirm = true) =>
+  PATCH(new Request('http://x/api/leads/bulk-edit', { method: 'PATCH', body: JSON.stringify(confirm ? { ...body, confirm: true } : body) }))
 
 describe('bulk edit (row 7)', () => {
   let db: TestDb
@@ -33,7 +35,7 @@ describe('bulk edit (row 7)', () => {
   })
 
   it('offers the inline-edit company whitelist minus stage', () => {
-    expect(BULK_COMPANY_FIELDS).toEqual(['name', 'website', 'phone', 'city', 'state'])
+    expect(BULK_COMPANY_FIELDS).toEqual(['website', 'phone', 'city', 'state'])
   })
 
   it('refuses viewers (403) and answers 503 with no database', async () => {
@@ -50,7 +52,12 @@ describe('bulk edit (row 7)', () => {
     holder.role = 'editor'
     expect((await patch({ company_ids: [], field: 'city', value: 'x' })).status).toBe(400)
     expect((await patch({ company_ids: [a], field: 'stage', value: 'ready' })).status).toBe(400)
-    expect((await patch({ company_ids: [a], field: 'name', value: '' })).status).toBe(400) // name is required
+    expect((await patch({ company_ids: [a], field: 'name', value: 'Same Name' })).status).toBe(400) // never bulk
+    const unconfirmed = await patch({ company_ids: [a], field: 'city', value: 'Nowhere' }, false)
+    expect(unconfirmed.status).toBe(400)
+    expect((await unconfirmed.json()).error).toMatch(/Confirm/)
+    const r = await db.query<{ city: string | null }>('select city from lp.companies where id = $1', [a])
+    expect(r.rows[0].city).not.toBe('Nowhere')
   })
 
   it('updates each lead through the inline-edit path, one audit row each, and says it plainly', async () => {
@@ -88,9 +95,10 @@ describe('bulk edit (row 7)', () => {
 
 describe('ask to change an Instantly-backed number (row 7)', () => {
   let db: TestDb
-  let co: number, camp: number
+  let co: number, camp: number, openedId = 0
   beforeAll(async () => {
     db = await createTestDb()
+    await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, harness, active, role) values ('editor1', 'human', 'Ed', 'dashboard', true, 'editor'), ('editor2', 'human', 'Edna', 'dashboard', true, 'editor') on conflict (id) do nothing`), 'owner')
     co = await addCompany(db, { name: 'Delta Jewelers' })
     camp = (await db.query<{ id: number }>(`insert into lp.campaigns (name, pool) values ('Spring', 'jeweler') returning id`)).rows[0].id
     for (const t of ['email_sent', 'email_sent', 'email_opened'])
@@ -101,7 +109,8 @@ describe('ask to change an Instantly-backed number (row 7)', () => {
   })
 
   it('files a pending approval with the stored current value, the proposed value and the reason; the count is untouched', async () => {
-    const { approval, payload } = await requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: '0', reason: 'Apple privacy pre-fetch, not a real open' })
+    const { approval, payload } = await requestValueChange(db, 'editor1', { companyId: co, campaignId: camp, field: 'opens', proposed: '0', reason: 'Apple privacy pre-fetch, not a real open' })
+    openedId = approval.id
     expect(approval.status).toBe('pending')
     expect(approval.action).toBe('other')
     expect(payload).toMatchObject({ field: 'opens', field_label: 'Opens', current: 1, proposed: 0, entity_id: co, campaign_id: camp })
@@ -121,5 +130,26 @@ describe('ask to change an Instantly-backed number (row 7)', () => {
     await expect(requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: -1, reason: 'x' })).rejects.toThrow(/whole number/)
     await expect(requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: '', reason: 'x' })).rejects.toThrow(/whole number/)
     await expect(requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: 4, reason: '  ' })).rejects.toThrow(/why/)
+  })
+
+  it('allows only one pending request per lead + field, even when two race', async () => {
+    await expect(requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: 5, reason: 'again' })).rejects.toThrow(
+      "There's already a pending request to change Opens for this lead.",
+    )
+    const race = await Promise.allSettled([
+      requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'replies', proposed: 1, reason: 'a' }),
+      requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'replies', proposed: 2, reason: 'b' }),
+    ])
+    expect(race.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const n = await db.query<{ n: number }>(`select count(*)::int as n from lp.approvals where status = 'pending' and payload->>'field' = 'replies' and payload->>'entity_id' = $1`, [String(co)])
+    expect(n.rows[0].n).toBe(1)
+  })
+
+  it('only an owner can decide it; once decided, a new request may be filed', async () => {
+    await expect(decideApproval(db, 'editor2', openedId, 'approved')).rejects.toThrow(/Only an owner/)
+    const d = await decideApproval(db, 'owner', openedId, 'rejected', 'opens are real')
+    expect(d.status).toBe('rejected')
+    const again = await requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: 2, reason: 'one missing' })
+    expect(again.approval.status).toBe('pending')
   })
 })

@@ -38,14 +38,31 @@ describe('BulkBar: Edit field', () => {
     const done = vi.fn()
     render(<BulkBar selected={{ companyIds: [1, 2, 3], unverifiedContactIds: [] }} onDone={done} />)
     const select = screen.getByLabelText('Edit field') as HTMLSelectElement
-    expect([...select.options].map((o) => o.value)).toEqual(['', 'name', 'website', 'phone', 'city', 'state'])
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'website', 'phone', 'city', 'state'])
     fireEvent.change(select, { target: { value: 'city' } })
     fireEvent.change(screen.getByLabelText('New value'), { target: { value: 'Towson' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply to 3' }))
+    // Apply only asks: the confirm shows the count, nothing is sent yet.
+    expect(screen.getByRole('group', { name: 'Confirm bulk edit' })).toHaveTextContent('Set City to \u201CTowson\u201D on 3 leads?')
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('bulk-edit'))).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(done).toHaveBeenCalled())
     const call = fetchMock.mock.calls.find(([u]) => String(u).includes('bulk-edit'))!
-    expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({ company_ids: [1, 2, 3], field: 'city', value: 'Towson' })
+    expect(JSON.parse(String((call[1] as RequestInit).body))).toEqual({ company_ids: [1, 2, 3], field: 'city', value: 'Towson', confirm: true })
     expect((call[1] as RequestInit).method).toBe('PATCH')
+  })
+
+  it('Cancel sends nothing; an empty value asks to clear', () => {
+    role.value = 'editor'
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL) => json({ lists: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<BulkBar selected={{ companyIds: [4], unverifiedContactIds: [] }} onDone={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Edit field'), { target: { value: 'phone' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to 1' }))
+    expect(screen.getByRole('group', { name: 'Confirm bulk edit' })).toHaveTextContent('Clear Phone on 1 lead?')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('group', { name: 'Confirm bulk edit' })).toBeNull()
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('bulk-edit'))).toHaveLength(0)
   })
 
   it('a viewer gets the view-only note and nothing is sent', () => {
@@ -60,6 +77,7 @@ describe('BulkBar: Edit field', () => {
     expect(apply).not.toBeDisabled()
     fireEvent.click(apply)
     expect(heard).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('group', { name: 'Confirm bulk edit' })).toBeNull()
     expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('bulk-edit'))).toHaveLength(0)
     window.removeEventListener(VIEW_ONLY_EVENT, heard)
   })
