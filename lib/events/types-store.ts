@@ -10,8 +10,9 @@
  * webhook / trigger insert fail, so they can be listed but not changed.
  */
 import type { Queryable } from '../db/types.ts'
+import { EVENT_TYPE_KEY_RE } from './type-key.ts'
 
-export const EVENT_TYPE_SLUG = /^[a-z][a-z0-9_.]{0,63}$/
+export const EVENT_TYPE_SLUG = EVENT_TYPE_KEY_RE
 export const EVENT_TYPE_CATEGORIES = ['email', 'lifecycle', 'verification', 'web', 'social', 'meeting', 'deal', 'signal', 'custom'] as const
 export const BUILT_IN_SOURCES: ReadonlySet<string> = new Set(['instantly', 'system'])
 
