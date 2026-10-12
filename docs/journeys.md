@@ -120,6 +120,35 @@ runs carry on. One advance takes at most 50 steps, then resumes next tick.
 Roles apply to keys minted for a person (`lib/ops/actor-role.ts`); agent keys
 are not role-gated, as with every other op.
 
+## Send controls (plan 3.10)
+
+`lib/journeys/send-controls.ts` is the gate a send step calls before it sends.
+It does not send. Quiet hours and send windows are in the lead's time zone.
+`launch_at` and `active_until` are absolute.
+
+Timezone order: contact `timezone`, then company `timezone`
+(`db/migrations/0065_lead_timezone.sql`), then `settings.send_controls.fallback_timezone`,
+then `America/New_York`. A blank or unknown name is skipped.
+
+```json
+{ "send_controls": {
+    "quiet_hours": { "start": "21:00", "end": "08:00" },
+    "fallback_timezone": "America/New_York",
+    "send_window": { "days": [1, 2, 3, 4, 5], "start": "09:00", "end": "17:00" },
+    "launch_at": "2026-10-14T13:00:00Z",
+    "active_until": "2026-11-01T00:00:00Z" } }
+```
+
+Days are 0 = Sunday through 6 = Saturday. A start later than the end wraps
+midnight. If the journey sets no quiet hours, the caller may pass the workspace
+quiet-hours clock. No send window means any time, still subject to quiet hours
+and the launch bounds.
+
+`sendAllowed` returns `{ allow: true }`, a hold `{ allow: false, until, reason }`
+(`before launch`, `quiet hours`, `send window`; `until` is one minute past the
+boundary), or `{ allow: false, until: null, reason: "past active-until" }` which
+skips the send. A bad clock or zone is treated as unset. It does not throw.
+
 ## Not in 3.1 (left for later rows)
 
 - Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
