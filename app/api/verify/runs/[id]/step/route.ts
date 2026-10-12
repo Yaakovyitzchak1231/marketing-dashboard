@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { stepRun, verifyEnvFromConfig } from '@/lib/verify/runs'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId, readJson } from '../../../_shared'
 
 export const dynamic = 'force-dynamic'
@@ -20,6 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const chunk = body.chunk == null ? undefined : Number(body.chunk)
   const concurrency = body.concurrency == null ? undefined : Number(body.concurrency)
   try {
+    await actorFor('owner')
     const env = await verifyEnvFromConfig()
     const report = await stepRun(db, id, env, {
       chunk: Number.isFinite(chunk) ? chunk : undefined,

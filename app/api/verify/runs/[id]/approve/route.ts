@@ -6,6 +6,7 @@
  */
 import { NextResponse } from 'next/server'
 import { approveRun } from '@/lib/verify/runs'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId, readJson } from '../../../_shared'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'max_cost_usd is required' }, { status: 400, headers: NO_STORE })
   }
   try {
-    return NextResponse.json({ run: await approveRun(db, id, max, 'owner') }, { headers: NO_STORE })
+    const actor = await actorFor('owner')
+    return NextResponse.json({ run: await approveRun(db, id, max, actor) }, { headers: NO_STORE })
   } catch (e) {
     return fail(e)
   }

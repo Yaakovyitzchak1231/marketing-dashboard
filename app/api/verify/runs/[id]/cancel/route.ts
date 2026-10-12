@@ -1,6 +1,7 @@
 /** POST /api/verify/runs/:id/cancel -> { run } */
 import { NextResponse } from 'next/server'
 import { cancelRun } from '@/lib/verify/runs'
+import { actorFor } from '@/lib/auth/act'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId } from '../../../_shared'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const id = parseRunId((await params).id)
   if (!id) return NextResponse.json({ error: 'Bad run id' }, { status: 400, headers: NO_STORE })
   try {
-    return NextResponse.json({ run: await cancelRun(db, id, 'owner') }, { headers: NO_STORE })
+    const actor = await actorFor('owner')
+    return NextResponse.json({ run: await cancelRun(db, id, actor) }, { headers: NO_STORE })
   } catch (e) {
     return fail(e)
   }
