@@ -28,7 +28,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       # Install deps so Claude can actually run the checks instead of only
       # reading code. Without this the runner has no node_modules and every
@@ -50,7 +50,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Pin the model: reviews are high-volume, so use the fast/cheap small model.
-          # `--allowedTools` is what grants Claude the right to execute the repo's
+                      --allowedTools "Read,Write,Edit,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git rebase:*),Bash(git push:*),Bash(git add:*),Bash(git commit:*),Bash(git rm:*),Bash(npm ci),Bash(npm run check),Bash(npm run build),Bash(npm test),Bash(npm run test:*),Bash(npm run typecheck),Bash(npm run lint),Bash(npm run docs:check),Bash(npx tsc:*),Bash(npx vitest:*),Bash(npx eslint:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh pr checks:*)"
           # checks. It defaults to read-only tools plus git add/commit, so without
           # this list it cannot run tests and will (correctly) say so in its review.
           claude_args: |
