@@ -7,6 +7,7 @@ import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
 import {
   getSendWindow,
+  isWindowExpired,
   leadKey,
   recomputeSendWindow,
   recomputeSendWindows,
@@ -36,17 +37,19 @@ function optInt(v: unknown, field: string): number | null {
 
 export const SENDTIME_OPS: Record<string, Op> = {
   sendtime_window: {
-    args: '{company_id?, contact_id?}  -- the lead\u2019s optimal send window (computes and stores it when missing)',
+    args: '{company_id?, contact_id?}  -- the lead\u2019s optimal send window (computes and stores it when missing or expired; null when there is too little evidence)',
     run: wrap(async (db, _actor, a) => {
       const key = leadKey(optInt(a.company_id, 'company_id'), optInt(a.contact_id, 'contact_id'))
       const existing = await getSendWindow(db, key)
-      if (existing) return { window: existing, computed: false }
-      const computed = await recomputeSendWindow(db, key)
-      return { window: computed, computed: computed != null }
+      if (existing && !isWindowExpired(existing)) return { window: existing, computed: false }
+      // Missing or expired: relearn. With too little evidence nothing is written and an expired row stays unused.
+      const relearned = await recomputeSendWindow(db, key)
+      const window = relearned && !isWindowExpired(relearned) ? relearned : null
+      return { window, computed: window != null && window.updated_at.getTime() !== existing?.updated_at.getTime() }
     }),
   },
   sendtime_recompute: {
-    args: '{campaign_id?, limit?}  -- relearn send windows for leads with recent engagement',
+    args: '{campaign_id?, limit?}  -- relearn send windows (replies and clicks only) for leads with recent engagement, then campaign windows; returns {recomputed, skipped, campaigns_recomputed, campaigns_skipped}',
     run: wrap((db, _actor, a) =>
       recomputeSendWindows(db, {
         campaign_id: optInt(a.campaign_id, 'campaign_id'),

@@ -7,7 +7,7 @@ import { fieldsForCampaign, getCampaign, liveVerdict, loadCampaignLeads, type Ca
 import { copyChecks, fillTemplate, type CopyWarning, type Filled, type ValueSource } from './render.ts'
 import { loadLead, resolveValues } from './resolve.ts'
 import { listSteps, StepsError, type StepRow } from './store.ts'
-import { getSendWindow, leadKey, type SendWindow } from '../sendtime/analyze.ts'
+import { getSendWindow, isWindowExpired, leadKey, type SendWindow } from '../sendtime/analyze.ts'
 
 export interface PreviewField {
   name: string
@@ -47,7 +47,7 @@ export interface LeadPreview {
   /** The rules evaluator's verdict for this lead under the campaign's rules (eligibility: email, holds, requirements). */
   verdict: LiveVerdict | null
   /** The lead's learned optimal send window, when one was computed (plan 3.11). */
-  send_window: Pick<SendWindow, 'best_hour' | 'best_dow' | 'timezone' | 'sample_size'> | null
+  send_window: Pick<SendWindow, 'best_hour' | 'best_dow' | 'timezone' | 'timezone_source' | 'sample_size' | 'basis'> | null
 }
 
 export async function previewLead(q: Queryable, campaignId: number, companyId: number, now: Date = new Date()): Promise<LeadPreview> {
@@ -98,10 +98,13 @@ export async function previewLead(q: Queryable, campaignId: number, companyId: n
   }
   if (!steps.length) why.push('This campaign has no steps yet.')
   const verdict = await liveVerdict(q, campaign, companyId, now)
-  let sendWindow: Pick<SendWindow, 'best_hour' | 'best_dow' | 'timezone' | 'sample_size'> | null = null
+  let sendWindow: Pick<SendWindow, 'best_hour' | 'best_dow' | 'timezone' | 'timezone_source' | 'sample_size' | 'basis'> | null = null
   try {
     const w = await getSendWindow(q, leadKey(lead.company.id, lead.contact?.id ?? null))
-    if (w) sendWindow = { best_hour: w.best_hour, best_dow: w.best_dow, timezone: w.timezone, sample_size: w.sample_size }
+    // An expired window (no engagement for WINDOW_MAX_AGE_DAYS) is not shown: it is not used either.
+    if (w && !isWindowExpired(w, now)) {
+      sendWindow = { best_hour: w.best_hour, best_dow: w.best_dow, timezone: w.timezone, timezone_source: w.timezone_source, sample_size: w.sample_size, basis: w.basis }
+    }
   } catch {
     sendWindow = null // lp.lead_send_windows appears with migration 0063
   }
