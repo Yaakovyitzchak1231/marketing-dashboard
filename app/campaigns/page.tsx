@@ -8,6 +8,8 @@ import { listCampaigns, listStatuses } from '@/lib/campaigns/store'
 import { listPools } from '@/lib/pools/store'
 import { POOL_SLUG_RE } from '@/lib/campaigns/types'
 import { INPUT, LABEL, Notice } from '@/components/campaigns/ui'
+import { currentRole } from '@/lib/auth/session'
+import { canAtLeast } from '@/lib/auth/roles'
 import { addStatusAction, archiveCampaignAction, createCampaignAction, toggleStatusAction } from '@/app/actions/campaigns'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +38,9 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
       </PageShell>
     )
   }
+  // Viewers get no edit controls (#97 view-only rule); every action below also
+  // refuses them server-side via actorFor('editor').
+  const canEdit = canAtLeast(await currentRole(), 'editor')
   const showArchived = one(sp.archived) === '1'
   const pools = await listPools(db)
   const poolLabel: Record<string, string> = Object.fromEntries(pools.map((p) => [p.id, p.label]))
@@ -89,7 +94,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                 <td className="px-3 py-2.5 text-ink-muted">{c.owner_name ?? c.owner ?? '—'}</td>
                 <td className="px-3 py-2.5 tabular-nums text-ink-faint">{shortDate(c.updated_at)}</td>
                 <td className="px-4 py-2.5 text-right">
-                  {!c.status_archived ? (
+                  {canEdit && !c.status_archived ? (
                     <form action={archiveCampaignAction} className="inline-flex items-center gap-1.5">
                       <input type="hidden" name="campaign_id" value={c.id} />
                       <input type="hidden" name="return_to" value="/campaigns" />
@@ -125,7 +130,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
           </div>
           <section aria-labelledby="c-h">
             <SectionHeader id="c-h" title="Campaigns" />
-            <Card>{table(live, 'No campaigns yet. Start one with the New campaign form.')}</Card>
+            <Card>{table(live, canEdit ? 'No campaigns yet. Start one with the New campaign form.' : 'No campaigns yet.')}</Card>
           </section>
           <section aria-labelledby="t-h">
             <SectionHeader id="t-h" title="Templates" meta="Start a new campaign from one: settings and leads are copied" />
@@ -134,6 +139,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         </div>
 
         <aside className="space-y-5">
+          {canEdit ? (
           <section aria-labelledby="new-h">
             <SectionHeader id="new-h" title="New campaign" />
             <Card className="p-3">
@@ -156,6 +162,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
               </form>
             </Card>
           </section>
+          ) : null}
 
           <section aria-labelledby="st-h">
             <SectionHeader id="st-h" title="Statuses" meta="Your list, not fixed" />
@@ -165,7 +172,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                   <span className={s.active ? 'text-ink' : 'text-ink-faint line-through'}>
                     {s.label} <span className="text-[11.5px] text-ink-faint">{s.id}{s.is_archived ? ' · archived' : ''}</span>
                   </span>
-                  {s.id !== 'draft' && s.id !== 'archived' ? (
+                  {canEdit && s.id !== 'draft' && s.id !== 'archived' ? (
                     <form action={toggleStatusAction}>
                       <input type="hidden" name="id" value={s.id} />
                       <input type="hidden" name="active" value={s.active ? 'no' : 'yes'} />
@@ -174,12 +181,14 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                   ) : null}
                 </div>
               ))}
+              {canEdit ? (
               <form action={addStatusAction} className="flex flex-wrap items-end gap-2 p-3">
                 <label className={LABEL}>Id<input name="id" required pattern="[a-z][a-z0-9_]{0,30}" className={`${INPUT} w-24`} placeholder="warming" /></label>
                 <label className={LABEL}>Label<input name="label" required maxLength={40} className={`${INPUT} w-28`} placeholder="Warming up" /></label>
                 <label className="flex items-center gap-1 pb-2 text-[11.5px] text-ink-faint"><input type="checkbox" name="is_archived" /> archived</label>
                 <button className={BUTTON}>Add</button>
               </form>
+              ) : null}
             </Card>
             <p className="mt-2 text-[11.5px] text-ink-faint">{statuses.length} statuses can be picked.</p>
           </section>
