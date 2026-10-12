@@ -45,6 +45,11 @@ function parseEventInput(a: Args, actor: string): EmitLeadEventInput {
   const contactId = a.contact_id == null ? null : id(a.contact_id, 'contact_id')
   const email = typeof a.email === 'string' && a.email.trim() ? a.email : null
   if (companyId == null && contactId == null && !email) throw new OpsError('give company_id, contact_id or email so the event lands on a lead')
+  const dedupe = typeof a.dedupe_key === 'string' && a.dedupe_key.trim() ? a.dedupe_key.trim() : null
+  // The journey runner keys its own enter/leave events this way. A caller must not be able to claim those keys.
+  if (dedupe && /^journey_(entered|finished):/.test(dedupe)) {
+    throw new OpsError('dedupe_key prefixes journey_entered: and journey_finished: are reserved for the journey runner')
+  }
   return {
     type,
     company_id: companyId,
@@ -57,7 +62,7 @@ function parseEventInput(a: Args, actor: string): EmitLeadEventInput {
     actor,
     props: parseProps(a.props),
     occurred_at: typeof a.occurred_at === 'string' ? a.occurred_at : null,
-    dedupe_key: typeof a.dedupe_key === 'string' && a.dedupe_key.trim() ? a.dedupe_key.trim() : null,
+    dedupe_key: dedupe,
   }
 }
 
