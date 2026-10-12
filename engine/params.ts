@@ -4,16 +4,20 @@
  * so the /find page and API routes import it too.
  *
  * `segment` is any pool slug (campaign-agnostic — see lib/pools/store.ts),
- * not a fixed union. search_phrases / place_categories / negative_keywords
- * are the campaign's search config (engine/searchConfig.ts resolves it from
- * the campaign's approved profile items, falling back to the pool's built-in
- * default list, engine/data/default-search-configs.ts, ONLY when the
- * campaign has none); config_source says which one a run actually used
- * ("profile" or "built-in default for pool X"), logged on the run.
+ * not a fixed union. There is no hard-coded pool default: a run started for
+ * a campaign reads the campaign's pool from its resolved profile; an ad hoc
+ * run must name its pool. search_phrases / place_categories /
+ * negative_keywords are the campaign's search config (engine/searchConfig.ts
+ * resolves it from the campaign's approved profile items, falling back to the
+ * pool's built-in default list, engine/data/default-search-configs.ts, ONLY
+ * when the campaign has none); config_source says which one a run actually
+ * used ("profile" or "built-in default for pool X"), logged on the run.
  */
 import { DEFAULT_SEARCH_CONFIGS, JEWELER_QUERIES, AI_AGENCY_QUERIES, defaultSearchConfigFor, type SearchConfig } from './data/default-search-configs.ts'
 import type { ResolvedSearchConfig } from './searchConfig.ts'
 
+// Kept re-exported: tests and the find form read the two original pools'
+// measured default sets through here.
 export { JEWELER_QUERIES, AI_AGENCY_QUERIES, DEFAULT_SEARCH_CONFIGS, defaultSearchConfigFor }
 export type { SearchConfig }
 
@@ -57,7 +61,10 @@ const POOL_RE = /^[a-z][a-z0-9_]{0,40}$/
 export function normalizeFindParams(raw: unknown, resolved?: ResolvedSearchConfig): FindLeadsParams {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const rawSegment = typeof o.segment === 'string' ? o.segment.trim().toLowerCase() : typeof o.pool === 'string' ? o.pool.trim().toLowerCase() : ''
-  const segment: EngineSegment = POOL_RE.test(rawSegment) ? rawSegment : 'jeweler'
+  // No hard-coded pool default. A campaign run reads the campaign's own pool
+  // from its resolved profile; an ad hoc run must name its pool explicitly.
+  const segment: EngineSegment | null = POOL_RE.test(rawSegment) ? rawSegment : resolved?.pool ?? null
+  if (!segment) throw new ParamsError('pick a pool for this find-leads run (e.g. segment: "jeweler")')
   const geo = (o.geography && typeof o.geography === 'object' ? o.geography : {}) as Record<string, unknown>
   const list = (v: unknown, sep: RegExp = /[,;\n]/): string[] =>
     (Array.isArray(v) ? v : typeof v === 'string' ? v.split(sep) : []).map((s) => String(s).trim()).filter(Boolean)
@@ -105,7 +112,9 @@ export function normalizeFindParams(raw: unknown, resolved?: ResolvedSearchConfi
   }
 
   let queries = list(o.queries).slice(0, 20)
-  if (!queries.length) queries = search_phrases.length ? search_phrases : segment === 'jeweler' ? JEWELER_QUERIES : segment === 'ai_agency' ? AI_AGENCY_QUERIES : []
+  // No per-pool branches: the fallback is whatever the pool's own built-in
+  // default search set is (empty for a pool that ships with none).
+  if (!queries.length) queries = search_phrases.length ? search_phrases : (defaultSearchConfigFor(segment)?.search_phrases ?? [])
   if (!queries.length) throw new ParamsError('no searches: give queries, or set the campaign\'s approved search phrases first')
   const max = Math.trunc(Number(o.max_businesses ?? o.max ?? 100))
   if (!Number.isFinite(max) || max < 1) throw new ParamsError('max businesses must be at least 1')
@@ -139,7 +148,12 @@ export function describeGeography(p: FindLeadsParams): string {
   return [...p.geography.states, ...p.geography.cities].join(', ')
 }
 
-export function findJobTitle(p: FindLeadsParams): string {
-  const seg = p.segment === 'jeweler' ? 'jewelers' : p.segment === 'ai_agency' ? 'AI agencies' : p.segment.replace(/_/g, ' ')
+/**
+ * The job's title. poolLabel is the pool's display label from lp.pools (the
+ * caller looks it up); without it the title falls back to the pool slug in
+ * plain words. No pool is special-cased here.
+ */
+export function findJobTitle(p: FindLeadsParams, poolLabel?: string | null): string {
+  const seg = (poolLabel?.trim() || p.segment.replace(/_/g, ' ')).slice(0, 80)
   return `Find ${p.max_businesses} ${seg} in ${describeGeography(p)}`.slice(0, 300)
 }

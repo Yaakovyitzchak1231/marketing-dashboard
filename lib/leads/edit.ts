@@ -16,6 +16,7 @@
  */
 import type { Queryable } from '@/lib/db/types'
 import { logEvent } from '@/lib/ops/events'
+import { safeOnFieldChanged } from '@/lib/triggers/match'
 import { actorName } from './queries'
 import { isRoleAddress, nameAddressKey, normalizeDomain, normalizeEmail, normalizePhone } from './normalize'
 import type { CompanyRow, ContactRow } from './types'
@@ -236,6 +237,12 @@ export async function editContact(
       entity_id: companyId,
       data: { contact_id: contactId, changes, verification_reset: verificationReset },
     })
+    for (const c of changes) {
+      await safeOnFieldChanged(q, {
+        entity: 'contact', id: contactId, field: c.field, from: c.from, to: c.to,
+        company_id: companyId, contact_id: contactId,
+      })
+    }
     return { changes, verification_reset: verificationReset, contact: rows[0] }
   }, actor)
 }
@@ -353,6 +360,12 @@ export async function editCompany(
       entity_id: companyId,
       data: { changes },
     })
+    for (const c of changes) {
+      await safeOnFieldChanged(q, {
+        entity: 'company', id: companyId, field: c.field, from: c.from, to: c.to,
+        company_id: companyId, contact_id: null,
+      })
+    }
     return { changes, verification_reset: false, company: rows[0] }
   }, actor)
 }

@@ -438,7 +438,7 @@ export function ArtifactProvenance({
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Say something"
-                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none"
+                className="mt-0.5 w-full border-0 focus:ring-1 focus:ring-ink/20 outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
               />
             </label>
             <button

@@ -14,6 +14,7 @@ import type { Db } from '../lib/db/types.ts'
 import { claimTask, completeTask, failTask, heartbeatTask, taskScopedDb, OpsError, type TaskRow } from '../lib/ops/core.ts'
 import { applyResearchResult } from '../lib/research/apply.ts'
 import { runFindLeads, type TaskControl } from './findLeads.ts'
+import { markFindJob } from './findJobRecord.ts'
 import { normalizeFindParams } from './params.ts'
 import { researchCompany, type ResearchPayload } from './research.ts'
 import { searchProviderFromEnv, type SearchProvider } from './io/search.ts'
@@ -61,9 +62,14 @@ export async function workTaskDb(db: Db, t: TaskRow, opts: WorkerOpts): Promise<
     const scopedDb = taskScopedDb(db, opts.agent, t.id, t.attempts)
     if (t.kind === 'find_leads') {
       const params = normalizeFindParams(t.payload)
+      await markFindJob(db, t.id, { status: 'running' })
       const out = await runFindLeads(scopedDb, t.id, params, { agent: opts.agent, control, search, log, fetch: opts.fetch, mx: opts.mx, politeness: opts.politeness })
-      if (out.status === 'cancelled') return 'cancelled'
+      if (out.status === 'cancelled') {
+        await markFindJob(db, t.id, { status: 'cancelled' })
+        return 'cancelled'
+      }
       await completeTask(db, opts.agent, t.id, { result: { run_id: out.run_id, counters: out.counters }, report: out.report, claim_attempt: t.attempts })
+      await markFindJob(db, t.id, { status: 'done', counters: out.counters as unknown as Record<string, unknown>, report: out.report })
       log(out.report)
       return 'done'
     }
@@ -94,6 +100,7 @@ export async function workTaskDb(db: Db, t: TaskRow, opts: WorkerOpts): Promise<
     const msg = (e as Error).message || String(e)
     log(`task ${t.id} failed: ${msg}`)
     await failTask(db, opts.agent, t.id, { error: msg, claim_attempt: t.attempts }).catch(() => undefined)
+    if (t.kind === 'find_leads') await markFindJob(db, t.id, { status: 'failed', error: msg }).catch(() => undefined)
     return 'failed'
   }
 }

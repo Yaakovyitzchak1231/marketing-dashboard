@@ -158,6 +158,7 @@ export default async function SettingsPage() {
         <Card className="flex flex-wrap gap-4 p-4 text-[13px]">
           <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
           <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
+          <Link href="/settings/pools" className="text-accent hover:underline">Pools — industries a campaign can target</Link>
         </Card>
       </section>
 

@@ -154,7 +154,7 @@ describe('merge + build', () => {
 
 describe('params', () => {
   it('extra stages are opt-in', () => {
-    expect(normalizeFindParams({ states: 'MD' }).stages).toEqual(ENGINE_STAGES)
-    expect(normalizeFindParams({ states: 'MD', stages: ['build', 'pattern', 'discover', 'reviews', 'bogus'] }).stages).toEqual(['discover', 'reviews', 'pattern', 'build'])
+    expect(normalizeFindParams({ segment: 'jeweler', states: 'MD' }).stages).toEqual(ENGINE_STAGES)
+    expect(normalizeFindParams({ segment: 'jeweler', states: 'MD', stages: ['build', 'pattern', 'discover', 'reviews', 'bogus'] }).stages).toEqual(['discover', 'reviews', 'pattern', 'build'])
   })
 })

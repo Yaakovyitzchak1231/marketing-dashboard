@@ -209,17 +209,19 @@ describe('robots.txt', () => {
 })
 
 describe('params', () => {
-  it('fills defaults from the measured query set', () => {
-    const p = normalizeFindParams({ states: 'md, va', max_businesses: '25' })
+  it('fills defaults from the pool\u2019s measured query set', () => {
+    const p = normalizeFindParams({ segment: 'jeweler', states: 'md, va', max_businesses: '25' })
     expect(p).toMatchObject({ segment: 'jeweler', queries: JEWELER_QUERIES, geography: { states: ['MD', 'VA'] }, max_businesses: 25, stages: ['discover', 'crawl', 'owner', 'build'], proxies: false })
     expect(p.concurrency).toEqual({ maps: 6, crawl: 8 })
-    expect(normalizeFindParams({ cities: 'Towson, MD; Columbia, MD' }).geography.cities).toEqual(['Towson, MD', 'Columbia, MD'])
+    expect(normalizeFindParams({ segment: 'jeweler', cities: 'Towson, MD; Columbia, MD' }).geography.cities).toEqual(['Towson, MD', 'Columbia, MD'])
   })
   it('refuses bad input in plain words', () => {
     expect(() => normalizeFindParams({})).toThrow(ParamsError)
-    expect(() => normalizeFindParams({ states: ['Maryland'] })).toThrow(/2-letter/)
-    expect(() => normalizeFindParams({ cities: ['Towson'] })).toThrow(/Towson, MD/)
-    expect(() => normalizeFindParams({ states: ['MD'], stages: ['crawl'] })).toThrow(/discover/)
+    expect(() => normalizeFindParams({})).toThrow(/pick a pool/)
+    expect(() => normalizeFindParams({ states: ['MD'], queries: ['x'] })).toThrow(/pick a pool/)
+    expect(() => normalizeFindParams({ segment: 'jeweler', states: ['Maryland'] })).toThrow(/2-letter/)
+    expect(() => normalizeFindParams({ segment: 'jeweler', cities: ['Towson'] })).toThrow(/Towson, MD/)
+    expect(() => normalizeFindParams({ segment: 'jeweler', states: ['MD'], stages: ['crawl'] })).toThrow(/discover/)
   })
 })
 

@@ -45,12 +45,14 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'list_jobs', 'get_job', 'job_runs',
   'recent_lead_events', 'list_event_types',
   'get_campaign_profile', 'list_profile_items', 'list_pools', 'sources_health',
+  'validate_campaign_profile', 'export_campaign_profile',
   'list_score_models', 'get_score_model', 'lead_scores',
   'list_tags', 'tag_trends', 'merge_candidates',
   'count_tagged', // #87: counts leads with a tag before a change (read-only)
   'list_retention_policies', 'retention_preview',
   'list_segments', 'get_segment', 'segment_preview', 'segment_members', 'segment_stats',
   'lead_profile', 'list_traits', 'get_trait', 'trait_preview',
+  'list_triggers', 'recent_trigger_fires',
 ])
 
 /** Ops only an Owner's key may run (an Editor's key gets 403). */
