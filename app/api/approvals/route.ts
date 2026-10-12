@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getRequestClient } from '@/lib/request-client'
 import { EDITABLE_ARTIFACTS, sessionEmail } from '@/lib/revisions'
 
@@ -40,6 +42,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Editors and owners only (middleware already blocks viewers); the stored actor stays the session email.
+  try {
+    await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const supabase = await getRequestClient(req)
   if (!supabase) return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 })
   let body: Record<string, unknown>
@@ -89,6 +97,14 @@ export async function POST(req: NextRequest) {
     .single()
   if (error) {
     console.error(`approvals POST: ${error.message}`)
+    // UNIQUE (artifact_type, artifact_id, status): this decision is already
+    // recorded. Say so plainly instead of a generic failure.
+    if (error.code === '23505' || error.message.includes('duplicate')) {
+      return NextResponse.json(
+        { error: 'This decision is already recorded for this row.' },
+        { status: 409 },
+      )
+    }
     return NextResponse.json({ error: 'Failed to record approval' }, { status: 500 })
   }
   return NextResponse.json(data, { status: 201 })

@@ -11,14 +11,15 @@ import type { SegmentDefinition } from './definition.ts'
 
 async function idsFromCompiled(q: Queryable, compiled: CompiledSegment, limit: number | null): Promise<number[]> {
   const match = matchQuerySql(compiled)
-  const limitSql = limit != null ? ` limit ${Math.floor(limit) + 1}` : ''
+  const params = [...compiled.params]
+  const limitSql = limit != null ? ` limit $${params.push(Math.floor(limit) + 1)}` : ''
   if (compiled.entity === 'company') {
-    const { rows } = await q.query<{ id: string | number }>(`${match}${limitSql}`, compiled.params)
+    const { rows } = await q.query<{ id: string | number }>(`${match}${limitSql}`, params)
     return rows.map((r) => Number(r.id))
   }
   const { rows } = await q.query<{ id: string | number }>(
     `select distinct ct.company_id as id from lp.contacts ct join (${match}) m on m.id = ct.id where ct.company_id is not null${limitSql}`,
-    compiled.params,
+    params,
   )
   return rows.map((r) => Number(r.id))
 }
@@ -48,6 +49,25 @@ function companyIdSubquery(compiled: CompiledSegment): string {
   const match = matchQuerySql(compiled)
   if (compiled.entity === 'company') return match
   return `select ct.company_id as id from lp.contacts ct join (${match}) m on m.id = ct.id where ct.company_id is not null`
+}
+
+/**
+ * One keyset page of a stored segment's company ids: ids greater than `afterId`, ascending,
+ * at most `limit` of them, decided in SQL (distinct company id is the stable unique key).
+ * Nothing is read into memory beyond the page, and a lead added or removed between two
+ * pages can neither make a later page skip an id nor repeat one. Ask for `limit + 1` to
+ * learn whether another page follows.
+ */
+export async function companyIdsForSegmentPage(q: Queryable, seg: StoredSegmentLike, afterId: number, limit: number): Promise<number[]> {
+  const compiled = await compileStoredSegment(q, seg)
+  const n = compiled.params.length
+  const after = Math.max(Math.trunc(Number(afterId)) || 0, 0)
+  const cap = Math.min(Math.max(Math.trunc(Number(limit)) || 1, 1), 10_001)
+  const { rows } = await q.query<{ id: string | number }>(
+    `select distinct x.id from (${companyIdSubquery(compiled)}) x where x.id > $${n + 1}::bigint order by x.id limit $${n + 2}::int`,
+    [...compiled.params, after, cap],
+  )
+  return rows.map((r) => Number(r.id))
 }
 
 /**

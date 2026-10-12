@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getDb } from '@/lib/db'
 import { listActors } from '@/lib/ops/queries'
 import { pauseAllState } from '@/lib/ops/pause'
+import { listDisabledAgents } from '@/lib/ops/agents-admin'
 import { pauseAgentAction, pauseAllAction, resumeAgentAction, resumeAllAction } from '@/app/actions/agents'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
 import { PauseControl } from '@/components/ops/PauseControl'
@@ -21,7 +22,7 @@ export default async function AgentsPage() {
       </PageFrame>
     )
   }
-  const [actors, all] = await Promise.all([listActors(db), pauseAllState(db)])
+  const [actors, all, disabled] = await Promise.all([listActors(db), pauseAllState(db), listDisabledAgents(db)])
   const now = new Date()
   const agents = actors.filter((a) => a.kind === 'agent')
   const groups: { title: string; list: typeof actors }[] = [
@@ -77,6 +78,7 @@ export default async function AgentsPage() {
                       <Presence lastSeen={a.last_seen_at} now={now} />
                       <p className="text-[14px] font-semibold text-ink">{a.display_name}</p>
                       {a.paused_at ? <Pill tone="warn">Paused</Pill> : null}
+                      {isAgent && a.can_send ? <Pill tone="accent">May send</Pill> : null}
                       <span className="ml-auto text-[11.5px] text-ink-faint">
                         seen <Ago at={a.last_seen_at} now={now} />
                       </span>
@@ -124,6 +126,21 @@ export default async function AgentsPage() {
           </div>
         </section>
       ))}
+      {disabled.length ? (
+        <section className="mb-6">
+          <SectionHeader title="Disabled agents" meta={<span className="tabular-nums">{disabled.length}</span>} />
+          <Card className="divide-y divide-line-soft">
+            {disabled.map((a) => (
+              <Link key={a.id} href={`/agents/${a.id}`} className="flex items-center gap-2 px-4 py-2.5 text-[13px] hover:text-accent">
+                <span className="font-medium text-ink">{a.display_name}</span>
+                <Pill tone="bad">Disabled</Pill>
+                <span className="ml-auto text-[11.5px] text-ink-faint">seen <Ago at={a.last_seen_at} now={now} /></span>
+              </Link>
+            ))}
+          </Card>
+          <p className="mt-2 text-[11.5px] text-ink-faint">Their requests are refused. An owner re-enables one on its page.</p>
+        </section>
+      ) : null}
       <section className="mb-6">
         <SectionHeader title="Add an agent" />
         <Card className="max-w-md p-3">

@@ -18,6 +18,8 @@ import { CampaignError, parseCampaignPatch, parseIds, parsePick } from '@/lib/ca
 import { runOp } from '@/lib/ops/dispatch'
 import { OpsError } from '@/lib/ops/core'
 import { actorFor } from '@/lib/auth/act'
+import { instantiateRecipe, RecipeError } from '@/lib/journeys/recipes'
+import { goalLabel } from '@/lib/journeys/goals'
 
 function db() {
   const d = getDb()
@@ -39,13 +41,13 @@ function back(path: string, params: Record<string, string>): never {
   redirect(`${path}${u.size ? `?${u}` : ''}`)
 }
 
-/** Run fn; on a CampaignError go back to `path` with the message (anything else is a real error). */
+/** Run fn; on a CampaignError/RecipeError go back to `path` with the message (anything else is a real error). */
 async function guarded(path: string, fn: () => Promise<string | void>): Promise<never> {
   let to: string | void
   try {
     to = await fn()
   } catch (e) {
-    if (e instanceof CampaignError) back(path, { error: e.message })
+    if (e instanceof CampaignError || e instanceof RecipeError) back(path, { error: e.message })
     throw e
   }
   revalidatePath('/campaigns')
@@ -56,13 +58,27 @@ async function guarded(path: string, fn: () => Promise<string | void>): Promise<
 export async function createCampaignAction(f: FormData) {
   const ME = await actorFor('editor')
   await guarded('/campaigns', async () => {
-    const from = Number(s(f, 'from_id'))
+    // Goal picker: a picked goal stores its label; "custom" uses the typed
+    // text; blank means the recipe's goal (from a recipe) or none.
+    const goalKey = s(f, 'goal_key')
+    const pickedGoal = goalKey === 'custom' ? s(f, 'goal_custom') || null : goalLabel(goalKey)
+    const fromRaw = s(f, 'from_id')
+    if (fromRaw.startsWith('recipe:')) {
+      const r = await instantiateRecipe(db(), ME, {
+        key: fromRaw.slice('recipe:'.length),
+        name: s(f, 'name') || null,
+        pool: s(f, 'pool') || null,
+        goal: pickedGoal,
+      })
+      return `/campaigns/${r.campaign.id}`
+    }
+    const from = Number(fromRaw)
     if (Number.isInteger(from) && from > 0) {
       const r = await duplicateCampaign(db(), ME, from, { name: s(f, 'name') || null, withLeads: s(f, 'with_leads') === 'on' })
       return `/campaigns/${r.campaign.id}`
     }
     const p = parseCampaignPatch(
-      { name: s(f, 'name'), pool: s(f, 'pool') || 'jeweler', goal: s(f, 'goal') || null, ...(s(f, 'is_template') ? { is_template: true } : {}) },
+      { name: s(f, 'name'), pool: s(f, 'pool') || 'jeweler', goal: pickedGoal, ...(s(f, 'is_template') ? { is_template: true } : {}) },
       { create: true },
     )
     const c = await createCampaign(db(), ME, p as { name: string }, { via: 'dashboard' })

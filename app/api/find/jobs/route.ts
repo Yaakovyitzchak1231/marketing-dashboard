@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { createFindJob, listFindJobs } from '@/lib/engine/jobs'
 import { ParamsError } from '@/engine/params'
@@ -18,9 +20,16 @@ export async function GET() {
 
 /**
  * POST /api/find/jobs { segment, states[] | cities[] | all_us, max_businesses, stages[], proxies, queries[]?, assigned_to? }
- * -> 201 { job }. Creates a find_leads task (assigned to Tab by default) as the signed-in owner.
+ * -> 201 { job }. Creates a find_leads task (assigned to Tab by default) as the signed-in person (editor or owner).
  */
 export async function POST(req: Request) {
+  // Role check first (editor and above); the task is created as the signed-in person.
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: 'database not connected' }, { status: 503 })
   let body: unknown
@@ -49,7 +58,7 @@ export async function POST(req: Request) {
     }
   }
   try {
-    const job = await createFindJob(db, 'owner', body)
+    const job = await createFindJob(db, actor, body)
     kickDelivery(db)
     return NextResponse.json({ job }, { status: 201 })
   } catch (e) {

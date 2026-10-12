@@ -325,6 +325,11 @@ function parseItemInput(v: unknown, i: number): Required<Pick<ItemInput, 'kind' 
   return { kind, name, value, config, status, source, rationale, sort, verify_status, verify_detail: verify_detail ?? undefined }
 }
 
+/** Same checks addItems uses, for validate/import. Does not write. */
+export function parseProfileItem(v: unknown, index = 0): ItemInput {
+  return parseItemInput(v, index)
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------

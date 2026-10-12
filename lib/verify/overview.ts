@@ -31,3 +31,15 @@ export async function providerBalances(
   ])
   return { millionverifier: mv, zerobounce: zb }
 }
+
+/** Settings-aware variant: resolves MillionVerifier/ZeroBounce keys through the
+ * settings store (DB first, env fallback), then fetches each provider's balance. */
+export async function providerBalancesAsync(fetchImpl?: FetchLike): Promise<{ millionverifier: ProviderBalance; zerobounce: ProviderBalance }> {
+  const { resolveConfig } = await import('../settings/store.ts')
+  const [mvRes, zbRes] = await Promise.all([resolveConfig('millionverifier.api_key'), resolveConfig('zerobounce.api_key')])
+  const [mv, zb] = await Promise.all([
+    mvCredits(mvRes.value || undefined, fetchImpl),
+    zbCredits(zbRes.value || undefined, fetchImpl),
+  ])
+  return { millionverifier: mv, zerobounce: zb }
+}

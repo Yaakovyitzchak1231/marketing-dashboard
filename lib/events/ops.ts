@@ -6,14 +6,24 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
+import { isEditorActor, requireEditorActor } from '../ops/actor-role.ts'
+import { registerEventType, updateEventType, EventTypeError } from './types-store.ts'
 import { emitLeadEvent, emitLeadEvents, EventError, type EmitLeadEventInput } from './emit.ts'
+import { evaluateCompositeRules } from './composite'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
 
 export const TRACK_EVENTS_MAX = 500
-const SLUG = /^[a-z][a-z0-9_.]{0,63}$/
-const CATEGORIES = ['email', 'lifecycle', 'verification', 'web', 'social', 'meeting', 'deal', 'signal', 'custom']
+
+async function typeErr<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (e) {
+    if (e instanceof EventTypeError) throw new OpsError(e.message, e.status)
+    throw e
+  }
+}
 
 function id(v: unknown, field: string): number {
   const n = Number(v)
@@ -35,6 +45,11 @@ function parseEventInput(a: Args, actor: string): EmitLeadEventInput {
   const contactId = a.contact_id == null ? null : id(a.contact_id, 'contact_id')
   const email = typeof a.email === 'string' && a.email.trim() ? a.email : null
   if (companyId == null && contactId == null && !email) throw new OpsError('give company_id, contact_id or email so the event lands on a lead')
+  const dedupe = typeof a.dedupe_key === 'string' && a.dedupe_key.trim() ? a.dedupe_key.trim() : null
+  // The journey runner keys its own enter/leave events this way. A caller must not be able to claim those keys.
+  if (dedupe && /^journey_(entered|finished):/.test(dedupe)) {
+    throw new OpsError('dedupe_key prefixes journey_entered: and journey_finished: are reserved for the journey runner')
+  }
   return {
     type,
     company_id: companyId,
@@ -47,7 +62,7 @@ function parseEventInput(a: Args, actor: string): EmitLeadEventInput {
     actor,
     props: parseProps(a.props),
     occurred_at: typeof a.occurred_at === 'string' ? a.occurred_at : null,
-    dedupe_key: typeof a.dedupe_key === 'string' && a.dedupe_key.trim() ? a.dedupe_key.trim() : null,
+    dedupe_key: dedupe,
   }
 }
 
@@ -59,7 +74,21 @@ const RAW: Record<string, Op> = {
     run: async (db, actor, a) => {
       const input = parseEventInput(a, actor)
       try {
-        return await db.tx((q) => emitLeadEvent(q, input), actor)
+        return await db.tx(async (q) => {
+          const r = await emitLeadEvent(q, input)
+          // Composite rules (e.g. positive_reply) derive from a combination of
+          // events; evaluate after every successful insert.
+          if (r.inserted && r.id != null) {
+            await evaluateCompositeRules(q, {
+              id: r.id,
+              type: r.type,
+              company_id: r.company_id,
+              contact_id: r.contact_id,
+              campaign_id: input.campaign_id ?? null,
+            })
+          }
+          return r
+        }, actor)
       } catch (e) {
         if (e instanceof EventError) throw new OpsError(e.message, e.status)
         throw e
@@ -110,6 +139,18 @@ const RAW: Record<string, Op> = {
           ready.forEach((i, k) => {
             results[i] = { ok: true, ...inserted[k] }
           })
+          for (let k = 0; k < ready.length; k++) {
+            const ins = inserted[k]
+            if (!ins.inserted || ins.id == null) continue
+            const inp = (parsed[ready[k]] as { input: EmitLeadEventInput }).input
+            await evaluateCompositeRules(q, {
+              id: ins.id,
+              type: ins.type,
+              company_id: ins.company_id,
+              contact_id: ins.contact_id,
+              campaign_id: inp.campaign_id ?? null,
+            })
+          }
         }
       }, actor)
       return results
@@ -159,22 +200,24 @@ const RAW: Record<string, Op> = {
     },
   },
   register_event_type: {
-    args: '{key (slug), label, category: email|lifecycle|verification|web|social|meeting|deal|signal|custom, props_schema?}  -- any authenticated actor may register a new type; it never auto-approves data, it only opens the door for track_event to use the key',
-    run: async (db, actor, a) => {
+    args: '{key (slug), label, category: email|lifecycle|verification|web|social|meeting|deal|signal|custom, props_schema? (JSON object, max 16 KB)}  -- any authenticated actor may register a NEW type; an existing key is 409 for agents (a person, editor or owner, may relabel it), and a built-in key (source instantly/system) is 409 for everyone',
+    run: (db, actor, a) =>
+      typeErr(() =>
+        db.tx(async (q) => {
+          const canRelabel = await isEditorActor(q, actor)
+          return registerEventType(q, actor, { key: a.key, label: a.label, category: a.category, props_schema: a.props_schema }, { canRelabel })
+        }, actor),
+      ),
+  },
+  update_event_type: {
+    args: '{key, label?, category?, active?}  -- people only (editor or owner); agents get 403. Changes a custom type (never its key); built-in types (source instantly/system) are 409. active:false makes track_event refuse the key',
+    run: (db, actor, a) => {
       const key = typeof a.key === 'string' ? a.key.trim() : ''
-      if (!SLUG.test(key)) throw new OpsError("key must be a lowercase slug, e.g. 'review_posted' (letters, digits, '_' or '.', starting with a letter)")
-      const label = typeof a.label === 'string' ? a.label.trim() : ''
-      if (!label || label.length > 80) throw new OpsError('label is required (max 80 characters)')
-      const category = typeof a.category === 'string' ? a.category : ''
-      if (!CATEGORIES.includes(category)) throw new OpsError(`category must be one of: ${CATEGORIES.join(', ')}`)
-      const { rows } = await db.query(
-        `insert into lp.event_types (key, label, category, source, props_schema, created_by)
-         values ($1, $2, $3, 'agent', $4, $5)
-         on conflict (key) do update set label = excluded.label, category = excluded.category
-         returning key, label, category, source, props_schema, active, created_by, created_at`,
-        [key, label, category, a.props_schema === undefined ? null : JSON.stringify(a.props_schema), actor],
-      )
-      return rows[0]
+      if (!key) throw new OpsError('key is required')
+      return typeErr(() => db.tx(async (q) => {
+        await requireEditorActor(q, actor, 'update_event_type is for people (editor or owner); an agent can register new types but not change existing ones')
+        return updateEventType(q, actor, key, { label: a.label, category: a.category, active: a.active })
+      }, actor))
     },
   },
 }

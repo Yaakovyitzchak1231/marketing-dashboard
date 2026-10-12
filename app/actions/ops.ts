@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import {
-  claimTask, comment, createTask, decideApproval, handoffTask, markRead, memoryDelete, memoryPut, releaseLock, sendMessage, updateTask,
+  OpsError, claimTask, comment, createTask, decideApproval, handoffTask, markRead, memoryDelete, memoryPut, releaseLock, sendMessage, updateTask,
 } from '@/lib/ops/core'
 import { kickDelivery } from '@/lib/notify/kick'
 
@@ -88,7 +88,15 @@ export async function decideApprovalAction(f: FormData) {
   const ME = await actorFor('editor')
   const id = n(f, 'approval_id')!
   const decision = s(f, 'decision') === 'approved' ? 'approved' : 'rejected'
-  await decideApproval(db(), ME, id, decision, s(f, 'note') || undefined)
+  try {
+    await decideApproval(db(), ME, id, decision, s(f, 'note') || undefined)
+  } catch (e) {
+    // A refusal (owner-only request, your own request, already decided, expired) is an answer,
+    // not a crash: show it on Activity instead of the generic error page.
+    if (!(e instanceof OpsError)) throw e
+    revalidatePath('/activity')
+    redirect(`/activity?tone=bad&note=${encodeURIComponent(e.message)}`)
+  }
   kickDelivery(db())
   revalidatePath('/activity')
   revalidatePath('/team')

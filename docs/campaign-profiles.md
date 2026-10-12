@@ -67,9 +67,15 @@ its configuration from the campaign's profile instead of being written per indus
 `get_campaign_profile`, `update_campaign_profile`, `add_profile_items`,
 `set_profile_item_status`, `update_profile_item`, `suggest_campaign_profile`,
 `copy_campaign_profile`, `list_profile_items`, `list_pools`, `create_pool`,
-`recheck_profile_item` — see `docs/AGENTS_API.md` for the full argument shapes.
+`recheck_profile_item`, `validate_campaign_profile`, `export_campaign_profile`,
+`import_campaign_profile` — see `docs/AGENTS_API.md` for the full argument shapes.
 `list_profile_items {kind}` with no `campaign_id` is what a monitor or connector
 agent calls to fetch every approved item of a kind across every active campaign.
+Features that need one campaign's approved profile call `profileFor` in
+`lib/campaigns/profile.ts`; `activeProfiles` is that read for every non-archived
+campaign whose profile is `active`. The signed-in door is
+`GET /api/campaigns/:id/profile` (the route file is
+`app/api/campaigns/[id]/profile/route.ts`).
 
 ## AI provider
 
