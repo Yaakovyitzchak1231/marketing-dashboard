@@ -69,6 +69,39 @@ describe('QuietHoursField', () => {
   })
 })
 
+describe('QuietHoursField with a bad stored pair', () => {
+  it('a half-set pair is "Incomplete", says which end is saved and that sends are held, not "Not set"', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end={null} action={noopForm} />)
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.getByText(/only the start \(21:00\) is saved\..*hold their sends until this is fixed/)).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start="" end="08:00" action={noopForm} />)
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText(/only the end \(08:00\) is saved/)).toBeInTheDocument()
+  })
+
+  it('equal ends, or times that are not HH:MM, are "Not valid" with the reason', () => {
+    const { unmount } = render(<QuietHoursField start="09:00" end="09:00" action={noopForm} />)
+    expect(screen.getByText('Not valid')).toBeInTheDocument()
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText(/Start and end are the same time \(09:00\)/)).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start="9pm" end="08:00" action={noopForm} />)
+    expect(screen.getByText(/not both 24-hour HH:MM/)).toBeInTheDocument()
+  })
+
+  it('a sound pair and a wholly unset pair show no problem text', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end="08:00" action={noopForm} />)
+    expect(screen.queryByText(/hold their sends/)).toBeNull()
+    expect(screen.getByText('21:00 to 08:00')).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start={null} end={null} action={noopForm} />)
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+    expect(screen.queryByText(/hold their sends/)).toBeNull()
+  })
+})
+
 describe('NeedsSetup', () => {
   it('counts what is missing and links to each field by anchor', () => {
     render(

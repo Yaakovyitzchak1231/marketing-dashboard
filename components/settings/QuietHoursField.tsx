@@ -4,10 +4,29 @@ import { useActionState, useState } from 'react'
 import type { FormResult } from '@/app/actions/settings'
 import { Pill } from '@/components/dashboard/primitives'
 import { inputCls, primaryBtnCls } from '@/components/ops/bits'
+import { quietHoursPairError } from '@/lib/settings/quiet-hours'
 
 type SaveAction = (prev: FormResult | null, f: FormData) => Promise<FormResult>
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/**
+ * What is wrong with the saved pair, in words, or null when it is sound or wholly unset.
+ * A half-saved or equal pair is not "Not set": it is stored, and the send gate holds
+ * sends over it (lib/journeys/send-controls.ts), so the page says so.
+ */
+function storedProblem(start: string | null, end: string | null): { pill: string; text: string } | null {
+  if (quietHoursPairError(start, end) === null) return null
+  const a = (start ?? '').trim()
+  const b = (end ?? '').trim()
+  const held = 'Journeys that use the workspace quiet hours hold their sends until this is fixed.'
+  if (a && !b) return { pill: 'Incomplete', text: `Incomplete: only the start (${a}) is saved. ${held}` }
+  if (!a && b) return { pill: 'Incomplete', text: `Incomplete: only the end (${b}) is saved. ${held}` }
+  if (HHMM.test(a) && HHMM.test(b) && a === b) {
+    return { pill: 'Not valid', text: `Start and end are the same time (${a}), so there would be no quiet hours. ${held}` }
+  }
+  return { pill: 'Not valid', text: `The saved times (${a} to ${b}) are not both 24-hour HH:MM. ${held}` }
+}
 
 /**
  * Quiet hours as one range: "21:00 to 08:00", two time pickers, one Save that
@@ -40,7 +59,8 @@ export function QuietHoursField({
     return r.ok ? { ok: true, message: `Saved: no emails from ${s} to ${e}.` } : r
   }
   const [state, formAction, pending] = useActionState<FormResult | null, FormData>(save, null)
-  const isSet = Boolean(start && end)
+  const problem = storedProblem(start, end)
+  const isSet = !problem && Boolean(start && end)
   const overnight = HHMM.test(s) && HHMM.test(e) && e < s
   return (
     <div id={anchorStart} className="scroll-mt-20 border-b border-line-soft py-3 last:border-b-0 target:bg-warn-soft">
@@ -49,8 +69,9 @@ export function QuietHoursField({
         <span className="text-[13px] font-medium text-ink" id="quiet-hours-label">
           Quiet hours
         </span>
-        {isSet ? <Pill tone="neutral">{`${start} to ${end}`}</Pill> : <Pill tone="warn">Not set</Pill>}
+        {problem ? <Pill tone="bad">{problem.pill}</Pill> : isSet ? <Pill tone="neutral">{`${start} to ${end}`}</Pill> : <Pill tone="warn">Not set</Pill>}
       </div>
+      {problem ? <p className="mt-0.5 text-[12px] leading-snug text-bad">{problem.text}</p> : null}
       <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">No emails go out between these hours, in your timezone; a campaign can override.</p>
       <form action={formAction} className="mt-2 flex flex-wrap items-center gap-2" aria-labelledby="quiet-hours-label">
         <input type="time" aria-label="Quiet hours start" value={s} onChange={(ev) => setS(ev.target.value)} className={`w-[8.5rem] ${inputCls}`} />

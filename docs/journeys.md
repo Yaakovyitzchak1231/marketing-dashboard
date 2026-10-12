@@ -291,7 +291,7 @@ blank. Saving enforces it on every path: the Quiet hours control on Settings and
 leave one end unset or the two equal. Pre-existing data that breaks the rule (half-set,
 equal, or not `HH:MM`) is not guessed at: while a journey has no quiet hours of its
 own, every send for it holds with `reason: "invalid workspace quiet hours"` until the
-pair is fixed on Settings. A journey that sets its own `quiet_hours` never reads the
+pair is fixed on Settings, where the Quiet hours row shows "Incomplete" or "Not valid" with the reason instead of "Not set". A journey that sets its own `quiet_hours` never reads the
 workspace pair.
 
 `sendAllowed` returns `{ allow: true }`, a hold `{ allow: false, until, reason }`
