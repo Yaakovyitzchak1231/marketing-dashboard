@@ -12,6 +12,9 @@ import { pauseBlockFor, pauseMessage } from './pause'
  *     /agents and kept hashed in lp.agent_keys), or, only where a
  *     route allows it, Vercel Cron's CRON_SECRET (acts as 'system').
  *  2. Is that agent paused (or are all agents paused)? Then 423, nothing runs.
+ *  2b. Is that agent disabled (lp.actors.active = false, set on /agents/[id])? Then 403.
+ *     Checked here so an OPS_AGENT_TOKENS env token is refused too, not only
+ *     database keys and ops that go through getActor.
  *  3. No credential may act as 'owner', the legacy human actor the ALLOWED_USER_EMAIL
  *     login writes as (Instinct #86 finding 5). An OPS_AGENT_TOKENS entry "owner:<token>"
  *     is refused with 403 before anything runs.
@@ -70,6 +73,18 @@ export async function opsGate(req: Request, opts: { allowCron?: boolean; cronOnl
   const db = getDb()
   if (db) {
     try {
+      if (agent !== 'system') {
+        const { rows } = await db.query<{ active: boolean }>('select active from lp.actors where id = $1', [agent])
+        if (rows[0] && rows[0].active === false) {
+          return {
+            ok: false,
+            response: NextResponse.json(
+              { ok: false, error: `Agent '${agent}' is disabled. A dashboard owner can re-enable it on its page under /agents.`, disabled: true },
+              { status: 403, headers: NO_STORE },
+            ),
+          }
+        }
+      }
       const block = await pauseBlockFor(db, agent)
       if (block) {
         return {
@@ -88,7 +103,7 @@ export async function opsGate(req: Request, opts: { allowCron?: boolean; cronOnl
       return {
         ok: false,
         response: NextResponse.json(
-          { ok: false, error: `Could not check whether ${agent} is paused, so nothing was done: ${(e as Error).message}` },
+          { ok: false, error: `Could not check whether ${agent} is paused or disabled, so nothing was done: ${(e as Error).message}` },
           { status: 503, headers: NO_STORE },
         ),
       }
