@@ -5,7 +5,7 @@ import { runOp } from '@/lib/ops/dispatch'
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
 /**
- * 2.12: the daily segment_snapshot job is seeded by migration 0055 with an
+ * 2.12: the daily segment_snapshot job is seeded by migration 0058 with an
  * lp.jobs row of kind 'ops_call' pointing at the 'segment_snapshot' op. The
  * runner (runner/handlers/ops_call.mjs) routes that payload to /api/ops, so
  * this test pins the wiring end-to-end against a real in-process Postgres:
@@ -13,7 +13,7 @@ type TestDb = Awaited<ReturnType<typeof createTestDb>>
  * to a daily run, and the op it names actually runs as the runner's 'system'
  * actor without error.
  */
-describe('segment_snapshot scheduled job (migration 0055)', () => {
+describe('segment_snapshot scheduled job (migration 0058)', () => {
   let db: TestDb
 
   beforeAll(async () => {
