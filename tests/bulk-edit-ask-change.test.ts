@@ -134,7 +134,7 @@ describe('ask to change an Instantly-backed number (row 7)', () => {
 
   it('allows only one pending request per lead + field, even when two race', async () => {
     await expect(requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'opens', proposed: 5, reason: 'again' })).rejects.toThrow(
-      "There's already a pending request to change Opens for this lead.",
+      "There's already a pending request to change Opens for this lead in this campaign.",
     )
     const race = await Promise.allSettled([
       requestValueChange(db, 'owner', { companyId: co, campaignId: camp, field: 'replies', proposed: 1, reason: 'a' }),
@@ -143,6 +143,16 @@ describe('ask to change an Instantly-backed number (row 7)', () => {
     expect(race.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
     const n = await db.query<{ n: number }>(`select count(*)::int as n from lp.approvals where status = 'pending' and payload->>'field' = 'replies' and payload->>'entity_id' = $1`, [String(co)])
     expect(n.rows[0].n).toBe(1)
+  })
+
+  it('dedupes per lead + campaign + field: another campaign is allowed, the same one is 409', async () => {
+    const camp2 = (await db.query<{ id: number }>(`insert into lp.campaigns (name, pool) values ('Autumn', 'jeweler') returning id`)).rows[0].id
+    const other = await requestValueChange(db, 'owner', { companyId: co, campaignId: camp2, field: 'opens', proposed: 3, reason: 'other campaign' })
+    expect(other.approval.status).toBe('pending')
+    expect(other.payload.current).toBe(0)
+    const dup = requestValueChange(db, 'owner', { companyId: co, campaignId: camp2, field: 'opens', proposed: 4, reason: 'again' })
+    await expect(dup).rejects.toMatchObject({ status: 409 })
+    await db.query(`update lp.approvals set status = 'rejected' where id = $1`, [other.approval.id])
   })
 
   it('only an owner can decide it; once decided, a new request may be filed', async () => {
