@@ -133,3 +133,19 @@ export async function requireOwnerOrSystem(q: Queryable, actor: string, message:
   if (actor === 'system') return
   await requireOwnerActor(q, actor, message)
 }
+
+/**
+ * True when `actor` is a person who may edit shared definitions: the built-in
+ * 'owner' actor, or an active human whose role is editor or owner. Agents and
+ * the runner are never editors (lp.actors.role is humans-only).
+ */
+export async function isEditorActor(q: Queryable, actor: string): Promise<boolean> {
+  if (actor === 'owner') return true
+  const row = await readActor(q, actor)
+  return !!row && row.kind === 'human' && row.active && row.has_role_col && (row.role === 'editor' || row.role === 'owner')
+}
+
+/** Throws OpsError 403 unless `actor` is an Editor or Owner person (see isEditorActor). */
+export async function requireEditorActor(q: Queryable, actor: string, message: string): Promise<void> {
+  if (!(await isEditorActor(q, actor))) throw new OpsError(message, 403)
+}
