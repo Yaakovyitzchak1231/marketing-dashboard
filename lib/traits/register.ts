@@ -13,6 +13,7 @@
 import type { Queryable } from '../db/types.ts'
 import { registerTraitField, unregisterField } from '../segments/fields.ts'
 import type { TraitEntity } from './definition.ts'
+import { isUndefinedTable } from '../db/errors.ts'
 
 const TRAIT_FIELD_PREFIX = 'trait.'
 
@@ -31,7 +32,7 @@ export async function ensureTraitFieldsRegistered(q: Queryable): Promise<void> {
     // Honest-empty-state contract (PHASE2_COMMON.md): a preview deploy, or prod before
     // migration 0033 has run, has no lp.traits table yet. Segments simply have no trait
     // fields available yet -- not a crash.
-    if (/does not exist/i.test((e as Error).message ?? '')) return
+    if (isUndefinedTable(e)) return
     throw e
   }
   for (const r of rows) {

@@ -25,6 +25,7 @@ import { addTeamMemberAction, changeTeamMemberRoleAction, removeTeamMemberAction
 import { TeamSection } from '@/components/settings/TeamSection'
 import { currentRole } from '@/lib/auth/session'
 import { listTeamMembers, type TeamMemberRow } from '@/lib/team/store'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 
 export const dynamic = 'force-dynamic'
@@ -43,7 +44,7 @@ async function listTeamMembersSafe(db: NonNullable<ReturnType<typeof getDb>>): P
   try {
     return { members: await listTeamMembers(db), needsMigration: false }
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) return { members: [], needsMigration: true }
+    if (isUndefinedTable(e)) return { members: [], needsMigration: true }
     throw e
   }
 }
@@ -72,7 +73,7 @@ export default async function SettingsPage() {
   try {
     retentionPolicies = await listRetentionPolicies(db)
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) retentionNeedsMigration = true
+    if (isUndefinedTable(e)) retentionNeedsMigration = true
     else throw e
   }
 

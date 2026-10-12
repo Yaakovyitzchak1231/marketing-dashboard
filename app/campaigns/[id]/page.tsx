@@ -20,6 +20,7 @@ import {
 import { listSegments, type Segment } from '@/lib/segments/store'
 import { InlineEditCell } from '@/components/edit/InlineEditCell'
 import { HistoryDrawer } from '@/components/edit/HistoryDrawer'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +67,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
     listSegments(db, { includeArchived: false })
       .then((segments) => ({ segments, needsMigration: false }))
       .catch((e) => {
-        if (/does not exist/i.test((e as Error).message ?? '')) return { segments: [] as Segment[], needsMigration: true }
+        if (isUndefinedTable(e)) return { segments: [] as Segment[], needsMigration: true }
         throw e
       }),
   ])

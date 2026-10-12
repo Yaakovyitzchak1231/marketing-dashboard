@@ -1,4 +1,5 @@
 import type { Db } from '@/lib/db/types'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 /**
  * Plan 1.15: the "get set up" checklist on the Overview page. `evaluate()` is
@@ -70,7 +71,7 @@ async function tableExists(db: Db, qualifiedName: string): Promise<boolean> {
     await db.query(`select 1 from ${qualifiedName} limit 1`)
     return true
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) return false
+    if (isUndefinedTable(e)) return false
     throw e
   }
 }
@@ -80,7 +81,7 @@ async function countFrom(db: Db, sql: string): Promise<number> {
     const r = await db.query<{ n: number }>(sql)
     return r.rows[0]?.n ?? 0
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) return 0
+    if (isUndefinedTable(e)) return 0
     throw e
   }
 }

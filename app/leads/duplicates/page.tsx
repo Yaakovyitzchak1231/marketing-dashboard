@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db'
 import { PageShell, DbNotConnected } from '@/components/app/PageShell'
 import { findCandidates, type MergeEntity } from '@/lib/merge/candidates'
 import { DuplicatesClient } from '@/components/leads/DuplicatesClient'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export default async function DuplicatesPage({ searchParams }: { searchParams: P
   try {
     candidates = await findCandidates(db, entity, 50)
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) needsMigration = true
+    if (isUndefinedTable(e)) needsMigration = true
     else throw e
   }
   if (needsMigration) {

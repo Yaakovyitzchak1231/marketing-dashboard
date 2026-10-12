@@ -7,6 +7,7 @@ import { TD, TH } from '@/components/reports/bits'
 import { TagPill } from '@/components/leads/pills'
 import { listTags, tagTrends } from '@/lib/tags/store'
 import { changeTagAction, mergeTagsAction, previewTagChangeAction, renameTagAction, setTagStyleAction } from '@/app/actions/tags'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
   try {
     ;[tags, trends] = await Promise.all([listTags(db), tagTrends(db, 8)])
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) needsMigration = true
+    if (isUndefinedTable(e)) needsMigration = true
     else throw e
   }
 

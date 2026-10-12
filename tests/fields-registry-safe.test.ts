@@ -8,7 +8,7 @@ import type { Queryable } from '@/lib/db/types'
 function missingTableDb(): Queryable {
   return {
     query: async () => {
-      throw new Error('relation "lp.field_defs" does not exist')
+      throw Object.assign(new Error('relation "lp.field_defs" does not exist'), { code: '42P01' })
     },
   } as unknown as Queryable
 }
@@ -30,9 +30,12 @@ function workingDb(rows: Partial<FieldDefRow>[]): Queryable {
 }
 
 describe('isMissingTableError', () => {
-  it('matches a Postgres "does not exist" message (missing table or missing column)', () => {
-    expect(isMissingTableError(new Error('relation "lp.field_defs" does not exist'))).toBe(true)
-    expect(isMissingTableError(new Error('column "custom" does not exist'))).toBe(true)
+  it('matches only Postgres undefined_table (SQLSTATE 42P01), the "migration has not run yet" error', () => {
+    expect(isMissingTableError(Object.assign(new Error('relation "lp.field_defs" does not exist'), { code: '42P01' }))).toBe(true)
+  })
+  it('does not match a missing column (42703) or a message with no SQLSTATE: those are real bugs and must throw', () => {
+    expect(isMissingTableError(Object.assign(new Error('column "custom" does not exist'), { code: '42703' }))).toBe(false)
+    expect(isMissingTableError(new Error('relation "lp.field_defs" does not exist'))).toBe(false)
   })
   it('does not match an unrelated error', () => {
     expect(isMissingTableError(new Error('connection terminated unexpectedly'))).toBe(false)

@@ -3,6 +3,7 @@ import { getSegment } from '@/lib/segments/store'
 import { segmentStats } from '@/lib/segments/stats'
 import { SegmentStats } from '@/components/segments/SegmentStats'
 import { Card } from '@/components/dashboard/primitives'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export default async function SegmentStatsPage({ params }: { params: Promise<{ i
     seg = await getSegment(db, segId)
     if (seg) data = await segmentStats(db, seg)
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) notice = 'Needs migration 0033 — it runs on the next production deploy.'
+    if (isUndefinedTable(e)) notice = 'Needs migration 0033 — it runs on the next production deploy.'
     else throw e
   }
 

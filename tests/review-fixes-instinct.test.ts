@@ -66,10 +66,10 @@ const tagged = async (tag: string) => (await db.query<{ n: number }>(`select cou
 beforeAll(async () => {
   db = await createTestDb()
   holder.db = db
-  await db.query(`insert into lp.actors (id, kind, display_name, email, role, active) values
+  await db.tx((q) => q.query(`insert into lp.actors (id, kind, display_name, email, role, active) values
     ('ed', 'human', 'Ed', 'ed@example.com', 'editor', true),
     ('olive', 'human', 'Olive', 'olive@example.com', 'owner', true)
-    on conflict do nothing`)
+    on conflict do nothing`), 'owner')
   await db.query(`insert into lp.actors (id, kind, display_name) values ('hermes', 'agent', 'Hermes') on conflict do nothing`)
   // EDITOR_TAG_CHANGE_CAP + 1 leads tagged "bulk".
   const { rows } = await db.query<{ id: number }>(

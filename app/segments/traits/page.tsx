@@ -3,6 +3,7 @@ import { listTraits } from '@/lib/traits/store'
 import { ensureTraitFieldsRegistered } from '@/lib/traits/register'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { defineTraitAction, archiveTraitAction, previewTraitAction, computePreviewFromQuery } from '@/app/actions/traits'
+import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
     await ensureTraitFieldsRegistered(db)
     traits = await listTraits(db, { includeArchived: false })
   } catch (e) {
-    if (/does not exist/i.test((e as Error).message ?? '')) needsMigration = true
+    if (isUndefinedTable(e)) needsMigration = true
     else throw e
   }
 
