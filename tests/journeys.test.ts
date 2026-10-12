@@ -160,7 +160,16 @@ describe('journeys: model, versions and the runner (plan 3.1)', () => {
     expect(runs.runs[0]).toMatchObject({ company_id: co, source: 'trigger', status: 'waiting' })
   })
 
-  it('a node that throws marks only its run as error; a paused journey does not move', async () => {
+  it('editing a journey keeps the fields the edit did not send', async () => {
+    const trig = await runOp(db, 'owner', 'upsert_trigger', { name: 'Keep me (journey)', kind: 'event', config: { event_type: 'custom' } }) as { id: number }
+    const j = await runOp(db, 'owner', 'journey_upsert', { name: 'Keeps', trigger_id: trig.id, entry_mode: 'multiple' }) as { id: number }
+    await expect(runOp(db, 'owner', 'journey_upsert', { id: j.id, name: 'Renamed' }))
+      .resolves.toMatchObject({ name: 'Renamed', trigger_id: trig.id, entry_mode: 'multiple' })
+    await expect(runOp(db, 'owner', 'journey_upsert', { id: j.id, name: 'Renamed', trigger_id: null }))
+      .resolves.toMatchObject({ trigger_id: null, entry_mode: 'multiple' })
+  })
+
+  it('a node that throws is retried, then only its run is marked error; a paused journey does not move', async () => {
     registerNodeHandler({ kind: 'boom_test', validate: () => [], run: async () => { throw new Error('kaboom') } })
     const bad = await runOp(db, 'owner', 'journey_upsert', { name: 'Bad' }) as { id: number }
     await runOp(db, 'owner', 'journey_publish', { journey_id: bad.id, graph: { start: 'b', nodes: [{ id: 'b', kind: 'boom_test' }] } })
@@ -172,9 +181,17 @@ describe('journeys: model, versions and the runner (plan 3.1)', () => {
     const rg = await runOp(db, 'owner', 'journey_enroll', { journey_id: good.id, company_id: co2 }) as { results: { run_id: number }[] }
     await runOp(db, 'owner', 'journey_set_status', { journey_id: good.id, status: 'paused' })
     const tick = await runDueJourneys(db)
-    expect(tick.errors).toBe(1)
-    expect(await run(rb.results[0].run_id)).toMatchObject({ status: 'error', last_error: 'kaboom' })
+    expect(tick.errors).toBe(0)
+    expect(await run(rb.results[0].run_id)).toMatchObject({ status: 'active', last_error: 'kaboom' })
     expect((await run(rg.results[0].run_id)).status).toBe('active')
+    // Attempts two and three (the backoff is 5, then 30 minutes; ticks two days apart are past both).
+    const later = new Date(Date.now() + 2 * day)
+    await runDueJourneys(db, { now: later })
+    const last = await runDueJourneys(db, { now: new Date(later.getTime() + day) })
+    expect(last.errors).toBe(1)
+    expect(await run(rb.results[0].run_id)).toMatchObject({ status: 'error', last_error: 'kaboom' })
+    await expect(runOp(db, 'owner', 'journey_retry', { run_id: rb.results[0].run_id })).resolves.toMatchObject({ status: 'active' })
+    await expect(runOp(db, 'owner', 'journey_retry', { run_id: rg.results[0].run_id })).rejects.toMatchObject({ status: 409 })
     await runOp(db, 'owner', 'journey_set_status', { journey_id: good.id, status: 'live' })
     await runDueJourneys(db)
     expect((await run(rg.results[0].run_id)).status).toBe('done')

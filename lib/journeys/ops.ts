@@ -8,16 +8,16 @@
  */
 import type { Db } from '../db/types.ts'
 import { OpsError } from '../ops/core.ts'
-import { requireOwnerOrSystem } from '../ops/actor-role.ts'
+import { requireOwnerActor, requireOwnerOrSystem } from '../ops/actor-role.ts'
 import { getSegment } from '../segments/store.ts'
 import { companyIdsForSegment } from '../segments/match-companies.ts'
 import { GraphError, validateGraph } from './graph.ts'
 import { nodeKinds } from './nodes.ts'
 import {
-  JourneyError, getJourney, getVersionGraph, listJourneys, listVersions, publishVersion, setJourneyStatus, upsertJourney,
-  type EntryMode,
+  JourneyError, approveCurrentVersion, getJourney, getVersionGraph, listJourneys, listVersions, publishVersion, setJourneyStatus,
+  upsertJourney, type EntryMode,
 } from './store.ts'
-import { enrollLead, exitRuns, runDueJourneys, type EnrollResult } from './runner.ts'
+import { enrollLead, exitRuns, retryRun, runDueJourneys, type EnrollResult } from './runner.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -109,13 +109,14 @@ export const JOURNEY_OPS: Record<string, Op> = {
     },
   },
   journey_upsert: {
-    args: '{id?, name, campaign_id?, trigger_id?, entry_mode?: once|multiple, goal?, settings?}  -- create or edit (not the graph; see journey_publish)',
+    args: '{id?, name, campaign_id?, trigger_id?, entry_mode?: once|multiple, goal?, settings?}  -- create or edit (not the graph; see journey_publish). An omitted field keeps its value on edit; null clears campaign_id or trigger_id.',
     run: (db, actor, a) => wrap(() => upsertJourney(db, actor, {
       id: optId(a.id, 'id'),
       name: typeof a.name === 'string' ? a.name : '',
-      campaign_id: optId(a.campaign_id, 'campaign_id'),
-      trigger_id: optId(a.trigger_id, 'trigger_id'),
-      entry_mode: (typeof a.entry_mode === 'string' && a.entry_mode ? a.entry_mode : 'once') as EntryMode,
+      // undefined = not sent (keep the stored value); null = clear it.
+      campaign_id: a.campaign_id === undefined ? undefined : optId(a.campaign_id, 'campaign_id'),
+      trigger_id: a.trigger_id === undefined ? undefined : optId(a.trigger_id, 'trigger_id'),
+      entry_mode: typeof a.entry_mode === 'string' && a.entry_mode ? (a.entry_mode as EntryMode) : undefined,
       goal: obj(a.goal, 'goal'),
       settings: obj(a.settings, 'settings'),
     })),
@@ -138,8 +139,23 @@ export const JOURNEY_OPS: Record<string, Op> = {
     },
   },
   journey_set_status: {
-    args: '{journey_id, status: draft|testing|live|paused|sunset}',
-    run: (db, actor, a) => wrap(() => setJourneyStatus(db, actor, id(a.journey_id, 'journey_id'), typeof a.status === 'string' ? a.status : '')),
+    args: '{journey_id, status: draft|testing|live|paused|sunset}  -- going live is owner only',
+    run: (db, actor, a) => wrap(async () => {
+      const status = typeof a.status === 'string' ? a.status : ''
+      if (status === 'live') await requireOwnerActor(db, actor, 'journey_set_status to live is owner only')
+      return setJourneyStatus(db, actor, id(a.journey_id, 'journey_id'), status)
+    }),
+  },
+  journey_approve: {
+    args: '{journey_id}  -- owner only: approve the current version. Send-capable nodes do not run on a version nobody approved.',
+    run: (db, actor, a) => wrap(async () => {
+      await requireOwnerActor(db, actor, 'journey_approve is owner only')
+      return approveCurrentVersion(db, actor, id(a.journey_id, 'journey_id'))
+    }),
+  },
+  journey_retry: {
+    args: '{run_id}  -- re-open an errored run; it resumes at the node that failed',
+    run: (db, actor, a) => wrap(() => retryRun(db, actor, id(a.run_id, 'run_id'))),
   },
   journey_enroll: {
     args: '{journey_id, company_id? | contact_id? | company_ids?: [] | segment_id?, offset?, context?, source?: manual|api}  -- live journeys; testing too (a try on a few leads)',

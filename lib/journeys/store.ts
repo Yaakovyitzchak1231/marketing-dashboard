@@ -36,6 +36,9 @@ export interface Journey {
   goal: Record<string, unknown>
   settings: Record<string, unknown>
   current_version: number | null
+  approved_version: number | null
+  approved_by: string | null
+  approved_at: string | null
   created_by: string | null
   updated_by: string | null
   created_at: string
@@ -43,7 +46,7 @@ export interface Journey {
 }
 
 const COLS = `id, name, status, campaign_id, trigger_id, trigger_cursor, entry_mode, goal, settings,
-  current_version, created_by, updated_by, created_at, updated_at`
+  current_version, approved_version, approved_by, approved_at, created_by, updated_by, created_at, updated_at`
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v)
@@ -90,8 +93,10 @@ export interface UpsertJourneyInput {
 export async function upsertJourney(db: Db, actor: string, input: UpsertJourneyInput, via: 'ui' | 'ops_api' = 'ops_api'): Promise<Journey> {
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name || name.length > 120) throw new JourneyError('name is required (max 120 characters)')
-  const mode = input.entry_mode ?? 'once'
-  if (!(ENTRY_MODES as readonly string[]).includes(mode)) throw new JourneyError(`entry_mode must be one of: ${ENTRY_MODES.join(', ')}`)
+  // An omitted field keeps its stored value on edit; only a create falls back to the defaults.
+  if (input.entry_mode != null && !(ENTRY_MODES as readonly string[]).includes(input.entry_mode)) {
+    throw new JourneyError(`entry_mode must be one of: ${ENTRY_MODES.join(', ')}`)
+  }
   if (input.goal != null && !isObject(input.goal)) throw new JourneyError('goal must be an object')
   if (input.settings != null && !isObject(input.settings)) throw new JourneyError('settings must be an object')
   return db.tx(async (q) => {
@@ -110,14 +115,18 @@ export async function upsertJourney(db: Db, actor: string, input: UpsertJourneyI
                  -- start reading fires from now: a new journey does not replay old ones
                  coalesce((select max(id) from lp.trigger_fires where trigger_id = $3), 0))
          returning ${COLS}`,
-        [name, input.campaign_id ?? null, input.trigger_id ?? null, mode, JSON.stringify(input.goal ?? {}), JSON.stringify(input.settings ?? {}), actor],
+        [name, input.campaign_id ?? null, input.trigger_id ?? null, input.entry_mode ?? 'once',
+          JSON.stringify(input.goal ?? {}), JSON.stringify(input.settings ?? {}), actor],
       )
       await history(q, rows[0].id, 'created', null, name, actor, via)
       return rows[0]
     }
     const cur = await getJourney(q, input.id)
     if (!cur) throw new JourneyError('no journey with that id', 404)
-    const triggerChanged = (input.trigger_id ?? null) !== cur.trigger_id
+    const campaignId = input.campaign_id === undefined ? cur.campaign_id : input.campaign_id
+    const triggerId = input.trigger_id === undefined ? cur.trigger_id : input.trigger_id
+    const mode = input.entry_mode ?? cur.entry_mode
+    const triggerChanged = (triggerId ?? null) !== cur.trigger_id
     const { rows } = await q.query<Journey>(
       `update lp.journeys
           set name = $2, campaign_id = $3, trigger_id = $4, entry_mode = $5, goal = $6, settings = $7, updated_by = $8,
@@ -126,7 +135,7 @@ export async function upsertJourney(db: Db, actor: string, input: UpsertJourneyI
                                     else trigger_cursor end
         where id = $1
         returning ${COLS}`,
-      [input.id, name, input.campaign_id ?? null, input.trigger_id ?? null, mode,
+      [input.id, name, campaignId, triggerId, mode,
         JSON.stringify(input.goal ?? cur.goal), JSON.stringify(input.settings ?? cur.settings), actor, triggerChanged],
     )
     for (const f of ['name', 'campaign_id', 'trigger_id', 'entry_mode'] as const) {
@@ -157,6 +166,22 @@ export async function publishVersion(
     await q.query('update lp.journeys set current_version = $2, updated_by = $3 where id = $1', [journeyId, version, actor])
     await history(q, journeyId, 'version', version - 1 || null, version, actor, via)
     return { journey_id: journeyId, version, graph }
+  }, actor)
+}
+
+/** Owner approval of the journey's current version. The runner checks it before any send-capable node. */
+export async function approveCurrentVersion(db: Db, actor: string, journeyId: number): Promise<Journey> {
+  return db.tx(async (q) => {
+    const cur = await getJourney(q, journeyId)
+    if (!cur) throw new JourneyError('no journey with that id', 404)
+    if (cur.current_version == null) throw new JourneyError('publish a version before approving it', 409)
+    const { rows } = await q.query<Journey>(
+      `update lp.journeys set approved_version = $2, approved_by = $3, approved_at = now(), updated_by = $3
+        where id = $1 returning ${COLS}`,
+      [journeyId, cur.current_version, actor],
+    )
+    await history(q, journeyId, 'approved_version', cur.approved_version, cur.current_version, actor, 'ops_api')
+    return rows[0]
   }, actor)
 }
 

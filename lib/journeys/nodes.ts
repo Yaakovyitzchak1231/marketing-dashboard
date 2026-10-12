@@ -46,8 +46,26 @@ export type NodeOutcome =
   /** End the run. */
   | { type: 'finish'; status: 'done' | 'exited' | 'goal'; result?: Record<string, unknown> }
 
+/**
+ * Side effects. A handler runs inside the run's transaction, and if it throws the
+ * whole advance rolls back (the run returns to the node it was on, and is retried).
+ * So:
+ *  - Database writes through `q` roll back with the run. Safe.
+ *  - Anything outside the database (an email, an HTTP call, an Instantly push) is NOT
+ *    rolled back. The retry will repeat it unless the handler makes it idempotent:
+ *    key the external effect by (run_id, node_id), record that it happened through
+ *    `q` (lp.journey_steps_log), and skip it if the record already exists. Do the
+ *    external call only after that record is durable (a separate committed step) or
+ *    accept at-least-once and say so in the node's docs.
+ */
 export interface NodeHandler {
   kind: string
+  /**
+   * True when the node can send or push something outside the database. The runner
+   * will not run it on a journey version the owner has not approved (journey_approve),
+   * and it checks suppression before each run of it.
+   */
+  sends?: boolean
   /** Problems with this node's config/paths, as plain sentences. Empty when fine. */
   validate(node: GraphNode): string[]
   run(ctx: NodeContext): Promise<NodeOutcome>

@@ -87,8 +87,47 @@ A handler returns one outcome and the runner does the bookkeeping:
 - `{ type: 'finish', status: 'done' | 'exited' | 'goal', result? }` — end the run.
 
 `context` merges into `run.context` (per-run memory, e.g. a 3.3 `cancel_on`
-list). A handler that throws marks that run `error` with the message; other
-runs carry on. One advance takes at most 50 steps, then resumes next tick.
+list). One advance takes at most 50 steps, then resumes next tick.
+
+### When a handler throws
+
+The advance rolls back, so the run is still on the node that failed. The runner
+counts the failure (`attempts`) and retries after 1, then 5, then 30 minutes.
+After three failures the run goes to `error` with `last_error`. Each attempt is
+a `retry` or `error` row in the step log. An errored run is re-opened by hand
+with `journey_retry`; it resumes at the same node with the count reset. A run
+whose lead cannot be reached because the DB is down is left open and tried again
+on the next tick. Other runs in the same tick are not affected.
+
+### Side effects (read before writing a send, push or HTTP node)
+
+A handler's writes through `q` roll back with the run. Anything outside the
+database does not. If a handler sends an email or calls Instantly and then the
+run's transaction rolls back, the effect has happened but the run goes back to
+the node, and the retry repeats it. So an external effect must be idempotent:
+
+- key it by `(run_id, node_id)`;
+- record it through `q` in `lp.journey_steps_log` before or as part of the step;
+- on retry, check for that record and skip the effect if it exists.
+
+If you cannot make a call idempotent, say so in the node's docs: it is
+at-least-once. Set `sends: true` on the handler (see the `NodeHandler` comment in
+`lib/journeys/nodes.ts`) for any kind that sends or pushes.
+
+### Suppression and approval
+
+- Enrolment and every step check the lead: a company at stage `do_not_contact`,
+  a contact with `do_not_contact` or status `do-not-contact`, or a live
+  suppression on its email (`lp.is_suppressed`, for the journey's campaign). A
+  blocked lead is not enrolled (`reason: do_not_contact | suppressed`), and a run
+  that is blocked mid-wait exits with `exited_suppressed` on its next tick.
+  Company-level domain suppression is not checked yet; send nodes must still
+  check suppression at send time.
+- A `sends: true` node does not run on a version nobody approved. The run waits
+  and is checked again in an hour (`awaiting_approval`). Approval is per version,
+  set with `journey_approve` (Owner only), so publishing a new version needs a
+  new approval.
+- Going live (`journey_set_status` to `live`) is Owner only.
 
 ## The runner (`lib/journeys/runner.ts`)
 
@@ -110,18 +149,21 @@ runs carry on. One advance takes at most 50 steps, then resumes next tick.
 | `journey_runs` | {journey_id?, company_id?, contact_id?, status?, limit?} | Viewer+ |
 | `journey_run_log` | {run_id} | Viewer+ |
 | `journey_validate` | {graph} | Viewer+ |
-| `journey_upsert` | {id?, name, campaign_id?, trigger_id?, entry_mode?, goal?, settings?} | Editor+ |
+| `journey_upsert` | {id?, name, campaign_id?, trigger_id?, entry_mode?, goal?, settings?} (an omitted field keeps its value on edit) | Editor+ |
 | `journey_publish` | {journey_id, graph, note?} | Editor+ |
-| `journey_set_status` | {journey_id, status} | Editor+ |
+| `journey_set_status` | {journey_id, status} (`live` is Owner only) | Editor+; Owner for `live` |
+| `journey_approve` | {journey_id} | Owner |
+| `journey_retry` | {run_id} (an errored run only) | Editor+ |
 | `journey_enroll` | {journey_id, company_id? / contact_id? / company_ids? / segment_id?, offset?, context?} | Editor+ |
 | `journey_exit` | {run_id} or {journey_id, company_id? / contact_id?}, reason? | Editor+ |
 | `run_journeys` | {limit?} | Owner or the runner (`system`) |
 
-Roles apply to keys minted for a person (`lib/ops/actor-role.ts`); agent keys
-are not role-gated, as with every other op.
+Roles apply to keys minted for a person (`lib/ops/actor-role.ts`). Owner-only
+checks inside an op (`journey_approve`, `live`) apply to every key, agents too.
+Agent keys are otherwise not role-gated, as with every other op.
 
 ## Not in 3.1 (left for later rows)
 
 - Node kinds beyond wait/exit/note: branch (3.5), split (3.6), goal and go-to (3.7), actions (3.8), send (3.9).
-- Human approval before a send-capable journey goes live (lands with 3.9, when a send kind exists).
+- Journey-level approval UI (the builder, 3.13). The approval gate itself is in place now.
 - A journeys page and the builder (3.13). There is no UI in 3.1.

@@ -19,6 +19,8 @@ import { JourneyError, getVersionGraph } from './store.ts'
 
 /** Steps one run may take in a single advance, so a loop of instant nodes cannot spin forever. */
 export const MAX_STEPS_PER_ADVANCE = 50
+/** A handler that throws is retried this many times in all (1, 5, then 30 minutes apart), then the run is 'error'. */
+export const MAX_ATTEMPTS = 3
 export const ENROLL_SOURCES = ['manual', 'segment', 'trigger', 'api'] as const
 export type EnrollSource = (typeof ENROLL_SOURCES)[number]
 const OPEN = `('active', 'waiting')`
@@ -36,7 +38,7 @@ export interface EnrollInput {
 export interface EnrollResult {
   enrolled: boolean
   run_id: number | null
-  reason?: 'already_in' | 'already_entered' | 'duplicate_fire'
+  reason?: 'already_in' | 'already_entered' | 'duplicate_fire' | 'do_not_contact' | 'suppressed'
 }
 
 async function logStep(q: Queryable, run: { id: number; journey_id: number; version: number }, nodeId: string, action: string, result: Record<string, unknown>, actor: string | null): Promise<void> {
@@ -75,6 +77,32 @@ async function resolveLead(q: Queryable, companyId: number | null, contactId: nu
   return { company_id: companyId, contact_id: null }
 }
 
+/**
+ * Why this lead must not be contacted, or null. A do-not-contact flag or stage blocks
+ * the lead; a live suppression on its email blocks it for the journey's campaign.
+ * Checked at enrolment and before every step, so a wait cannot outlive an unsubscribe.
+ */
+async function leadBlock(
+  q: Queryable, lead: { company_id: number | null; contact_id: number | null }, campaignId: number | null,
+): Promise<'do_not_contact' | 'suppressed' | null> {
+  if (lead.company_id != null) {
+    const { rows } = await q.query('select 1 from lp.companies where id = $1 and stage = $2', [lead.company_id, 'do_not_contact'])
+    if (rows[0]) return 'do_not_contact'
+  }
+  if (lead.contact_id != null) {
+    const { rows } = await q.query<{ do_not_contact: boolean; status: string; email_norm: string | null }>(
+      'select do_not_contact, status, email_norm from lp.contacts where id = $1', [lead.contact_id],
+    )
+    const c = rows[0]
+    if (c && (c.do_not_contact || c.status === 'do-not-contact')) return 'do_not_contact'
+    if (c?.email_norm) {
+      const s = await q.query<{ s: boolean }>('select lp.is_suppressed($1, $2::bigint) as s', [c.email_norm, campaignId])
+      if (s.rows[0]?.s) return 'suppressed'
+    }
+  }
+  return null
+}
+
 /** Enrol one lead. Call inside a transaction (db.tx) — it writes the run, its first log row and an event. */
 export async function enrollLead(q: Queryable, actor: string, journeyId: number, input: EnrollInput): Promise<EnrollResult> {
   const { rows: js } = await q.query<{ id: number; status: string; current_version: number | null; entry_mode: string; campaign_id: number | null }>(
@@ -91,6 +119,8 @@ export async function enrollLead(q: Queryable, actor: string, journeyId: number,
   const lead = await resolveLead(q, input.company_id ?? null, input.contact_id ?? null)
   const source = input.source ?? 'manual'
   if (!(ENROLL_SOURCES as readonly string[]).includes(source)) throw new JourneyError(`source must be one of: ${ENROLL_SOURCES.join(', ')}`)
+  const block = await leadBlock(q, lead, j.campaign_id)
+  if (block) return { enrolled: false, run_id: null, reason: block }
 
   if (j.entry_mode === 'once') {
     const prior = await q.query(
@@ -114,6 +144,31 @@ export async function enrollLead(q: Queryable, actor: string, journeyId: number,
   await logStep(q, run, graph.start, 'entered', { source, trigger_fire_id: input.trigger_fire_id ?? null }, actor)
   await emit(q, 'journey_entered', run, j.campaign_id, actor, { source })
   return { enrolled: true, run_id: run.id }
+}
+
+/** Re-open an errored run. It resumes at the node that failed, with its retry count reset. */
+export async function retryRun(db: Db, actor: string, runId: number, now: Date = new Date()): Promise<{ run_id: number; status: string }> {
+  return db.tx(async (q) => {
+    const { rows } = await q.query<{ id: number; journey_id: number; version: number; node_id: string }>(
+      `select id, journey_id, version, node_id from lp.journey_runs where id = $1 and status = 'error'`, [runId],
+    )
+    const r = rows[0]
+    if (!r) throw new JourneyError('only an errored run can be retried', 409)
+    // The open-lead rule: a lead can have only one open run per journey.
+    const clash = await q.query(
+      `select 1 from lp.journey_runs o join lp.journey_runs e on e.id = $1
+        where o.journey_id = e.journey_id and coalesce(o.company_id, 0) = coalesce(e.company_id, 0)
+          and coalesce(o.contact_id, 0) = coalesce(e.contact_id, 0) and o.status in ${OPEN} limit 1`,
+      [runId],
+    )
+    if (clash.rows[0]) throw new JourneyError('this lead already has an open run in this journey', 409)
+    await q.query(
+      `update lp.journey_runs set status = 'active', attempts = 0, next_run_at = $2, finished_at = null where id = $1`,
+      [runId, now.toISOString()],
+    )
+    await logStep(q, r, r.node_id, 'retried_by_hand', {}, actor)
+    return { run_id: runId, status: 'active' }
+  }, actor)
 }
 
 /** Take open runs out by hand: one run, or every open run for a lead in a journey. */
@@ -144,7 +199,7 @@ export async function exitRuns(
   }, actor)
 }
 
-type RunRow = RunState & { status: string; campaign_id: number | null; journey_status: string }
+type RunRow = RunState & { status: string; campaign_id: number | null; journey_status: string; approved_version: number | null }
 
 export interface AdvanceResult {
   run_id: number
@@ -165,7 +220,7 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
     return await db.tx(async (q) => {
       const { rows } = await q.query<RunRow>(
         `select r.id, r.journey_id, r.version, r.company_id, r.contact_id, r.node_id, r.node_entered_at, r.entered_at,
-                r.context, r.status, j.campaign_id, j.status as journey_status
+                r.context, r.status, j.campaign_id, j.status as journey_status, j.approved_version
            from lp.journey_runs r join lp.journeys j on j.id = r.journey_id
           where r.id = $1 and r.status in ${OPEN} and r.next_run_at <= $2
             and j.status in ('live', 'testing', 'sunset')
@@ -200,6 +255,26 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
         if (!node) throw new Error(`node '${run.node_id}' is not in version ${run.version}`)
         const handler = getNodeHandler(node.kind)
         if (!handler) throw new Error(`no handler for node kind '${node.kind}'`)
+        // Before every step: an unsubscribe or do-not-contact ends the run, even mid-wait.
+        const block = await leadBlock(q, run, row.campaign_id)
+        if (block) {
+          await q.query(
+            `update lp.journey_runs set status = 'exited', finished_at = $2, next_run_at = null, node_id = $3, context = $4 where id = $1`,
+            [run.id, now.toISOString(), node.id, JSON.stringify(run.context)],
+          )
+          await logStep(q, run, node.id, 'exited_suppressed', { reason: block }, actor)
+          await emit(q, 'journey_finished', run, row.campaign_id, actor, { status: 'exited', node_id: node.id, reason: block })
+          return { run_id: run.id, advanced: true, steps, status: 'exited', node_id: node.id }
+        }
+        // A send-capable node waits for the owner's approval of this version. Nothing is sent meanwhile.
+        if (handler.sends && (row.approved_version == null || Number(row.approved_version) !== run.version)) {
+          await q.query(
+            `update lp.journey_runs set status = 'waiting', next_run_at = $2, node_id = $3, node_entered_at = $4, context = $5 where id = $1`,
+            [run.id, new Date(now.getTime() + 60 * 60_000).toISOString(), node.id, run.node_entered_at.toISOString(), JSON.stringify(run.context)],
+          )
+          await logStep(q, run, node.id, 'awaiting_approval', { version: run.version }, actor)
+          return { run_id: run.id, advanced: true, steps, status: 'waiting', node_id: node.id }
+        }
         const out: NodeOutcome = await handler.run({ q, run, node, graph, now })
         steps++
         if ('context' in out && out.context) run.context = { ...run.context, ...out.context }
@@ -246,25 +321,45 @@ export async function advanceRun(db: Db, runId: number, now: Date = new Date(), 
       }
     }, actor)
   } catch (e) {
+    // The advance rolled back, so the run is still on the node it failed at. Count the
+    // failure: retry after a backoff, or give up as 'error' after MAX_ATTEMPTS.
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000)
-    await db.tx(async (q) => {
-      const { rows } = await q.query<{ id: number; journey_id: number; version: number; node_id: string }>(
-        `update lp.journey_runs set status = 'error', last_error = $2, next_run_at = null, finished_at = $3
-          where id = $1 and status in ${OPEN} returning id, journey_id, version, node_id`,
-        [runId, message, now.toISOString()],
-      )
-      if (rows[0]) await logStep(q, rows[0], rows[0].node_id, 'error', { error: message }, actor)
-    }, actor)
-    return { run_id: runId, advanced: false, steps: 0, status: 'error', error: message }
+    try {
+      return await db.tx(async (q) => {
+        const { rows } = await q.query<{ id: number; journey_id: number; version: number; node_id: string; status: string; attempts: number }>(
+          `update lp.journey_runs
+              set attempts = attempts + 1,
+                  last_error = $2,
+                  status = case when attempts + 1 >= $3::int then 'error' else status end,
+                  next_run_at = case when attempts + 1 >= $3::int then null
+                                     else $4::timestamptz + make_interval(mins => case attempts when 0 then 1 when 1 then 5 else 30 end) end,
+                  finished_at = case when attempts + 1 >= $3::int then $4::timestamptz else null end
+            where id = $1 and status in ${OPEN}
+            returning id, journey_id, version, node_id, status, attempts`,
+          [runId, message, MAX_ATTEMPTS, now.toISOString()],
+        )
+        const r = rows[0]
+        if (!r) return { run_id: runId, advanced: false, steps: 0, status: 'unchanged', error: message }
+        await logStep(q, r, r.node_id, r.status === 'error' ? 'error' : 'retry', { error: message, attempt: Number(r.attempts) }, actor)
+        return { run_id: runId, advanced: false, steps: 0, status: r.status, error: message }
+      }, actor)
+    } catch (recordErr) {
+      // The DB is the problem, so the failure could not be recorded. The run is still
+      // open, and the next tick tries it again. Other runs carry on.
+      const why = recordErr instanceof Error ? recordErr.message : String(recordErr)
+      return { run_id: runId, advanced: false, steps: 0, status: 'unrecorded', error: `${message} (could not record it: ${why.slice(0, 300)})` }
+    }
   }
 }
 
 /** Enrol from trigger fires the live journeys have not consumed yet. */
-export async function consumeTriggerFires(db: Db, actor = 'system', perJourney = 500): Promise<{ journey_id: number; fires: number; enrolled: number }[]> {
+export async function consumeTriggerFires(db: Db, actor = 'system', perJourney = 500): Promise<{
+  journey_id: number; fires: number; enrolled: number; skipped: { fire_id: number; reason: string }[]
+}[]> {
   const { rows: js } = await db.query<{ id: number }>(
     `select id from lp.journeys where status = 'live' and trigger_id is not null and current_version is not null order by id`,
   )
-  const out: { journey_id: number; fires: number; enrolled: number }[] = []
+  const out: { journey_id: number; fires: number; enrolled: number; skipped: { fire_id: number; reason: string }[] }[] = []
   for (const { id } of js) {
     const res = await db.tx(async (q) => {
       // Lock the journey so two ticks never read the same fires twice.
@@ -279,8 +374,12 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
         [rows[0].trigger_id, rows[0].trigger_cursor, perJourney],
       )
       let enrolled = 0
+      const skipped: { fire_id: number; reason: string }[] = []
       for (const f of fires.rows) {
         if (f.company_id == null && f.contact_id == null) continue
+        // One bad fire (a lead that was deleted, merged, or no longer matches its company)
+        // is skipped and reported. It must not hold the cursor, or every later tick fails on it.
+        // The fire's own writes are only made after its checks pass, so nothing is left half done.
         try {
           const r = await enrollLead(q, actor, Number(id), {
             company_id: f.company_id == null ? null : Number(f.company_id),
@@ -289,13 +388,13 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
           })
           if (r.enrolled) enrolled++
         } catch (e) {
-          // A fire for a lead that was deleted or merged away is skipped, not fatal.
-          if (!(e instanceof JourneyError) || e.status !== 404) throw e
+          if (!(e instanceof JourneyError)) throw e
+          skipped.push({ fire_id: Number(f.id), reason: e.message })
         }
       }
       const last = fires.rows.length ? Number(fires.rows[fires.rows.length - 1].id) : null
       if (last != null) await q.query('update lp.journeys set trigger_cursor = $2 where id = $1', [id, last])
-      return { journey_id: Number(id), fires: fires.rows.length, enrolled }
+      return { journey_id: Number(id), fires: fires.rows.length, enrolled, skipped }
     }, actor)
     if (res && res.fires) out.push(res)
   }
@@ -305,7 +404,7 @@ export async function consumeTriggerFires(db: Db, actor = 'system', perJourney =
 /** One runner tick. */
 export async function runDueJourneys(
   db: Db, opts: { limit?: number; now?: Date; actor?: string } = {},
-): Promise<{ enrolled_from_triggers: number; due: number; advanced: number; errors: number; results: AdvanceResult[] }> {
+): Promise<{ enrolled_from_triggers: number; skipped_fires: number; due: number; advanced: number; errors: number; results: AdvanceResult[] }> {
   const now = opts.now ?? new Date()
   const actor = opts.actor ?? 'system'
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 5000)
@@ -317,9 +416,15 @@ export async function runDueJourneys(
     [now.toISOString(), limit],
   )
   const results: AdvanceResult[] = []
-  for (const r of rows) results.push(await advanceRun(db, Number(r.id), now, actor))
+  for (const r of rows) {
+    // advanceRun reports its own failures; this catches anything it did not expect, so one run cannot stop the rest.
+    results.push(await advanceRun(db, Number(r.id), now, actor).catch((e): AdvanceResult => ({
+      run_id: Number(r.id), advanced: false, steps: 0, status: 'unrecorded', error: e instanceof Error ? e.message : String(e),
+    })))
+  }
   return {
     enrolled_from_triggers: consumed.reduce((n, c) => n + c.enrolled, 0),
+    skipped_fires: consumed.reduce((n, c) => n + c.skipped.length, 0),
     due: rows.length,
     advanced: results.filter((r) => r.advanced).length,
     errors: results.filter((r) => r.status === 'error').length,

@@ -33,6 +33,13 @@ create table if not exists lp.journeys (
 
 create index if not exists journeys_trigger_idx on lp.journeys (trigger_id) where trigger_id is not null;
 
+-- Owner approval. A send-capable node kind will not run until the run's version
+-- is approved (journey_approve, owner only). Approval is per version: publishing
+-- a new version needs a new approval.
+alter table lp.journeys add column if not exists approved_version integer;
+alter table lp.journeys add column if not exists approved_by     text references lp.actors(id);
+alter table lp.journeys add column if not exists approved_at    timestamptz;
+
 drop trigger if exists journeys_updated on lp.journeys;
 create trigger journeys_updated before update on lp.journeys for each row execute function lp.touch_updated_at();
 
@@ -69,6 +76,10 @@ create table if not exists lp.journey_runs (
   constraint journey_runs_version_fk foreign key (journey_id, version)
     references lp.journey_versions (journey_id, version)
 );
+
+-- How many times a handler has thrown on this run in a row. The runner retries
+-- up to three times (lib/journeys/runner.ts), then the run goes to 'error'.
+alter table lp.journey_runs add column if not exists attempts integer not null default 0 check (attempts >= 0);
 
 -- The runner's queue: open runs by due time.
 create index if not exists journey_runs_due_idx on lp.journey_runs (next_run_at)

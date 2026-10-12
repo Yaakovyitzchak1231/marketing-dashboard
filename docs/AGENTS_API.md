@@ -541,7 +541,8 @@ Roles, also Oct 11: managing people and roles, agent keys, agents, the Tools hub
 
 Build a journey, publish its graph as a version, set it live, and enrol leads:
 `journey_upsert`, `journey_publish`, `journey_set_status`, `journey_enroll`,
-`journey_exit`; read with `journey_list`, `journey_get`, `journey_runs`,
+`journey_exit`, `journey_retry` (re-open an errored run); owner only: `journey_approve`
+and setting a journey `live`. Read with `journey_list`, `journey_get`, `journey_runs`,
 `journey_run_log`, `journey_validate`. The runner tick is `run_journeys`
 (owner or `system`). Tables, graph format, node kinds and how later rows add
 node kinds: [journeys.md](journeys.md).
