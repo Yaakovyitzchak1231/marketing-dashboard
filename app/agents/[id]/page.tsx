@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { actorDetail, listActors, listProjects, sharedMemory } from '@/lib/ops/queries'
 import { createTaskAction, markReadAction, memoryDeleteAction, memoryPutAction } from '@/app/actions/ops'
-import { pauseAgentAction, resumeAgentAction } from '@/app/actions/agents'
+import { pauseAgentAction, renameAgentAction, resumeAgentAction, setAgentActiveAction, setAgentCanSendAction } from '@/app/actions/agents'
+import { AgentAdminCard } from '@/components/ops/AgentAdminCard'
+import { currentRole } from '@/lib/auth/session'
 import { pauseAllState } from '@/lib/ops/pause'
 import { PauseControl } from '@/components/ops/PauseControl'
 import { AutoRefresh } from '@/components/ops/AutoRefresh'
@@ -13,10 +15,17 @@ import { ConnectPanel } from '@/components/ops/ConnectPanel'
 import { DeliveryChip } from '@/components/ops/DeliveryChip'
 import type { DeliveryStatus } from '@/lib/notify/deliver'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
+import { ActionNote } from '@/components/reports/Note'
 
 export const dynamic = 'force-dynamic'
 
-export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ note?: string; tone?: string }>
+}) {
   const db = getDb()
   if (!db) {
     return (
@@ -26,11 +35,13 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
     )
   }
   const id = (await params).id
-  const [d, projects, shared, all, actors] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db), listActors(db)])
+  const sp = (await searchParams) ?? {}
+  const [d, projects, shared, all, actors, role] = await Promise.all([actorDetail(db, id), listProjects(db), sharedMemory(db), pauseAllState(db), listActors(db), currentRole()])
   if (!d) notFound()
   const { actor: a } = d
   const now = new Date()
   const isAgent = a.kind === 'agent'
+  const canAdmin = isAgent && role === 'owner' && a.id !== 'system' && a.id !== 'owner'
 
   return (
     <PageFrame
@@ -39,6 +50,8 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
         <span className="inline-flex items-center gap-1.5">
           <Presence lastSeen={a.last_seen_at} now={now} />
           {a.paused_at ? <Pill tone="warn">Paused</Pill> : null}
+          {isAgent && !a.active ? <Pill tone="bad">Disabled</Pill> : null}
+          {isAgent && a.can_send ? <Pill tone="accent">May send</Pill> : null}
           {isAgent ? 'Agent' : 'Person'} · last seen <Ago at={a.last_seen_at} now={now} />
           {a.status_note ? ` · “${a.status_note}”` : ''}
         </span>
@@ -46,6 +59,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       actions={<Link href="/agents" className={btnCls}>All agents</Link>}
     >
       <AutoRefresh seconds={15} />
+      <ActionNote note={sp.note} tone={sp.tone} />
       {isAgent ? (
         <Card className={`mb-5 flex flex-wrap items-center gap-3 p-4 ${a.paused_at || all ? 'border-warn/40' : ''}`}>
           <div className="min-w-0 flex-1 text-[12.5px] leading-snug">
@@ -138,6 +152,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <aside className="space-y-5">
+          {canAdmin ? <AgentAdminCard agent={a} renameAction={renameAgentAction} canSendAction={setAgentCanSendAction} activeAction={setAgentActiveAction} /> : null}
           <ConnectPanel db={db} actor={a} agents={actors.filter((x) => x.kind === 'agent')} now={now} />
           <section>
             <SectionHeader title={`Give ${a.display_name} a task`} />

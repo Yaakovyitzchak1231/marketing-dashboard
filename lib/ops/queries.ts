@@ -7,6 +7,8 @@ export interface ActorView {
   harness: string | null
   status_note: string | null
   last_seen_at: Date | null
+  /** lp.actors.can_send: the agent may carry out approved outward sends (a flag, not a gate). */
+  can_send: boolean
   active_tasks: number
   queued_for: number
   locks_held: number
@@ -22,7 +24,7 @@ export interface ActorView {
 
 export async function listActors(q: Queryable): Promise<ActorView[]> {
   const { rows } = await q.query<ActorView>(
-    `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at,
+    `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at, a.can_send,
             (select count(*)::int from lp.tasks t where t.claimed_by = a.id and t.status in ('claimed', 'running', 'blocked', 'needs_approval')) as active_tasks,
             (select count(*)::int from lp.tasks t where t.assigned_to = a.id and t.status = 'queued') as queued_for,
             (select count(*)::int from lp.locks l where l.holder = a.id and l.lease_expires_at > now()) as locks_held,
@@ -167,10 +169,10 @@ export async function feed(q: Queryable, f: { actor?: string | null; kind_prefix
 
 export async function actorDetail(q: Queryable, id: string) {
   const a = await q.query<{
-    id: string; kind: string; display_name: string; harness: string | null; status_note: string | null; last_seen_at: Date | null; can_send: boolean
+    id: string; kind: string; display_name: string; harness: string | null; status_note: string | null; last_seen_at: Date | null; can_send: boolean; active: boolean
     paused_at: Date | null; paused_by_name: string | null; pause_reason: string | null; quiet_shabbos: boolean
   }>(
-    `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at, a.can_send,
+    `select a.id, a.kind, a.display_name, a.harness, a.status_note, a.last_seen_at, a.can_send, a.active,
             a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason, a.quiet_shabbos
        from lp.actors a where a.id = $1`,
     [id],

@@ -494,7 +494,7 @@ export function SharedWorkspace({
                     <input
                       name="reason"
                       data-testid="dismiss-reason"
-                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                     />
                   </label>
                   <p className="text-[12px] text-ink-faint">{COPY.workspace.dismissNote}</p>
@@ -535,7 +535,7 @@ export function SharedWorkspace({
                         name="body"
                         data-testid={`comment-input-${row.id}`}
                         aria-label={COPY.workspace.commentOn(row.label)}
-                        className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted"
+                        className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                       />
                       <button
                         type="submit"

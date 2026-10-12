@@ -11,14 +11,15 @@ import type { SegmentDefinition } from './definition.ts'
 
 async function idsFromCompiled(q: Queryable, compiled: CompiledSegment, limit: number | null): Promise<number[]> {
   const match = matchQuerySql(compiled)
-  const limitSql = limit != null ? ` limit ${Math.floor(limit) + 1}` : ''
+  const params = [...compiled.params]
+  const limitSql = limit != null ? ` limit $${params.push(Math.floor(limit) + 1)}` : ''
   if (compiled.entity === 'company') {
-    const { rows } = await q.query<{ id: string | number }>(`${match}${limitSql}`, compiled.params)
+    const { rows } = await q.query<{ id: string | number }>(`${match}${limitSql}`, params)
     return rows.map((r) => Number(r.id))
   }
   const { rows } = await q.query<{ id: string | number }>(
     `select distinct ct.company_id as id from lp.contacts ct join (${match}) m on m.id = ct.id where ct.company_id is not null${limitSql}`,
-    compiled.params,
+    params,
   )
   return rows.map((r) => Number(r.id))
 }

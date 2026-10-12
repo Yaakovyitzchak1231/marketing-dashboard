@@ -5,7 +5,7 @@
  * -> { run, processed_now, spent_now_usd, done, paused, halted }
  */
 import { NextResponse } from 'next/server'
-import { stepRun, verifyEnvFromProcess } from '@/lib/verify/runs'
+import { stepRun, verifyEnvFromConfig } from '@/lib/verify/runs'
 import { dbOrNull, fail, notConnected, NO_STORE, parseRunId, readJson } from '../../../_shared'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +20,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const chunk = body.chunk == null ? undefined : Number(body.chunk)
   const concurrency = body.concurrency == null ? undefined : Number(body.concurrency)
   try {
-    const report = await stepRun(db, id, verifyEnvFromProcess(), {
+    const env = await verifyEnvFromConfig()
+    const report = await stepRun(db, id, env, {
       chunk: Number.isFinite(chunk) ? chunk : undefined,
       concurrency: Number.isFinite(concurrency) ? concurrency : undefined,
       timeBudgetMs: 40_000,

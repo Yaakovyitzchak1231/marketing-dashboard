@@ -126,6 +126,28 @@ const RAW: Record<string, Op> = {
       return rows
     },
   },
+  validate_campaign_profile: {
+    args: '{profile?, items?}  -- check a portable document; writes nothing. Unknown keys refused.',
+    run: async (_db, _actor, a) => {
+      const { validateProfileDocument } = await import('./transfer.ts')
+      const doc = validateProfileDocument(a)
+      return { ok: true, profile: doc.profile, items: doc.items.map((it) => ({ kind: it.kind, name: it.name, value: it.value ?? null, status: it.status, source: it.source })) }
+    },
+  },
+  export_campaign_profile: {
+    args: '{campaign_id}  -- portable {profile, items} (non-archived items). Creates nothing. 404 if the campaign is missing.',
+    run: async (db, _actor, a) => {
+      const { exportProfileDocument } = await import('./transfer.ts')
+      return exportProfileDocument(db, cid(a.campaign_id))
+    },
+  },
+  import_campaign_profile: {
+    args: '{campaign_id, profile?, items?}  -- merge. Existing live items are left alone. Every new item is source "import". Editor or agent; not a Viewer.',
+    run: async (db, actor, a) => {
+      const { importProfileDocument } = await import('./transfer.ts')
+      return importProfileDocument(db, actor, cid(a.campaign_id), strip(a, 'campaign_id'))
+    },
+  },
 }
 
 export const CAMPAIGN_PROFILE_OPS: Record<string, Op> = Object.fromEntries(Object.entries(RAW).map(([k, v]) => [k, { args: v.args, run: wrap(v.run) }]))
