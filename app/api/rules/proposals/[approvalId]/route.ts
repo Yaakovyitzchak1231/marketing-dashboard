@@ -1,5 +1,7 @@
 /** POST /api/rules/proposals/:approvalId {decision: 'apply'|'reject', note?} -- a person decides an agent's rule proposal. */
 import { NextResponse } from 'next/server'
+import { actorFor } from '@/lib/auth/act'
+import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { applyProposal, rejectProposal } from '@/lib/rules/store'
 import { kickRecompute } from '@/lib/rules/kick'
@@ -8,6 +10,13 @@ import { NO_DB, rulesFail } from '@/lib/rules/http'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request, ctx: { params: Promise<{ approvalId: string }> }) {
+  // Role check first (editor and above); the decision is logged as the signed-in person.
+  let actor: string
+  try {
+    actor = await actorFor('editor')
+  } catch (e) {
+    return authDenied(e)
+  }
   const db = getDb()
   if (!db) return NextResponse.json({ error: NO_DB }, { status: 503 })
   const { approvalId } = await ctx.params
@@ -15,12 +24,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ approvalId: st
   const body = ((await req.json().catch(() => null)) ?? {}) as { decision?: string; note?: string }
   try {
     if (body.decision === 'apply') {
-      const out = await applyProposal(db, 'owner', Number(approvalId))
+      const out = await applyProposal(db, actor, Number(approvalId))
       kickRecompute(db)
       return NextResponse.json({ applied: true, rule_set: out.ruleSet, changes: out.changes })
     }
     if (body.decision === 'reject') {
-      await rejectProposal(db, 'owner', Number(approvalId), typeof body.note === 'string' ? body.note.slice(0, 500) : null)
+      await rejectProposal(db, actor, Number(approvalId), typeof body.note === 'string' ? body.note.slice(0, 500) : null)
       return NextResponse.json({ rejected: true })
     }
     return NextResponse.json({ error: "decision must be 'apply' or 'reject'." }, { status: 400 })

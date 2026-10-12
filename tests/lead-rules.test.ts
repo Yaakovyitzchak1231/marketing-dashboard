@@ -24,6 +24,7 @@ const { holder } = vi.hoisted(() => ({ holder: { db: null as unknown } }))
 vi.mock('server-only', () => ({}))
 vi.mock('next/server', async (orig) => ({ ...(await orig<typeof import('next/server')>()), after: () => undefined }))
 vi.mock('@/lib/db', () => ({ getDb: () => holder.db }))
+vi.mock('@/lib/auth/session', () => ({ currentRole: async () => 'owner', currentActorId: async () => 'owner', currentEmail: async () => null }))
 
 import { PUT as putRules } from '@/app/api/rules/[id]/route'
 import { GET as listRulesRoute } from '@/app/api/rules/route'
