@@ -9,6 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
 import { pauseAgent, pauseAll, resumeAgent, resumeAll } from '@/lib/ops/pause'
+import { renameAgent, setAgentActive, setAgentCanSend } from '@/lib/ops/agents-admin'
 import { actorFor } from '@/lib/auth/act'
 
 function db() {
@@ -55,4 +56,27 @@ export async function resumeAllAction(f: FormData) {
   if (s(f, 'confirm') !== 'yes') return
   await resumeAll(db(), ME)
   refresh()
+}
+
+/** Rename / disable / re-enable / can_send (lib/ops/agents-admin.ts). Owner only, agents only. */
+export async function renameAgentAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  await renameAgent(db(), ME, id, s(f, 'display_name'))
+  refresh(id)
+}
+
+export async function setAgentActiveAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  if (s(f, 'confirm') !== 'yes') return
+  await setAgentActive(db(), ME, id, s(f, 'active') === 'true')
+  refresh(id)
+}
+
+export async function setAgentCanSendAction(f: FormData) {
+  const ME = await actorFor('owner')
+  const id = s(f, 'agent_id')
+  await setAgentCanSend(db(), ME, id, s(f, 'can_send') === 'true')
+  refresh(id)
 }
