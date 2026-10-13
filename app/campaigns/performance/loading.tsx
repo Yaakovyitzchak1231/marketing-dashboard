@@ -13,8 +13,8 @@ export default function Loading() {
       <div>
         <div className="mx-auto flex max-w-shell flex-col gap-3 px-4 pt-5 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pt-6">
           <div>
-            <div className="text-[15px] font-semibold text-ink">Campaigns</div>
-            <div className="mt-0.5 text-[12px] text-ink-faint">Loading live numbers from Instantly…</div>
+            <div className="text-base font-semibold text-ink">Campaigns</div>
+            <div className="mt-0.5 text-xs text-ink-faint">Loading live numbers from Instantly…</div>
           </div>
           <Block className="h-8 w-[260px]" />
         </div>
