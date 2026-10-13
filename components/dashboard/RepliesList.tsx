@@ -73,7 +73,7 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
       <SectionHeader
         id="replies-heading"
         title="Replies waiting (from Instantly)"
-        meta={leads.length ? `${waiting.length} waiting · ${leads.length} replied in range · newest first` : undefined}
+        meta={leads.length ? `${waiting.length} waiting · ${leads.length} replied in range (newest replies only) · interested first, then longest wait` : undefined}
       />
       <Card>
         {waiting.length === 0 ? (
