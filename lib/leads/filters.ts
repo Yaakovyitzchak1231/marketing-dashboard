@@ -54,6 +54,10 @@ export interface LeadFilters {
   verification?: VerificationStatus
   hasEmail?: boolean
   ownerKnown?: boolean
+  /** Has a verified, sendable email not yet in a campaign: the Overview "Ready to send" tile. See READY_CONTACT_SQL. */
+  ready?: boolean
+  /** Has any Instantly activity (a campaign_touches row): the Overview "In campaigns" tile. */
+  touched?: boolean
   /** lp.tasks id of a Find-leads job: companies with lp.sources kind='engine', source_ref='find_leads:<id>'. */
   job?: number
   /** Latest campaign name, or NONE. */
@@ -113,6 +117,8 @@ export function parseLeadQuery(p: Params): LeadQuery {
     verification: oneOf(one(p.verification), VERIFICATION_STATUSES),
     hasEmail: yesNo(one(p.email)),
     ownerKnown: yesNo(one(p.owner)),
+    ready: yesNo(one(p.ready)),
+    touched: yesNo(one(p.touched)),
     job,
     campaign: one(p.campaign)?.slice(0, 300),
   }
@@ -139,6 +145,8 @@ export function leadQueryToParams(q: LeadQuery): URLSearchParams {
   if (f.verification) u.set('verification', f.verification)
   if (f.hasEmail !== undefined) u.set('email', f.hasEmail ? 'yes' : 'no')
   if (f.ownerKnown !== undefined) u.set('owner', f.ownerKnown ? 'yes' : 'no')
+  if (f.ready !== undefined) u.set('ready', f.ready ? 'yes' : 'no')
+  if (f.touched !== undefined) u.set('touched', f.touched ? 'yes' : 'no')
   if (f.job !== undefined) u.set('job', String(f.job))
   if (f.campaign) u.set('campaign', f.campaign)
   if (q.sort !== 'updated') u.set('sort', q.sort)

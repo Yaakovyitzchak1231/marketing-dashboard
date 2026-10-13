@@ -50,11 +50,11 @@ export default async function OverviewPage() {
                 note={`${fmt(o.readiness.personalized)} personalized · ${fmt(o.readiness.generic)} generic · ${fmt(o.readiness.parked)} parked${o.readiness.rescoring ? ' · re-scoring' : ''}`}
               />
             ) : (
-              <Tile label="Ready to send" value={o.readyToSend} href="/leads?verification=valid" note="verified emails not in a campaign (lead rules not scored yet)" />
+              <Tile label="Ready to send" value={o.readyToSend} href="/leads?ready=yes" note={`leads with a verified email not yet in a campaign · ${fmt(o.readyToSendEmails)} emails (lead rules not scored yet)`} />
             )}
             <Tile label="Needs verification" value={o.needsVerificationCompanies} href="/leads?view=verify" note={`${fmt(o.unverifiedContacts)} unverified emails`} />
             <Tile label="Needs research" value={o.needsResearch} href="/leads?view=research" note={o.researchQueued ? `${fmt(o.researchQueued)} more queued` : 'no site or owner work done'} />
-            <Tile label="In campaigns" value={o.inCampaigns} href="/leads?view=campaign" note="leads with Instantly activity" />
+            <Tile label="In campaigns" value={o.inCampaigns} href="/leads?touched=yes" note="leads with any Instantly activity" />
           </div>
         </section>
 

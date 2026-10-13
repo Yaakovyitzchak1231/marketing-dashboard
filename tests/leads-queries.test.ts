@@ -214,12 +214,20 @@ describe('lead queries (real Postgres via PGlite)', () => {
     expect(o.needsResearch).toBe(2)
     expect(o.needsVerificationCompanies).toBe(1)
     expect(o.unverifiedContacts).toBe(1)
-    expect(o.readyToSend).toBe(2) // info@gemco + sales@ringbros (agency already replied)
+    expect(o.readyToSend).toBe(2) // companies: gemco + ringbros (agency already replied)
+    expect(o.readyToSendEmails).toBe(2) // info@gemco + sales@ringbros
     expect(o.inCampaigns).toBe(2)
     expect(o.repliesWaiting).toBe(1)
     expect(o.interested).toBe(1)
     expect(o.recent.length).toBeGreaterThan(0)
     expect(o.tasksActive).toBe(0)
+  })
+
+  it('overview tiles count exactly what the page they link to lists', async () => {
+    const o = await loadOverview(db)
+    expect((await listLeads(db, q('ready=yes'))).total).toBe(o.readyToSend)
+    expect((await listLeads(db, q('touched=yes'))).total).toBe(o.inCampaigns)
+    expect((await listLeads(db, q('view=verify'))).total).toBe(o.needsVerificationCompanies)
   })
 
   it('facets list only stored values', async () => {
