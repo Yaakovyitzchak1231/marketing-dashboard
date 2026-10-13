@@ -66,8 +66,8 @@ export function LeadsTable({
   return (
     <div>
       <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
-        <table className="hidden w-full text-left text-[13px] md:table" data-testid="leads-table">
-          <thead className="border-b border-line bg-canvas/60 text-[11px] uppercase tracking-[0.05em] text-ink-faint">
+        <table className="hidden w-full text-left text-sm md:table" data-testid="leads-table">
+          <thead className="border-b border-line bg-canvas/60 text-2xs uppercase tracking-[0.05em] text-ink-faint">
             <tr>
               <th className="w-9 py-2 pl-3">
                 <input type="checkbox" aria-label="Select all on this page" checked={allOn} onChange={toggleAll} className="accent-accent" />
@@ -98,11 +98,11 @@ export function LeadsTable({
                 <td className="max-w-[260px] px-3 py-2 align-top">
                   <div className="flex items-baseline gap-2">
                     <InlineEditCell type="company" id={r.id} field="name" value={r.name} label={`Name for ${r.name}`} className="font-medium text-ink" />
-                    <Link href={`/leads/${r.id}`} prefetch={false} className="text-[11px] text-ink-faint hover:text-accent">
+                    <Link href={`/leads/${r.id}`} prefetch={false} className="text-2xs text-ink-faint hover:text-accent">
                       Open →
                     </Link>
                   </div>
-                  <div className="truncate text-[12px] text-ink-faint" title={[r.website_domain, r.owner_name].filter(Boolean).join(' · ') || undefined}>
+                  <div className="truncate text-xs text-ink-faint" title={[r.website_domain, r.owner_name].filter(Boolean).join(' · ') || undefined}>
                     {[r.website_domain, r.owner_name].filter(Boolean).join(' · ') || <span className="text-unavailable">No site or owner yet</span>}
                   </div>
                   {showResearch ? (
@@ -124,7 +124,7 @@ export function LeadsTable({
                 </td>
                 <td className="max-w-[220px] truncate px-3 py-2 align-top text-ink-muted" title={r.primary_email ?? undefined}>
                   {r.primary_email ?? <Dash />}
-                  {r.contact_count > 1 ? <span className="ml-1 text-[11px] text-ink-faint tabular-nums">+{r.contact_count - 1}</span> : null}
+                  {r.contact_count > 1 ? <span className="ml-1 text-2xs text-ink-faint tabular-nums">+{r.contact_count - 1}</span> : null}
                 </td>
                 <td className="px-3 py-2 align-top">{r.primary_verification ? <VerificationPill status={r.primary_verification} /> : <Dash />}</td>
                 <td className="max-w-[180px] truncate px-3 py-2 align-top text-ink-muted" title={r.campaign_name ?? undefined}>{r.campaign_name ?? <Dash />}</td>
@@ -135,7 +135,7 @@ export function LeadsTable({
         </table>
 
         <ul className="divide-y divide-line-soft md:hidden" data-testid="leads-list">
-          <li className="flex items-center gap-3 bg-canvas/60 px-3 py-2 text-[12px] text-ink-faint">
+          <li className="flex items-center gap-3 bg-canvas/60 px-3 py-2 text-xs text-ink-faint">
             <input type="checkbox" aria-label="Select all on this page" checked={allOn} onChange={toggleAll} className="accent-accent" />
             <span>Select all</span>
           </li>
@@ -144,19 +144,19 @@ export function LeadsTable({
               <input type="checkbox" aria-label={`Select ${r.name}`} checked={sel.has(r.id)} onChange={() => toggle(r.id)} className="mt-1 accent-accent" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <Link href={`/leads/${r.id}`} prefetch={false} className="truncate text-[14px] font-medium text-ink">
+                  <Link href={`/leads/${r.id}`} prefetch={false} className="truncate text-sm font-medium text-ink">
                     {r.name}
                   </Link>
-                  <span className="shrink-0 text-[11px] tabular-nums text-ink-faint">{place(r.city, r.state) ?? ''}</span>
+                  <span className="shrink-0 text-2xs tabular-nums text-ink-faint">{place(r.city, r.state) ?? ''}</span>
                 </div>
-                <div className="truncate text-[12px] text-ink-muted" title={r.primary_email ?? r.website_domain ?? undefined}>{r.primary_email ?? r.website_domain ?? 'No email yet'}</div>
+                <div className="truncate text-xs text-ink-muted" title={r.primary_email ?? r.website_domain ?? undefined}>{r.primary_email ?? r.website_domain ?? 'No email yet'}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   <StagePill stage={r.stage} />
                   {r.score != null ? <ScorePill score={r.score} thresholdLabel={r.score_threshold} title={r.score_model ?? undefined} /> : null}
                   {r.primary_verification ? <VerificationPill status={r.primary_verification} /> : null}
                   {showResearch ? <ResearchPill status={r.research_status} /> : null}
                 </div>
-                {updatedLabels[r.id] ? <div className="mt-1 text-[11px] tabular-nums text-ink-faint">Updated {updatedLabels[r.id]}</div> : null}
+                {updatedLabels[r.id] ? <div className="mt-1 text-2xs tabular-nums text-ink-faint">Updated {updatedLabels[r.id]}</div> : null}
               </div>
             </li>
           ))}
