@@ -53,22 +53,22 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       <AutoRefresh seconds={15} />
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-5">
-          <Card className="divide-y divide-line-soft text-[13px]">
+          <Card className="divide-y divide-line-soft text-sm">
             <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
               <div>
-                <p className="text-[11.5px] text-ink-faint">Assigned to</p>
+                <p className="text-xs text-ink-faint">Assigned to</p>
                 <p className="mt-0.5"><ActorLink id={t.assigned_to} name={t.assigned_name} /></p>
               </div>
               <div>
-                <p className="text-[11.5px] text-ink-faint">Working on it</p>
+                <p className="text-xs text-ink-faint">Working on it</p>
                 <p className="mt-0.5">{t.claimed_by ? <ActorLink id={t.claimed_by} name={t.claimed_name} /> : <span className="text-ink-faint">nobody yet</span>}</p>
               </div>
               <div>
-                <p className="text-[11.5px] text-ink-faint">Last check-in</p>
+                <p className="text-xs text-ink-faint">Last check-in</p>
                 <p className="mt-0.5"><Ago at={t.heartbeat_at} now={now} /></p>
               </div>
               <div>
-                <p className="text-[11.5px] text-ink-faint">Lease</p>
+                <p className="text-xs text-ink-faint">Lease</p>
                 <p className="mt-0.5">{t.lease_expires_at ? <>ends <Ago at={t.lease_expires_at} now={now} /></> : <span className="text-ink-faint">none</span>}</p>
               </div>
             </div>
@@ -79,11 +79,11 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             ) : null}
             {t.handoff_note ? <p className="px-4 py-2.5"><span className="text-ink-faint">Handoff note: </span>{t.handoff_note}</p> : null}
             {t.error ? <p className="px-4 py-2.5 text-bad">Problem: {t.error}</p> : null}
-            {t.report ? <div className="whitespace-pre-wrap px-4 py-3 leading-relaxed"><p className="mb-1 text-[11.5px] text-ink-faint">Report</p>{t.report}</div> : null}
+            {t.report ? <div className="whitespace-pre-wrap px-4 py-3 leading-relaxed"><p className="mb-1 text-xs text-ink-faint">Report</p>{t.report}</div> : null}
             {t.payload && Object.keys(t.payload as object).length ? (
               <details className="px-4 py-2.5">
-                <summary className="cursor-pointer text-[12px] text-ink-muted">Job details</summary>
-                <pre className="mt-2 overflow-x-auto rounded bg-canvas p-2 text-[11.5px] text-ink-muted">{JSON.stringify(t.payload, null, 2)}</pre>
+                <summary className="cursor-pointer text-xs text-ink-muted">Job details</summary>
+                <pre className="mt-2 overflow-x-auto rounded bg-canvas p-2 text-xs text-ink-muted">{JSON.stringify(t.payload, null, 2)}</pre>
               </details>
             ) : null}
           </Card>
@@ -91,7 +91,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           {approvals.length ? (
             <section>
               <SectionHeader title="Approvals" />
-              <Card className="divide-y divide-line-soft text-[13px]">
+              <Card className="divide-y divide-line-soft text-sm">
                 {approvals.map((a) => (
                   <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <span>{a.summary}</span>
@@ -99,7 +99,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   </div>
                 ))}
               </Card>
-              <p className="mt-1 text-[12px] text-ink-faint">Decide pending requests on the <Link className="text-accent" href="/activity">Activity</Link> screen.</p>
+              <p className="mt-1 text-xs text-ink-faint">Decide pending requests on the <Link className="text-accent" href="/activity">Activity</Link> screen.</p>
             </section>
           ) : null}
 
@@ -108,8 +108,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             <Card className="divide-y divide-line-soft">
               {comments.length ? (
                 comments.map((c) => (
-                  <div key={c.id} className="px-4 py-3 text-[13px]">
-                    <p className="text-[12px] text-ink-faint">
+                  <div key={c.id} className="px-4 py-3 text-sm">
+                    <p className="text-xs text-ink-faint">
                       <ActorLink id={c.author} name={c.author_name} /> {COMMENT_LABEL[c.kind] ?? ''} · <Ago at={c.created_at} now={now} />
                     </p>
                     <p className="mt-1 whitespace-pre-wrap leading-relaxed text-ink">
@@ -118,7 +118,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   </div>
                 ))
               ) : (
-                <p className="px-4 py-5 text-[13px] text-ink-faint">No notes yet.</p>
+                <p className="px-4 py-5 text-sm text-ink-faint">No notes yet.</p>
               )}
               <form action={commentAction} className="space-y-2 p-3">
                 <input type="hidden" name="task_id" value={t.id} />
@@ -142,7 +142,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 ) : null}
                 <form action={handoffAction} className="space-y-2">
                   <input type="hidden" name="task_id" value={t.id} />
-                  <p className="text-[12px] font-medium text-ink-muted">Hand off</p>
+                  <p className="text-xs font-medium text-ink-muted">Hand off</p>
                   <select name="to" className={inputCls} defaultValue="tab">
                     {actors.map((a) => (
                       <option key={a.id} value={a.id}>{a.display_name}</option>
@@ -168,7 +168,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <SectionHeader title="Who was told" />
               <Card className="divide-y divide-line-soft">
                 {told.map((n) => (
-                  <div key={n.notification_id} className="px-3 py-2 text-[12px] leading-snug">
+                  <div key={n.notification_id} className="px-3 py-2 text-xs leading-snug">
                     <p className="flex items-baseline gap-2">
                       <span className="font-medium text-ink">{n.recipient_name}</span>
                       <span className="ml-auto"><DeliveryChip status={n.status} error={n.last_error} human={n.recipient_kind === 'human'} /></span>
@@ -183,7 +183,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             <SectionHeader title="History" />
             <Card className="divide-y divide-line-soft">
               {events.map((e) => (
-                <p key={e.id} className="px-3 py-2 text-[12px] leading-snug text-ink-muted">
+                <p key={e.id} className="px-3 py-2 text-xs leading-snug text-ink-muted">
                   {e.summary} <span className="text-ink-faint">· <Ago at={e.at} now={now} /></span>
                 </p>
               ))}
