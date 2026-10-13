@@ -17,6 +17,7 @@ import { CommentLayer, VIEW_ONLY_NOTE, type CommentActions } from '@/components/
 import { PageComments, listMyComments } from '@/components/comments/PageComments'
 import { resetRoleCache, VIEWER_REFUSAL } from '@/components/auth/useRole'
 import { putLocal } from '@/lib/page-comments/drafts'
+import { PreferencesProvider, REVIEW_KEY } from '@/components/shell/preferences'
 import { GET } from '@/app/api/page-comments/route'
 
 afterEach(() => {
@@ -49,10 +50,33 @@ const noWrites = () => {
   }
 }
 
+/** The comment layer is part of Review mode (off by default; the provider reads it from localStorage). */
+function renderInReviewMode() {
+  localStorage.setItem(REVIEW_KEY, '1')
+  return render(
+    <PreferencesProvider>
+      <PageComments />
+    </PreferencesProvider>,
+  )
+}
+
 describe('page comments for a viewer', () => {
+  it('renders nothing outside Review mode and makes no request', async () => {
+    const f = stubFetch('editor')
+    const { container } = render(
+      <PreferencesProvider>
+        <PageComments />
+      </PreferencesProvider>,
+    )
+    await act(async () => {})
+    expect(container).toBeEmptyDOMElement()
+    expect(f).not.toHaveBeenCalled()
+    noWrites()
+  })
+
   it('lists over GET, never calls a server action, and shows view-only instead of Comment', async () => {
     const f = stubFetch('viewer')
-    render(<PageComments />)
+    renderInReviewMode()
     await waitFor(() => expect(screen.getByText(VIEW_ONLY_NOTE)).toBeInTheDocument())
     // The layer renders as soon as the role is known; its list GET starts in an effect just after,
     // so wait for the call instead of asserting it on the same tick (it raced under CI load).
@@ -65,7 +89,7 @@ describe('page comments for a viewer', () => {
 
   it('an editor keeps the Comment button; the list still comes over GET', async () => {
     const f = stubFetch('editor')
-    render(<PageComments />)
+    renderInReviewMode()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Comment' })).toBeInTheDocument())
     expect(screen.queryByText(VIEW_ONLY_NOTE)).toBeNull()
     // The layer renders as soon as the role is known; its list GET starts in an effect just after,
