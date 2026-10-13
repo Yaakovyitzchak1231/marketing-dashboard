@@ -340,6 +340,15 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
     }, 350)
   }, [pathname, pins])
 
+  // Leaving a page closes its comment box: the layer lives in the root layout, so without this an
+  // open box followed you onto the next page (comment #71). Typing in it is still autosaved.
+  useEffect(() => {
+    setOpenId((o) => {
+      const p = o ? pinsRef.current.find((x) => x.client_id === o) : undefined
+      return p && !onPage(p, pathname) ? null : o
+    })
+  }, [pathname])
+
   const goTo = useCallback(
     (p: Pin) => {
       setTrayOpen(false)
@@ -459,7 +468,7 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
   const drafts = pins.filter((p) => p.status === 'draft')
   const sentPins = pins.filter((p) => p.status !== 'draft' && (showResolved || p.status !== 'resolved'))
   const resolvedCount = pins.filter((p) => p.status === 'resolved').length
-  const open = openId ? pins.find((p) => p.client_id === openId) ?? null : null
+  const open = openId ? pins.find((p) => p.client_id === openId && onPage(p, pathname)) ?? null : null
   const openSpot = open ? spots[open.client_id] ?? spotFor(open, document) : null
   const ui = { [UI_ATTR]: '' }
 

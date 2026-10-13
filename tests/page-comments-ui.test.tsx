@@ -323,6 +323,33 @@ describe('the comment layer', () => {
     expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
   })
 
+  it('an open comment box closes when you leave its page, and pins still open on their own page (comment #71)', async () => {
+    // Opened from a link on /leads (?pin=66), then the nav goes to /rules: the box must not follow.
+    setPathname('/leads')
+    window.history.replaceState(null, '', '/leads?pin=66')
+    const sent = view({ id: 66, client_id: 'sent-0000066', page_path: '/leads', status: 'sent', body: 'add timing', sent_at: '2026-10-09T10:01:00.000Z' })
+    const other = view({ id: 71, client_id: 'sent-0000071', page_path: '/rules', status: 'sent', body: 'Scrolling down does not work', sent_at: '2026-10-09T10:02:00.000Z' })
+    const { a } = fakeActions({ list: vi.fn(async () => ({ ok: true as const, comments: [sent, other], recipients: [{ id: 'tab', display_name: 'Tab' }] })) })
+    const { rerender } = render(<CommentLayer actions={a} />)
+    await act(async () => {})
+    expect(screen.getByRole('dialog', { name: 'Comment' })).toHaveTextContent('add timing')
+
+    setPathname('/rules')
+    window.history.replaceState(null, '', '/rules')
+    await act(async () => { rerender(<CommentLayer actions={a} />) })
+    expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
+
+    // A pin that belongs to /rules still opens there as usual.
+    fireEvent.click(screen.getByRole('button', { name: /Scrolling down does not work/ }))
+    expect(screen.getByRole('dialog', { name: 'Comment' })).toHaveTextContent('Scrolling down does not work')
+
+    // Coming back to /leads does not bring the old box back.
+    setPathname('/leads')
+    window.history.replaceState(null, '', '/leads')
+    await act(async () => { rerender(<CommentLayer actions={a} />) })
+    expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
+  })
+
   it('a failed discard puts the draft back instead of hiding it', async () => {
     vi.useFakeTimers()
     const main = page()
