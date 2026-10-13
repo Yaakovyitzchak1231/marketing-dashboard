@@ -103,7 +103,7 @@ export function DailyChart({ daily }: { daily: DailyPoint[] }) {
         }
       />
       <Card className="px-3 pb-2 pt-3 sm:px-4">
-        <div className="mb-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 px-1 text-[12px]" aria-live="polite">
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 px-1 text-xs" aria-live="polite">
           <span className="font-medium text-ink">{f ? formatDay(f.date) : ''}</span>
           <Readout label="sent" v={f ? f.sent : null} />
           <Readout label="replies" one="reply" v={f ? f.replied : null} />
@@ -162,11 +162,11 @@ export function DailyChart({ daily }: { daily: DailyPoint[] }) {
             )
           })}
         </svg>
-          <span className="pointer-events-none absolute left-1 top-1 text-[10px] text-ink-faint">
+          <span className="pointer-events-none absolute left-1 top-1 text-2xs text-ink-faint">
             Sent · scale {formatCount(sentMax)}/day
           </span>
           <span
-            className="pointer-events-none absolute left-1 text-[10px] text-ink-faint"
+            className="pointer-events-none absolute left-1 text-2xs text-ink-faint"
             style={{ top: `calc(${toPct(botTop / H)} + 3px)` }}
           >
             Replies · scale {formatCount(replyMax)}/day
@@ -177,7 +177,7 @@ export function DailyChart({ daily }: { daily: DailyPoint[] }) {
             (i % labelEvery === 0 && n - 1 - i >= labelEvery / 2) || i === n - 1 ? (
               <span
                 key={d.date}
-                className="absolute top-0 whitespace-nowrap text-[10px] text-ink-faint"
+                className="absolute top-0 whitespace-nowrap text-2xs text-ink-faint"
                 style={
                   i === n - 1
                     ? { right: 0 }
