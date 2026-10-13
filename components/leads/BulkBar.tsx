@@ -41,7 +41,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
   if (n === 0) {
     // The selection clears after an action; its result stays readable.
     return note ? (
-      <p role="status" className={`mt-3 text-[12px] ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
+      <p role="status" className={`mt-3 text-xs ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
         {note.text}
       </p>
     ) : null
@@ -175,9 +175,9 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
     <div
       role="region"
       aria-label="Selected leads"
-      className="sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-card border border-line bg-surface px-3 py-2 shadow-card"
+      className="sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-control border border-line bg-surface px-3 py-2 shadow-card"
     >
-      <span className="mr-1 text-[12px] font-medium tabular-nums text-ink">{n} selected</span>
+      <span className="mr-1 text-xs font-medium tabular-nums text-ink">{n} selected</span>
       <button type="button" className={`${BUTTON_PRIMARY} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && busy} onClick={research} {...(viewer ? VIEW_ONLY_PROPS : {})}>
         Research selected
       </button>
@@ -199,7 +199,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             setListChoice(e.target.value)
             if (e.target.value) setNewListName('')
           }}
-          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+          className="rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink"
         >
           <option value="">Add to list…</option>
           {lists.map((l) => (
@@ -214,7 +214,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             value={newListName}
             onChange={(e) => setNewListName(e.target.value)}
             placeholder="New list name"
-            className="w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+            className="w-28 rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink"
           />
         ) : null}
         <button type="button" className={`${BUTTON} ${viewer ? VIEW_ONLY_DIM : ''}`} disabled={!viewer && (busy || (!listChoice && !newListName.trim()))} onClick={addToList} {...(viewer ? VIEW_ONLY_PROPS : {})}>
@@ -237,7 +237,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
           id="bulk-stage"
           value={stage}
           onChange={(e) => setStage(e.target.value as Stage | '')}
-          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+          className="rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink"
         >
           <option value="">Set stage…</option>
           {STAGES.map((s) => (
@@ -261,7 +261,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
             setEditField(e.target.value)
             setConfirming(false)
           }}
-          className="rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+          className="rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink"
         >
           <option value="">Edit field…</option>
           {BULK_FIELD_CHOICES.map((f) => (
@@ -283,7 +283,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
                 setConfirming(false)
               }}
               placeholder="Empty clears it"
-              className="w-32 rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink"
+              className="w-32 rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink"
             />
           </>
         ) : null}
@@ -292,7 +292,7 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
         </button>
       </span>
       {confirming && editField && !viewer ? (
-        <span role="group" aria-label="Confirm bulk edit" className="flex w-full flex-wrap items-center gap-2 border-t border-line-soft pt-2 text-[12px] text-ink">
+        <span role="group" aria-label="Confirm bulk edit" className="flex w-full flex-wrap items-center gap-2 border-t border-line-soft pt-2 text-xs text-ink">
           <span className="tabular-nums">
             {editValue.trim() === ''
               ? `Clear ${fieldLabel} on ${n} lead${n === 1 ? '' : 's'}?`
@@ -306,11 +306,11 @@ export function BulkBar({ selected, onDone }: { selected: Selected; onDone: () =
           </button>
         </span>
       ) : null}
-      <button type="button" className="ml-auto text-[12px] text-ink-faint hover:text-ink" onClick={onDone}>
+      <button type="button" className="ml-auto text-xs text-ink-faint hover:text-ink" onClick={onDone}>
         Clear
       </button>
       {note ? (
-        <p role="status" className={`w-full text-[12px] ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
+        <p role="status" className={`w-full text-xs ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
           {note.text}
         </p>
       ) : null}
