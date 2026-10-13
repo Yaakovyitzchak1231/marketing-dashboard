@@ -50,20 +50,20 @@ function LeadTable({ leads, showReason }: { leads: PreviewLead[]; showReason?: b
           <tr key={l.contact_id} className="border-b border-line-soft last:border-0">
             <td className={TD}>
               <Link href={`/leads/${l.company_id}`} prefetch={false} className="hover:text-accent">{l.company}</Link>
-              {l.first_name ? <div className="text-[11px] text-ink-faint">{[l.first_name, l.last_name].filter(Boolean).join(' ')}</div> : null}
+              {l.first_name ? <div className="text-2xs text-ink-faint">{[l.first_name, l.last_name].filter(Boolean).join(' ')}</div> : null}
             </td>
             <td className={`${TD} break-all`}>{l.email ?? <span className="text-unavailable">none</span>}</td>
             <td className={TD}>
               {showReason && l.excluded ? (
                 <>
                   {EXCLUDE_WORDS[l.excluded] ?? l.excluded}
-                  {l.park_reasons?.length ? <div className="text-[11px] text-ink-faint">{l.park_reasons.join(' · ')}</div> : null}
+                  {l.park_reasons?.length ? <div className="text-2xs text-ink-faint">{l.park_reasons.join(' · ')}</div> : null}
                 </>
               ) : (
                 <>
                   {l.tier === 'ready_personalized' ? 'Ready-personalized' : l.tier === 'ready_generic' ? 'Ready-generic' : l.verification_status}
                   {l.merge && Object.keys(l.merge).length ? (
-                    <div className="text-[11px] text-ink-faint [overflow-wrap:anywhere]">{Object.entries(l.merge).map(([k, v]) => `${k}: ${v}`).join(' · ')}</div>
+                    <div className="text-2xs text-ink-faint [overflow-wrap:anywhere]">{Object.entries(l.merge).map(([k, v]) => `${k}: ${v}`).join(' · ')}</div>
                   ) : null}
                 </>
               )}
@@ -118,7 +118,7 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
     >
       <ActionNote note={sp.note} tone={sp.tone} />
       {!enabled ? (
-        <p className="mb-4 rounded-card border border-line bg-surface px-3 py-2 text-[12px] text-ink-muted">
+        <p className="mb-4 rounded-control border border-line bg-surface px-3 py-2 text-xs text-ink-muted">
           Instantly actions are off on this deploy (no Instantly key, or INSTANTLY_ACTIONS=off). You can preview, but nothing can be sent.
         </p>
       ) : null}
@@ -129,31 +129,31 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
           <Card className="mb-4 px-4 py-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-[12px] text-ink-faint">Campaign</p>
-                <p className="text-[15px] font-semibold text-ink">{action.campaign_name ?? action.campaign_id}</p>
+                <p className="text-xs text-ink-faint">Campaign</p>
+                <p className="text-base font-semibold text-ink">{action.campaign_name ?? action.campaign_id}</p>
               </div>
               <Pill tone={action.status === 'done' ? 'good' : action.status === 'preview' || action.status === 'awaiting_approval' ? 'accent' : action.status === 'failed' || action.status === 'unknown' ? 'bad' : 'neutral'}>
                 {STATUS_WORD[action.status]}
               </Pill>
             </div>
-            <p className="mt-3 text-[13px] text-ink">
+            <p className="mt-3 text-sm text-ink">
               <strong className="font-numeric tabular-nums">{readyN}</strong> ready to add ·{' '}
               <span className="font-numeric tabular-nums">{leftN}</span> left out
             </p>
-            {action.preview?.instantlyNote ? <p className="mt-1 text-[12px] text-ink-faint">{action.preview.instantlyNote}</p> : null}
+            {action.preview?.instantlyNote ? <p className="mt-1 text-xs text-ink-faint">{action.preview.instantlyNote}</p> : null}
             {action.preview?.rules ? (
-              <p className="mt-1 text-[12px] text-ink-faint">
+              <p className="mt-1 text-xs text-ink-faint">
                 Scored with the lead rules <Link href={`/rules/${action.preview.rules.id}`} className="text-accent">{action.preview.rules.name}</Link> (v{action.preview.rules.version})
                 {action.preview.batch === 'role-inbox' ? ' · role-inbox batch: role inboxes only, tagged tab_batch=role-inbox' : ''}. Re-checked when you confirm.
               </p>
             ) : null}
 
             {action.status === 'awaiting_approval' ? (
-              <p className="mt-2 text-[12px] text-ink-muted">
+              <p className="mt-2 text-xs text-ink-muted">
                 An agent asked for this{action.requested_reason ? `: ${action.requested_reason}` : ''}. Approve or reject it in <Link className="text-accent" href="/activity" prefetch={false}>Activity › Needs your OK</Link>.
               </p>
             ) : null}
-            {action.status === 'rejected' && action.decision_note ? <p className="mt-2 text-[12px] text-ink-muted">Rejected: {action.decision_note}</p> : null}
+            {action.status === 'rejected' && action.decision_note ? <p className="mt-2 text-xs text-ink-muted">Rejected: {action.decision_note}</p> : null}
             {action.status === 'preview' ? (
               <div className="mt-3">
                 <ConfirmAction
@@ -169,12 +169,12 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
               </div>
             ) : null}
             {action.result ? (
-              <p className="mt-3 text-[12px] text-ink-muted">
+              <p className="mt-3 text-xs text-ink-muted">
                 Instantly’s answer: {typeof action.result.leads_uploaded === 'number' ? `${action.result.leads_uploaded} added` : 'no count returned'}
                 {action.error ? ` · ${action.error}` : ''}
               </p>
             ) : action.error ? (
-              <p className="mt-3 text-[12px] text-bad">{action.error}</p>
+              <p className="mt-3 text-xs text-bad">{action.error}</p>
             ) : null}
           </Card>
           {action.preview?.ready.length ? (
@@ -194,8 +194,8 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
         <Card><EmptyNote>Select leads on the Leads screen, then choose “Add to Instantly”.</EmptyNote></Card>
       ) : (
         <Card className="mb-6 px-4 py-4">
-          <p className="text-[13px] text-ink"><strong className="font-numeric tabular-nums">{companyIds.length}</strong> leads selected. Pick the campaign, then you’ll see exactly who would be added.</p>
-          {campaignError ? <p className="mt-2 text-[12px] text-bad">{campaignError}</p> : null}
+          <p className="text-sm text-ink"><strong className="font-numeric tabular-nums">{companyIds.length}</strong> leads selected. Pick the campaign, then you’ll see exactly who would be added.</p>
+          {campaignError ? <p className="mt-2 text-xs text-bad">{campaignError}</p> : null}
           <form action={previewAddLeadsAction} className="mt-3 flex flex-wrap items-center gap-2">
             <input type="hidden" name="company_ids" value={companyIds.join(',')} />
             <select name="campaign_id" required className={`${inputCls} max-w-[420px]`} aria-label="Campaign" defaultValue="">
@@ -217,13 +217,13 @@ export default async function AddToInstantlyPage({ searchParams }: { searchParam
       {recent.length ? (
         <section>
           <SectionHeader title="Recent Instantly changes from this dashboard" />
-          <Card className="divide-y divide-line-soft text-[13px]">
+          <Card className="divide-y divide-line-soft text-sm">
             {recent.map((r) => (
               <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
                 <span>
                   {r.kind === 'add_leads' ? `Add ${r.contact_ids.length} leads` : r.kind === 'pause' ? 'Pause' : 'Resume'} · {r.campaign_name ?? r.campaign_id}
                 </span>
-                <span className="text-[12px] text-ink-faint">{STATUS_WORD[r.status]}</span>
+                <span className="text-xs text-ink-faint">{STATUS_WORD[r.status]}</span>
               </div>
             ))}
           </Card>
