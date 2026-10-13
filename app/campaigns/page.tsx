@@ -68,13 +68,13 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
     }
     return `/campaigns${u.size ? `?${u}` : ''}`
   }
-  const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-[12px] ${on ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
+  const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-xs ${on ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
 
   const table = (rows: typeof campaigns, empty: string) =>
     rows.length ? (
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-[13px]">
-          <thead className="border-b border-line text-[11.5px] uppercase tracking-[0.05em] text-ink-faint">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-[0.05em] text-ink-faint">
             <tr>
               <th className="px-4 py-2 font-medium">Campaign</th>
               <th className="px-3 py-2 font-medium">Pool</th>
@@ -90,7 +90,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
               <tr key={c.id} className="border-b border-line-soft last:border-0">
                 <td className="px-4 py-2.5">
                   <Link href={`/campaigns/${c.id}`} className="font-medium text-ink hover:text-accent">{c.name}</Link>
-                  {c.goal ? <p className="mt-0.5 line-clamp-1 text-[12px] text-ink-faint">{c.goal}</p> : null}
+                  {c.goal ? <p className="mt-0.5 line-clamp-1 text-xs text-ink-faint">{c.goal}</p> : null}
                 </td>
                 <td className="px-3 py-2.5 text-ink-muted">{poolLabel[c.pool] ?? c.pool}</td>
                 <td className="px-3 py-2.5"><Pill tone={c.status === 'active' ? 'good' : c.status_archived ? 'neutral' : c.status === 'paused' ? 'warn' : 'accent'}>{c.status_label}</Pill></td>
@@ -102,7 +102,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                     <form action={archiveCampaignAction} className="inline-flex items-center gap-1.5">
                       <input type="hidden" name="campaign_id" value={c.id} />
                       <input type="hidden" name="return_to" value="/campaigns" />
-                      <label className="flex items-center gap-1 text-[11.5px] text-ink-faint">
+                      <label className="flex items-center gap-1 text-xs text-ink-faint">
                         <input type="checkbox" name="confirm" value="yes" required /> sure
                       </label>
                       <button className={BUTTON}>Archive</button>
@@ -171,7 +171,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
                     {sources.map((c) => <option key={c.id} value={c.id}>{c.is_template ? 'Template: ' : 'Copy of: '}{c.name}</option>)}
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-[12px] text-ink-muted"><input type="checkbox" name="with_leads" defaultChecked /> When copying, copy its leads too</label>
+                <label className="flex items-center gap-2 text-xs text-ink-muted"><input type="checkbox" name="with_leads" defaultChecked /> When copying, copy its leads too</label>
                 <button className={BUTTON_PRIMARY}>Create</button>
               </form>
             </Card>
@@ -182,9 +182,9 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
             <SectionHeader id="st-h" title="Statuses" meta="Your list, not fixed" />
             <Card className="divide-y divide-line-soft">
               {allStatuses.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[13px]">
+                <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                   <span className={s.active ? 'text-ink' : 'text-ink-faint line-through'}>
-                    {s.label} <span className="text-[11.5px] text-ink-faint">{s.id}{s.is_archived ? ' · archived' : ''}</span>
+                    {s.label} <span className="text-xs text-ink-faint">{s.id}{s.is_archived ? ' · archived' : ''}</span>
                   </span>
                   {canEdit && s.id !== 'draft' && s.id !== 'archived' ? (
                     <form action={toggleStatusAction}>
@@ -199,12 +199,12 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
               <form action={addStatusAction} className="flex flex-wrap items-end gap-2 p-3">
                 <label className={LABEL}>Id<input name="id" required pattern="[a-z][a-z0-9_]{0,30}" className={`${INPUT} w-24`} placeholder="warming" /></label>
                 <label className={LABEL}>Label<input name="label" required maxLength={40} className={`${INPUT} w-28`} placeholder="Warming up" /></label>
-                <label className="flex items-center gap-1 pb-2 text-[11.5px] text-ink-faint"><input type="checkbox" name="is_archived" /> archived</label>
+                <label className="flex items-center gap-1 pb-2 text-xs text-ink-faint"><input type="checkbox" name="is_archived" /> archived</label>
                 <button className={BUTTON}>Add</button>
               </form>
               ) : null}
             </Card>
-            <p className="mt-2 text-[11.5px] text-ink-faint">{statuses.length} statuses can be picked.</p>
+            <p className="mt-2 text-xs text-ink-faint">{statuses.length} statuses can be picked.</p>
           </section>
         </aside>
       </div>
