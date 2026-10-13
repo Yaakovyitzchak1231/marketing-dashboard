@@ -52,11 +52,11 @@ export function AddLeadForm({
       </div>
       {state ? (
         state.ok ? (
-          <p className="sm:col-span-2 text-[12.5px] text-ink-muted">
+          <p className="sm:col-span-2 text-xs text-ink-muted">
             {state.would_create ? 'Created.' : state.would_update ? 'Matched an existing lead and updated it.' : state.skipped_suppressed ? 'Skipped: that email is suppressed.' : 'Nothing to add -- give at least an email or a phone.'}
           </p>
         ) : (
-          <p className="sm:col-span-2 text-[12.5px] text-warn">{state.error}</p>
+          <p className="sm:col-span-2 text-xs text-warn">{state.error}</p>
         )
       ) : null}
     </form>
