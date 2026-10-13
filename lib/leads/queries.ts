@@ -78,6 +78,16 @@ function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (m) => `\\${m}`)
 }
 
+/**
+ * A contact that can be sent to right now: verified valid, not do-not-contact, and not already in
+ * Instantly / sent / replied / bounced / rejected / on hold. ONE definition: the Overview "Ready to
+ * send" tile counts the companies that have such a contact, and /leads?ready=yes filters on the same.
+ */
+export function readyContactSql(alias: string): string {
+  return `${alias}.email_norm is not null and ${alias}.merged_into is null and ${alias}.verification_status = 'valid' and not ${alias}.do_not_contact
+    and ${alias}.status not in ('in-Instantly', 'sent', 'replied', 'bounced', 'rejected', 'do-not-contact', 'role-based-hold', 'needs-check')`
+}
+
 /** View predicates: fixed SQL, no input. */
 const VIEW_WHERE: Partial<Record<LeadView, string>> = {
   research: `c.research_status in ('needs_research', 'failed')`,
@@ -123,6 +133,10 @@ export function buildLeadWhere(f: LeadFilters, view: LeadView, p: Params, merged
   if (f.hasEmail !== undefined)
     w.push(`${f.hasEmail ? '' : 'not '}exists (select 1 from lp.contacts ec where ec.company_id = c.id and ec.email_norm is not null)`)
   if (f.ownerKnown !== undefined) w.push(f.ownerKnown ? `nullif(trim(c.owner_name), '') is not null` : `nullif(trim(c.owner_name), '') is null`)
+  if (f.ready !== undefined)
+    w.push(`${f.ready ? '' : 'not '}exists (select 1 from lp.contacts rc where rc.company_id = c.id and ${readyContactSql('rc')})`)
+  if (f.touched !== undefined)
+    w.push(`c.id ${f.touched ? '' : 'not '}in (select tc.co from ${TOUCH_COMPANY_REL} tc)`)
   if (f.job !== undefined)
     w.push(`exists (select 1 from lp.sources js where js.company_id = c.id and js.kind = 'engine' and js.source_ref = ${p.add(`find_leads:${f.job}`)})`)
   if (f.campaign === NONE) w.push(`c.id not in (select lc.co from ${LATEST_CAMPAIGN_REL} lc)`)

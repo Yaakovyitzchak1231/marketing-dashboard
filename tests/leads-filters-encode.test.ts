@@ -21,6 +21,13 @@ describe('Leads URL contract (plan 2.5): old params unaffected by the new ones',
     expect(roundTripped).toEqual(q)
   })
 
+  it('round-trips the ready and touched filters the Overview tiles link to', () => {
+    const q = parseLeadQuery({ ready: 'yes', touched: 'no' })
+    expect(q.filters).toMatchObject({ ready: true, touched: false })
+    expect(parseLeadQuery(Object.fromEntries(leadQueryToParams(q)))).toEqual(q)
+    expect(activeFilterCount(q.filters)).toBe(2)
+  })
+
   it('a bare old /leads URL (no seg, no f) still parses to zero active filters', () => {
     const q = parseLeadQuery({})
     expect(activeFilterCount(q.filters)).toBe(0)

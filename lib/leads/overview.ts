@@ -2,7 +2,7 @@
 import type { Queryable } from '@/lib/db/types'
 import { STAGES, type Stage } from './types'
 import { replyDeskCounts } from './replies'
-import { TOUCH_COMPANY_REL } from './queries'
+import { TOUCH_COMPANY_REL, readyContactSql } from './queries'
 import { overviewReadiness, type OverviewReadiness } from '../rules/readiness'
 import { PENDING_APPROVALS_COUNT_SQL } from '../ops/counters'
 import { ROUTINE_EVENT_SQL } from '../ops/routine'
@@ -19,8 +19,10 @@ export interface OverviewData {
   /** Companies with at least one unverified email; and the unverified emails themselves. */
   needsVerificationCompanies: number
   unverifiedContacts: number
-  /** Emails verified valid, not do-not-contact, not on hold, and not yet in Instantly / sent / replied / bounced / rejected (email-only count). */
+  /** Companies with at least one sendable email (readyContactSql): the same set /leads?ready=yes lists. */
   readyToSend: number
+  /** The sendable emails themselves (a company can have several). */
+  readyToSendEmails: number
   /** Leads scored by the lead-rules evaluator under their pool's rules; null before migration 0010. */
   readiness: OverviewReadiness | null
   /** Companies with at least one Instantly event (campaign_touches). */
@@ -53,7 +55,7 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
     db.query<{ stage: Stage; n: number }>(`select stage, count(*)::int as n from lp.companies where ${live.co} group by stage`),
     db.query<{
       companies: number; contacts: number; needs_research: number; research_queued: number; needs_verif_co: number
-      unverified: number; ready: number; in_campaigns: number
+      unverified: number; ready: number; ready_emails: number; in_campaigns: number
     }>(
       `select
          (select count(*)::int from lp.companies where ${live.co}) as companies,
@@ -63,8 +65,10 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
          (select count(distinct ct.company_id)::int from lp.contacts ct join lp.companies co on co.id = ct.company_id
              where ct.email_norm is not null and ct.verification_status = 'unverified' and ${live.joinedCt} and ${live.joinedCo}) as needs_verif_co,
          (select count(*)::int from lp.contacts where email_norm is not null and ${live.ct} and verification_status = 'unverified') as unverified,
-         (select count(*)::int from lp.contacts where email_norm is not null and ${live.ct} and verification_status = 'valid' and not do_not_contact
-             and status not in ('in-Instantly', 'sent', 'replied', 'bounced', 'rejected', 'do-not-contact', 'role-based-hold', 'needs-check')) as ready,
+         (select count(distinct rc.company_id)::int from lp.contacts rc join lp.companies co on co.id = rc.company_id
+             where ${readyContactSql('rc')} and ${live.joinedCo}) as ready,
+         (select count(*)::int from lp.contacts rc join lp.companies co on co.id = rc.company_id
+             where ${readyContactSql('rc')} and ${live.joinedCo}) as ready_emails,
          (select count(distinct tc.co)::int from ${TOUCH_COMPANY_REL} tc where true ${live.coJoin}) as in_campaigns`,
     ),
     db.query<{ active: number; queued: number; approvals: number }>(
@@ -96,6 +100,7 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
     needsVerificationCompanies: Number(t.needs_verif_co),
     unverifiedContacts: Number(t.unverified),
     readyToSend: Number(t.ready),
+    readyToSendEmails: Number(t.ready_emails),
     readiness,
     inCampaigns: Number(t.in_campaigns),
     repliesWaiting: desk.needs_reply,

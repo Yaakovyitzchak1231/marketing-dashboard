@@ -29,7 +29,7 @@ Legend: `[ ]` not yet verified in the new UI · `[x]` carried over (→ new loca
 - [ ] Meta: total leads · email addresses
 - [ ] Auto-refresh every 30s
 - [ ] Setup checklist (N of 6 done, item links, Dismiss)
-- [ ] "What needs you" tiles: Replies waiting → `/replies`; Interested → `/replies#interested`; Ready (personalized / generic / parked / re-scoring) → `/rules` or Ready to send → `/leads?verification=valid`; Needs verification → `/leads?view=verify`; Needs research → `/leads?view=research`; In campaigns → `/leads?view=campaign`
+- [ ] "What needs you" tiles: Replies waiting → `/replies`; Interested → `/replies#interested`; Ready (personalized / generic / parked / re-scoring) → `/rules` or Ready to send → `/leads?ready=yes` (leads with a sendable email; the note shows the email count); Needs verification → `/leads?view=verify`; Needs research → `/leads?view=research`; In campaigns → `/leads?touched=yes` (any Instantly activity)
 - [ ] "Why leads are parked" list + scored/stale counts + link to Lead rules
 - [ ] "Leads by stage" bars, each stage → `/leads?stage=…`; "Open board" → `/leads?view=kanban`
 - [ ] "Team at work": tasks in progress / waiting / need your OK (→ `/team`), who is working now; "Team board" link

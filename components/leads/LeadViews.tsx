@@ -80,6 +80,8 @@ export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuer
           />
           <Sel name="email" label="Has email" value={yn(f.hasEmail)} options={[['yes', 'Has email'], ['no', 'No email']]} />
           <Sel name="owner" label="Owner name" value={yn(f.ownerKnown)} options={[['yes', 'Owner known'], ['no', 'Owner unknown']]} />
+          <Sel name="ready" label="Ready to send" value={yn(f.ready)} options={[['yes', 'Ready to send'], ['no', 'Not ready']]} />
+          <Sel name="touched" label="Instantly activity" value={yn(f.touched)} options={[['yes', 'Has activity'], ['no', 'No activity']]} />
           {campaigns.length || f.campaign ? (
             <Sel
               name="campaign"
