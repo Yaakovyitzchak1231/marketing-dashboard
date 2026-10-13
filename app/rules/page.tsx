@@ -37,8 +37,8 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
       <Notice error={sp.error} saved={sp.saved} />
       {proposals.length ? (
         <Card className="mb-6 border-warn/40 p-4">
-          <p className="text-[13.5px] font-semibold text-ink">Agents proposed {proposals.length} rule change{proposals.length === 1 ? '' : 's'}</p>
-          <ul className="mt-1 text-[12.5px] text-ink-muted">
+          <p className="text-sm font-semibold text-ink">Agents proposed {proposals.length} rule change{proposals.length === 1 ? '' : 's'}</p>
+          <ul className="mt-1 text-xs text-ink-muted">
             {proposals.map((p) => (
               <li key={p.approval_id}>
                 <Link className="text-accent hover:underline" href={`/rules/${p.rule_set_id}`}>
@@ -75,7 +75,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
                       <Link href={`/rules/${r.id}`} className="font-medium text-ink hover:text-accent">
                         {r.name}
                       </Link>
-                      <span className="ml-1 text-[11.5px] text-ink-faint">v{r.version}</span>
+                      <span className="ml-1 text-xs text-ink-faint">v{r.version}</span>
                     </td>
                     <td className={TD}>
                       {SCOPE_WORDS[r.scope]}
@@ -106,19 +106,19 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
 
       <section className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
-          <p className="text-[13.5px] font-semibold text-ink">Give a campaign its own rules</p>
-          <p className="mt-0.5 text-[12.5px] text-ink-muted">Start from a template or copy any set. Without its own rules a campaign uses its pool&apos;s.</p>
+          <p className="text-sm font-semibold text-ink">Give a campaign its own rules</p>
+          <p className="mt-0.5 text-xs text-ink-muted">Start from a template or copy any set. Without its own rules a campaign uses its pool&apos;s.</p>
           <form action={createRulesAction} className="mt-3 grid gap-2 sm:grid-cols-2">
             <input type="hidden" name="scope" value="campaign" />
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Instantly campaign id
               <input name="campaign_id" required className={inputCls} placeholder="e.g. 3f2a…" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Campaign name
               <input name="campaign_name" className={inputCls} />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Pool (which leads it scores)
               <select name="segment" className={inputCls} defaultValue="">
                 <option value="">as set on the campaign</option>
@@ -129,7 +129,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
                 ))}
               </select>
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Start from
               <select name="from_id" required className={inputCls}>
                 {sources.map((r) => (
@@ -145,15 +145,15 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
           </form>
         </Card>
         <Card className="p-4">
-          <p className="text-[13.5px] font-semibold text-ink">New template</p>
-          <p className="mt-0.5 text-[12.5px] text-ink-muted">A template scores nothing; campaigns start from it.</p>
+          <p className="text-sm font-semibold text-ink">New template</p>
+          <p className="mt-0.5 text-xs text-ink-muted">A template scores nothing; campaigns start from it.</p>
           <form action={createRulesAction} className="mt-3 grid gap-2 sm:grid-cols-2">
             <input type="hidden" name="scope" value="template" />
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Name
               <input name="name" required className={inputCls} placeholder="Template: …" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Copy of
               <select name="from_id" required className={inputCls}>
                 {sources.map((r) => (
@@ -173,7 +173,7 @@ export default async function RulesPage({ searchParams }: { searchParams: Promis
       <section>
         <SectionHeader title="Standing rules" meta="Always on, for every campaign. Not editable." />
         <Card className="p-4">
-          <ul className="list-disc space-y-1 pl-5 text-[12.5px] text-ink-muted">
+          <ul className="list-disc space-y-1 pl-5 text-xs text-ink-muted">
             {STANDING_RULES.map((r) => (
               <li key={r.code}>{r.label}</li>
             ))}
