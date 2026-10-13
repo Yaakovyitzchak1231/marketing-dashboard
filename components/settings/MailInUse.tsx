@@ -34,11 +34,11 @@ export function MailInUse({
   return (
     <Card className="mb-2 p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-[13px] font-semibold text-ink">In use now</p>
+        <p className="text-sm font-semibold text-ink">In use now</p>
         {ready ? <Pill tone="good">Sending</Pill> : <Pill tone="warn">Not sending yet</Pill>}
         <Pill tone="neutral">Settings first, then Vercel</Pill>
       </div>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
         <dt className="text-ink-muted">Provider</dt>
         <dd className="text-ink">
           {provider ? provider : <span className="font-semibold text-warn">Not set</span>}
@@ -61,7 +61,7 @@ export function MailInUse({
           )}
         </dd>
       </dl>
-      <p className="mt-2 text-[12px] leading-snug text-ink-muted">
+      <p className="mt-2 text-xs leading-snug text-ink-muted">
         Sending uses the effective values shown here. Values saved on Settings take precedence over Vercel environment variables.
       </p>
     </Card>
