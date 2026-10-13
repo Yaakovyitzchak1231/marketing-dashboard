@@ -76,6 +76,7 @@ export function Footnote({ range, previous }: { range: DateRange; previous: Dash
     <footer className="border-t border-line pt-4 text-2xs leading-relaxed text-ink-faint">
       Reply rate = leads who replied ÷ leads contacted (auto-replies excluded). Positive rate = leads marked interested in Instantly ÷ leads contacted.
       Bounce rate = bounced ÷ emails sent. Days are counted in {range.timezone}.
+      Everything on this page is Instantly&apos;s own count for the dates selected, and the replies list shows only the newest replies. The Overview and Replies pages count the replies and labels this app has stored, so their numbers can differ.
       {previous ? ' Changes compare with the same number of days just before this range.' : ''}
     </footer>
   )

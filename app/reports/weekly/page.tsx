@@ -26,7 +26,7 @@ const ROWS: [string, keyof WeeklyNumbers, boolean][] = [
   ['New leads contacted', 'contacted', false],
   ['Replies', 'replied', false],
   ['Reply rate', 'replyRate', true],
-  ['Interested', 'interested', false],
+  ['Marked interested (Instantly)', 'interested', false],
   ['Meetings booked', 'meetings', false],
   ['Bounces', 'bounced', false],
   ['Bounce rate', 'bounceRate', true],
@@ -204,7 +204,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
         </section>
       </div>
       <p className="mt-6 text-2xs text-ink-faint">
-        Generated {r.generatedAt}. Numbers from Instantly and the lead database; “no data” means nobody reported it.
+        Generated {r.generatedAt}. Sends, replies, interested, meetings and bounces are Instantly’s own counts for the week; the Overview and Replies pages count the replies and labels this app has stored, so they can differ. “No data” means nobody reported it.
       </p>
     </PageShell>
   )
