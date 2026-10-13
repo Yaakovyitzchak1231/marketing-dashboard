@@ -80,7 +80,7 @@ function pinLabel(p: Pin): string {
 /** What a viewer sees in place of the Comment button, and if any write is tried anyway. */
 export const VIEW_ONLY_NOTE = "View-only access: you can't comment"
 
-export function CommentLayer({ actions, readOnly = false }: { actions: CommentActions; readOnly?: boolean }) {
+export function CommentLayer({ actions, readOnly = false, onExit }: { actions: CommentActions; readOnly?: boolean; onExit?: () => void }) {
   const pathname = usePathname() ?? '/'
   const router = useRouter()
   const [pins, setPins] = useState<Pin[]>([])
@@ -493,7 +493,7 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
                 aria-label={`Comment ${i + 1}: ${STATUS_LABEL[p.status]}${p.body ? ` — ${p.body.slice(0, 40)}` : ''}`}
                 title={s.found ? undefined : 'The element this was pinned to has moved; shown at its old spot'}
                 style={{ left: s.x - 12, top: s.y - 24 }}
-                className={`pointer-events-auto absolute flex h-6 min-w-6 items-center justify-center rounded-full rounded-bl-none border px-1.5 text-[11px] font-semibold tabular-nums shadow-sm ${
+                className={`pointer-events-auto absolute flex h-6 min-w-6 items-center justify-center rounded-full rounded-bl-none border px-1.5 text-2xs font-semibold tabular-nums shadow-sm ${
                   p.status === 'draft'
                     ? 'border-warn bg-warn-soft text-warn'
                     : p.status === 'resolved'
@@ -520,9 +520,9 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
               style={{ left: hover.left - 2, top: hover.top - 2, width: hover.width + 4, height: hover.height + 4 }}
             />
           ) : null}
-          <div {...ui} role="status" className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-accent bg-accent-soft px-4 py-2.5 text-[13px] text-ink print:hidden">
+          <div {...ui} role="status" className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-accent bg-accent-soft px-4 py-2.5 text-sm text-ink print:hidden">
             <span>Tap anything on the page to pin a comment to it.</span>
-            <button type="button" onClick={() => setPicking(false)} className="rounded-md border border-line bg-surface px-2.5 py-1 text-[12px] font-medium text-ink hover:border-ink-faint">
+            <button type="button" onClick={() => setPicking(false)} className="rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:border-ink-faint">
               Cancel
             </button>
           </div>
@@ -563,12 +563,12 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
           className="fixed inset-x-0 bottom-0 z-50 flex max-h-[78vh] flex-col rounded-t-xl border border-line bg-surface shadow-lg sm:inset-x-auto sm:bottom-20 sm:right-4 sm:max-h-[70vh] sm:w-[380px] sm:rounded-xl print:hidden"
         >
           <div className="flex items-center justify-between border-b border-line-soft px-4 py-3">
-            <h2 className="text-[14px] font-semibold text-ink">My comments</h2>
-            <button type="button" onClick={() => setTrayOpen(false)} className="rounded-md px-2 py-1 text-[12px] text-ink-muted hover:text-ink">
+            <h2 className="text-sm font-semibold text-ink">My comments</h2>
+            <button type="button" onClick={() => setTrayOpen(false)} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:text-ink">
               Close
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line-soft px-4 py-2 text-[12px] text-ink-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line-soft px-4 py-2 text-xs text-ink-muted">
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
@@ -589,29 +589,29 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
               Show resolved{resolvedCount ? ` (${resolvedCount})` : ''}
             </label>
           </div>
-          {notice ? <p className="border-b border-line-soft bg-canvas px-4 py-2 text-[12px] text-ink">{notice}</p> : null}
+          {notice ? <p className="border-b border-line-soft bg-canvas px-4 py-2 text-xs text-ink">{notice}</p> : null}
           <div className="min-h-0 flex-1 overflow-y-auto">
             <section className="px-4 py-3">
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-[12px] font-semibold uppercase tracking-[0.04em] text-ink-muted">Drafts ({drafts.length})</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">Drafts ({drafts.length})</h3>
                 {drafts.length > 1 ? (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => void send(drafts.map((d) => d.client_id))}
-                    className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-soft disabled:opacity-50"
+                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-soft disabled:opacity-50"
                   >
                     Send all {drafts.length}
                   </button>
                 ) : null}
               </div>
-              {drafts.length === 0 ? <p className="text-[12px] text-ink-faint">No drafts. Tap Comment, then tap anything on a page.</p> : null}
+              {drafts.length === 0 ? <p className="text-xs text-ink-faint">No drafts. Tap Comment, then tap anything on a page.</p> : null}
               <ul className="space-y-1.5">
                 {drafts.map((p) => (
                   <li key={p.client_id} className="flex items-start gap-2 rounded-md border border-line-soft px-2.5 py-2">
                     <button type="button" onClick={() => goTo(p)} className="min-w-0 flex-1 text-left">
-                      <span className="block truncate text-[13px] text-ink">{p.body.trim() ? p.body : <em className="text-ink-faint">Empty draft</em>}</span>
-                      <span className="block truncate text-[11px] text-ink-faint">
+                      <span className="block truncate text-sm text-ink">{p.body.trim() ? p.body : <em className="text-ink-faint">Empty draft</em>}</span>
+                      <span className="block truncate text-2xs text-ink-faint">
                         {pinLabel(p)} · to {p.recipient_name} · <span suppressHydrationWarning>{when(p.updated_at)}</span>
                       </span>
                     </button>
@@ -619,7 +619,7 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
                       type="button"
                       disabled={busy || !p.body.trim()}
                       onClick={() => void send([p.client_id])}
-                      className="shrink-0 rounded-md border border-line px-2 py-1 text-[12px] font-medium text-accent disabled:opacity-40"
+                      className="shrink-0 rounded-md border border-line px-2 py-1 text-xs font-medium text-accent disabled:opacity-40"
                     >
                       Send
                     </button>
@@ -628,17 +628,17 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
               </ul>
             </section>
             <section className="border-t border-line-soft px-4 py-3">
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-ink-muted">Sent ({sentPins.length})</h3>
-              {sentPins.length === 0 ? <p className="text-[12px] text-ink-faint">Nothing sent yet.</p> : null}
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">Sent ({sentPins.length})</h3>
+              {sentPins.length === 0 ? <p className="text-xs text-ink-faint">Nothing sent yet.</p> : null}
               <ul className="space-y-1.5">
                 {sentPins.map((p) => (
                   <li key={p.client_id}>
                     <button type="button" onClick={() => goTo(p)} className="w-full rounded-md border border-line-soft px-2.5 py-2 text-left hover:border-line">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[13px] text-ink">{p.body}</span>
-                        <span className={`shrink-0 text-[11px] font-medium ${STATUS_CLS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+                        <span className="truncate text-sm text-ink">{p.body}</span>
+                        <span className={`shrink-0 text-2xs font-medium ${STATUS_CLS[p.status]}`}>{STATUS_LABEL[p.status]}</span>
                       </span>
-                      <span className="block truncate text-[11px] text-ink-faint">
+                      <span className="block truncate text-2xs text-ink-faint">
                         {pinLabel(p)} · to {p.recipient_name} · <span suppressHydrationWarning>{when(p.sent_at)}</span>
                         {p.replies.length ? ` · ${p.replies.length} repl${p.replies.length === 1 ? 'y' : 'ies'}` : ''}
                       </span>
@@ -655,24 +655,25 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
           data-nav-menu-open on <html>), so the pill never draws over the drawer. */}
       <div
         {...ui}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 print:hidden [html[data-nav-menu-open]_&]:hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="fixed bottom-[calc(4.25rem+env(safe-area-inset-bottom))] right-3 z-50 flex items-center gap-2 rounded-full border border-warn/30 bg-warn-soft/95 p-1 pl-3 shadow-raised backdrop-blur print:hidden md:bottom-4 md:right-4 [html[data-nav-menu-open]_&]:hidden"
+        data-testid="review-mode-bar"
       >
+        <span className="text-2xs font-semibold uppercase tracking-[0.06em] text-warn">Review mode</span>
         <button
           type="button"
           onClick={() => setTrayOpen((t) => !t)}
           aria-label={drafts.length ? `My comments, ${drafts.length} draft${drafts.length === 1 ? '' : 's'}` : 'My comments'}
-          className="relative rounded-full border border-line bg-surface px-3.5 py-2 text-[13px] text-ink shadow-sm hover:border-ink-faint"
+          className="relative rounded-full border border-line bg-surface px-3.5 py-2 text-sm text-ink shadow-sm hover:border-ink-faint"
         >
           My comments
           {drafts.length ? (
-            <span className="ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-warn px-1 text-[11px] font-semibold tabular-nums text-warn-soft">
+            <span className="ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-warn px-1 text-2xs font-semibold tabular-nums text-warn-soft">
               {drafts.length}
             </span>
           ) : null}
         </button>
         {readOnly ? (
-          <span className="rounded-full border border-line-soft bg-surface px-3 py-2 text-[12px] text-ink-muted shadow-sm">{VIEW_ONLY_NOTE}</span>
+          <span className="rounded-full border border-line-soft bg-surface px-3 py-2 text-xs text-ink-muted shadow-sm">{VIEW_ONLY_NOTE}</span>
         ) : (
           <button
             type="button"
@@ -682,11 +683,16 @@ export function CommentLayer({ actions, readOnly = false }: { actions: CommentAc
               setPicking((x) => !x)
             }}
             aria-pressed={picking}
-            className="rounded-full bg-accent px-4 py-2 text-[13px] font-medium text-accent-soft shadow-sm hover:opacity-95"
+            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-on-accent shadow-sm hover:opacity-95"
           >
             {picking ? 'Cancel' : 'Comment'}
           </button>
         )}
+        {onExit ? (
+          <button type="button" onClick={onExit} aria-label="Turn off Review mode" className="inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-surface hover:text-ink" data-compact>
+            <span aria-hidden="true" className="text-lg leading-none">×</span>
+          </button>
+        ) : null}
       </div>
     </>
   )
@@ -733,16 +739,16 @@ function Composer({
     >
       <div className="flex items-start justify-between gap-2 border-b border-line-soft px-3.5 py-2.5">
         <div className="min-w-0">
-          <p className="truncate text-[12px] text-ink-muted">
+          <p className="truncate text-xs text-ink-muted">
             On {pin.anchor_label ?? 'this spot'}
             {pin.anchor_text ? <span className="text-ink-faint"> · “{pin.anchor_text.slice(0, 60)}”</span> : null}
           </p>
-          <p className={`text-[11px] font-medium ${STATUS_CLS[pin.status]}`}>
+          <p className={`text-2xs font-medium ${STATUS_CLS[pin.status]}`}>
             {STATUS_LABEL[pin.status]}
             {!isDraft ? <span className="font-normal text-ink-faint"> · to {pin.recipient_name} · <span suppressHydrationWarning>{when(pin.sent_at)}</span>{pin.delivery === 'failed' ? ' · delivery failed' : ''}</span> : null}
           </p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 rounded-md px-1.5 py-0.5 text-[16px] leading-none text-ink-muted hover:text-ink">
+        <button type="button" onClick={onClose} aria-label="Close" className="shrink-0 rounded-md px-1.5 py-0.5 text-base leading-none text-ink-muted hover:text-ink">
           ×
         </button>
       </div>
@@ -760,15 +766,15 @@ function Composer({
               value={pin.body}
               onChange={(e) => onEdit({ body: e.target.value })}
               placeholder="What should change here?"
-              className="w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[14px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+              <label className="flex items-center gap-1.5 text-xs text-ink-muted">
                 To
                 <select
                   value={pin.recipient}
                   onChange={(e) => onEdit({ recipient: e.target.value })}
-                  className="rounded-md border border-line bg-surface px-1.5 py-1 text-[12px] text-ink"
+                  className="rounded-md border border-line bg-surface px-1.5 py-1 text-xs text-ink"
                 >
                   {recipients.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -784,7 +790,7 @@ function Composer({
                     type="button"
                     aria-pressed={pin.tag === t.id}
                     onClick={() => onEdit({ tag: pin.tag === t.id ? null : t.id })}
-                    className={`rounded-full border px-2 py-0.5 text-[11px] ${pin.tag === t.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
+                    className={`rounded-full border px-2 py-0.5 text-2xs ${pin.tag === t.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
                   >
                     {t.label}
                   </button>
@@ -794,20 +800,20 @@ function Composer({
           </>
         ) : (
           <>
-            <p className="whitespace-pre-wrap text-[14px] text-ink">{pin.body}</p>
+            <p className="whitespace-pre-wrap text-sm text-ink">{pin.body}</p>
             {pin.replies.length ? (
               <ol className="mt-3 space-y-2 border-t border-line-soft pt-3">
                 {pin.replies.map((r) => (
                   <li key={r.id} className={r.author_kind === 'agent' ? 'rounded-md bg-accent-soft px-2.5 py-2' : 'px-2.5'}>
-                    <p className="text-[11px] text-ink-muted">
+                    <p className="text-2xs text-ink-muted">
                       <span className="font-medium text-ink">{r.author_name}</span> · <span suppressHydrationWarning>{when(r.created_at)}</span>
                     </p>
-                    <p className="whitespace-pre-wrap text-[13px] text-ink">{r.body}</p>
+                    <p className="whitespace-pre-wrap text-sm text-ink">{r.body}</p>
                   </li>
                 ))}
               </ol>
             ) : (
-              <p className="mt-2 text-[12px] text-ink-faint">{pin.status === 'seen' ? `${pin.recipient_name} has seen it.` : `Waiting for ${pin.recipient_name}.`}</p>
+              <p className="mt-2 text-xs text-ink-faint">{pin.status === 'seen' ? `${pin.recipient_name} has seen it.` : `Waiting for ${pin.recipient_name}.`}</p>
             )}
             {readOnly ? null : (
             <>
@@ -823,7 +829,7 @@ function Composer({
                 putReply(storage(), pin.client_id, e.target.value)
               }}
               placeholder={pin.status === 'resolved' ? 'Reply to reopen…' : 'Reply…'}
-              className="mt-3 w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="mt-3 w-full resize-y rounded-md border border-line bg-canvas px-2.5 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
             </>
             )}
@@ -834,32 +840,32 @@ function Composer({
       <div className="flex items-center justify-between gap-2 border-t border-line-soft px-3.5 py-2.5" style={sheet ? { paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' } : undefined}>
         {isDraft ? (
           <>
-            <span className="text-[11px] text-ink-faint" aria-live="polite">
+            <span className="text-2xs text-ink-faint" aria-live="polite">
               {saveState === 'saving' ? 'Saving…' : saveState === 'local' ? 'Saved on this device' : saveState === 'error' ? 'Not saved' : 'Draft saved'}
             </span>
             <div className="flex items-center gap-1.5">
               {confirmDelete ? (
                 <>
-                  <button type="button" onClick={onDiscard} className="rounded-md px-2 py-1 text-[12px] font-medium text-bad">
+                  <button type="button" onClick={onDiscard} className="rounded-md px-2 py-1 text-xs font-medium text-bad">
                     Delete draft
                   </button>
-                  <button type="button" onClick={() => setConfirmDelete(false)} className="rounded-md px-2 py-1 text-[12px] text-ink-muted">
+                  <button type="button" onClick={() => setConfirmDelete(false)} className="rounded-md px-2 py-1 text-xs text-ink-muted">
                     Keep
                   </button>
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-md px-2 py-1 text-[12px] text-ink-muted hover:text-bad">
+                  <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:text-bad">
                     Delete
                   </button>
-                  <button type="button" onClick={onClose} className="rounded-md border border-line px-2.5 py-1 text-[12px] text-ink">
+                  <button type="button" onClick={onClose} className="rounded-md border border-line px-2.5 py-1 text-xs text-ink">
                     Later
                   </button>
                   <button
                     type="button"
                     disabled={busy || !pin.body.trim()}
                     onClick={onSend}
-                    className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-soft disabled:opacity-50"
+                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-soft disabled:opacity-50"
                   >
                     Send to {pin.recipient_name}
                   </button>
@@ -868,10 +874,10 @@ function Composer({
             </div>
           </>
         ) : readOnly ? (
-          <span className="text-[11px] text-ink-faint">{VIEW_ONLY_NOTE}</span>
+          <span className="text-2xs text-ink-faint">{VIEW_ONLY_NOTE}</span>
         ) : (
           <>
-            <button type="button" onClick={() => onResolve(pin.status !== 'resolved')} className="rounded-md px-2 py-1 text-[12px] text-ink-muted hover:text-ink">
+            <button type="button" onClick={() => onResolve(pin.status !== 'resolved')} className="rounded-md px-2 py-1 text-xs text-ink-muted hover:text-ink">
               {pin.status === 'resolved' ? 'Reopen' : 'Mark resolved'}
             </button>
             <button
@@ -883,7 +889,7 @@ function Composer({
                   putReply(storage(), pin.client_id, '')
                 }
               }}
-              className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-soft disabled:opacity-50"
+              className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-soft disabled:opacity-50"
             >
               Reply
             </button>
