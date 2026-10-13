@@ -15,8 +15,8 @@ export default async function SegmentStatsPage({ params }: { params: Promise<{ i
   if (!db) {
     return (
       <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
-        <h1 className="text-[15px] font-semibold text-ink">Segment stats</h1>
-        <p className="mt-2 text-[13px] text-ink-faint">The lead database is not connected (DATABASE_URL is not set).</p>
+        <h1 className="text-base font-semibold text-ink">Segment stats</h1>
+        <p className="mt-2 text-sm text-ink-faint">The lead database is not connected (DATABASE_URL is not set).</p>
       </main>
     )
   }
@@ -24,7 +24,7 @@ export default async function SegmentStatsPage({ params }: { params: Promise<{ i
   if (!Number.isInteger(segId) || segId <= 0) {
     return (
       <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
-        <p className="text-[13px] text-ink-faint">Not a valid segment id.</p>
+        <p className="text-sm text-ink-faint">Not a valid segment id.</p>
       </main>
     )
   }
@@ -43,13 +43,13 @@ export default async function SegmentStatsPage({ params }: { params: Promise<{ i
   return (
     <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
       <header className="mb-6">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{seg ? `${seg.name} — stats` : 'Segment stats'}</h1>
-        <p className="mt-1 text-[13px] text-ink-faint">Size over time, reply rate and meetings for this segment.</p>
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">{seg ? `${seg.name} — stats` : 'Segment stats'}</h1>
+        <p className="mt-1 text-sm text-ink-faint">Size over time, reply rate and meetings for this segment.</p>
       </header>
       {notice ? (
-        <Card className="p-4"><p className="text-[13px] text-ink-faint">{notice}</p></Card>
+        <Card className="p-4"><p className="text-sm text-ink-faint">{notice}</p></Card>
       ) : !seg ? (
-        <Card className="p-4"><p className="text-[13px] text-ink-faint">No segment #{segId}.</p></Card>
+        <Card className="p-4"><p className="text-sm text-ink-faint">No segment #{segId}.</p></Card>
       ) : data ? (
         <SegmentStats data={data} entity={seg.entity} />
       ) : null}
