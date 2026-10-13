@@ -26,8 +26,8 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
   if (!db) {
     return (
       <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
-        <h1 className="text-[15px] font-semibold text-ink">Traits</h1>
-        <p className="mt-2 text-[13px] text-ink-faint">The lead database is not connected (DATABASE_URL is not set).</p>
+        <h1 className="text-base font-semibold text-ink">Traits</h1>
+        <p className="mt-2 text-sm text-ink-faint">The lead database is not connected (DATABASE_URL is not set).</p>
       </main>
     )
   }
@@ -47,15 +47,15 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
   return (
     <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
       <header className="mb-6">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Traits</h1>
-        <p className="mt-1 text-[13px] text-ink-faint">Per-lead numbers computed once from events, used in segments, scores and the lead profile.</p>
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">Traits</h1>
+        <p className="mt-1 text-sm text-ink-faint">Per-lead numbers computed once from events, used in segments, scores and the lead profile.</p>
       </header>
 
-      {error ? <p className="mb-4 rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">{error}</p> : null}
+      {error ? <p className="mb-4 rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">{error}</p> : null}
 
       {needsMigration ? (
         <Card className="p-4">
-          <p className="text-[13px] text-ink-faint">Needs migration 0033 — it runs on the next production deploy.</p>
+          <p className="text-sm text-ink-faint">Needs migration 0033 — it runs on the next production deploy.</p>
         </Card>
       ) : (
         <>
@@ -64,9 +64,9 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
             {traits.length === 0 ? (
               <EmptyNote>No traits defined yet.</EmptyNote>
             ) : (
-              <table className="w-full text-left text-[13px]">
+              <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-line text-[11px] uppercase tracking-[0.04em] text-ink-faint">
+                  <tr className="border-b border-line text-2xs uppercase tracking-[0.04em] text-ink-faint">
                     <th className="px-4 py-2 font-medium">Key</th>
                     <th className="px-4 py-2 font-medium">Label</th>
                     <th className="px-4 py-2 font-medium">Entity</th>
@@ -79,7 +79,7 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
                 <tbody>
                   {traits.map((t) => (
                     <tr key={t.key} className="border-b border-line last:border-0">
-                      <td className="px-4 py-2 font-mono text-[12px]">{t.key}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{t.key}</td>
                       <td className="px-4 py-2">{t.label}</td>
                       <td className="px-4 py-2"><Pill tone="neutral">{t.entity}</Pill></td>
                       <td className="px-4 py-2">{t.definition.aggregation}</td>
@@ -88,7 +88,7 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
                       <td className="px-4 py-2 text-right">
                         <form action={archiveTraitAction}>
                           <input type="hidden" name="key" value={t.key} />
-                          <button type="submit" className="text-[12px] text-ink-faint hover:text-bad">Archive</button>
+                          <button type="submit" className="text-xs text-ink-faint hover:text-bad">Archive</button>
                         </form>
                       </td>
                     </tr>
@@ -100,7 +100,7 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
 
           <SectionHeader title="New trait" />
           <Card className="mb-8 p-4">
-            <form action={defineTraitAction} className="grid grid-cols-2 gap-3 text-[13px]">
+            <form action={defineTraitAction} className="grid grid-cols-2 gap-3 text-sm">
               <label className="flex flex-col gap-1">
                 Key (slug)
                 <input name="key" required pattern="[a-z][a-z0-9_]{0,63}" className="rounded border border-line px-2 py-1" placeholder="replies_30d" />
@@ -165,9 +165,9 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
                 {preview.sample.length === 0 ? (
                   <EmptyNote>No leads to preview against yet.</EmptyNote>
                 ) : (
-                  <table className="w-full text-left text-[13px]">
+                  <table className="w-full text-left text-sm">
                     <thead>
-                      <tr className="border-b border-line text-[11px] uppercase tracking-[0.04em] text-ink-faint">
+                      <tr className="border-b border-line text-2xs uppercase tracking-[0.04em] text-ink-faint">
                         <th className="px-2 py-1 font-medium">{preview.entity === 'company' ? 'Company' : 'Contact'}</th>
                         <th className="px-2 py-1 font-medium">Value</th>
                       </tr>
