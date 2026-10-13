@@ -98,7 +98,7 @@ export function ImportWizard({
 
   return (
     <div className="flex flex-col gap-4">
-      {error ? <p className="text-[12.5px] text-warn">{error}</p> : null}
+      {error ? <p className="text-xs text-warn">{error}</p> : null}
 
       {step === 'paste' ? (
         <div className="flex flex-col gap-3">
@@ -107,12 +107,12 @@ export function ImportWizard({
             onChange={(e) => setCsvText(e.target.value)}
             rows={8}
             placeholder={'email,first_name,last_name,company,phone\\nsara@example.com,Sara,Lee,Acme Jewelers,5551234567'}
-            className={`${inputCls} font-mono text-[12px]`}
+            className={`${inputCls} font-mono text-xs`}
           />
           <input
             type="file"
             accept=".csv,text/csv"
-            className="text-[12.5px]"
+            className="text-xs"
             onChange={async (e) => {
               const file = e.target.files?.[0]
               if (file) setCsvText(await file.text())
@@ -128,10 +128,10 @@ export function ImportWizard({
 
       {step === 'map' && parsed ? (
         <div className="flex flex-col gap-4">
-          <p className="text-[12.5px] text-ink-muted">{parsed.rowCount.toLocaleString('en-US')} data rows found. Map each column, then choose a pool and/or campaign to add these leads to.</p>
+          <p className="text-xs text-ink-muted">{parsed.rowCount.toLocaleString('en-US')} data rows found. Map each column, then choose a pool and/or campaign to add these leads to.</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {parsed.headers.map((h) => (
-              <label key={h} className="flex items-center gap-2 text-[12.5px]">
+              <label key={h} className="flex items-center gap-2 text-xs">
                 <span className="w-36 shrink-0 truncate font-medium text-ink" title={h}>
                   {h}
                 </span>
@@ -191,7 +191,7 @@ export function ImportWizard({
 
       {step === 'done' && summary ? (
         <div className="flex flex-col gap-4">
-          <p className="text-[13px] font-medium text-ink">Imported.</p>
+          <p className="text-sm font-medium text-ink">Imported.</p>
           <SummaryCounts summary={summary} />
           <div>
             <Link href="/leads" className={primaryBtnCls}>
@@ -213,7 +213,7 @@ function SummaryCounts({ summary }: { summary: ImportSummary }) {
     ['Invalid', summary.invalid],
   ]
   return (
-    <div className="flex flex-wrap gap-4 text-[12.5px]">
+    <div className="flex flex-wrap gap-4 text-xs">
       {rows.map(([label, n]) => (
         <div key={label}>
           <span className="font-numeric font-semibold text-ink">{n.toLocaleString('en-US')}</span> <span className="text-ink-muted">{label}</span>
@@ -229,8 +229,8 @@ function RowSample({ summary }: { summary: ImportSummary }) {
   if (!problems.length) return null
   return (
     <div>
-      <p className="mb-1 text-[12px] font-medium text-ink-muted">Rows not imported (up to 20 shown)</p>
-      <ul className="max-h-60 overflow-auto text-[12px] text-ink-faint">
+      <p className="mb-1 text-xs font-medium text-ink-muted">Rows not imported (up to 20 shown)</p>
+      <ul className="max-h-60 overflow-auto text-xs text-ink-faint">
         {problems.map((r) => (
           <li key={r.row} className="border-b border-line-soft py-1 last:border-0">
             Row {r.row}: {r.email ?? r.phone ?? '(no email/phone)'} -- {r.reason ?? r.outcome}
