@@ -44,7 +44,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
   const site = sites.find((s) => s.id === (audit?.site_id ?? (Number(one(sp.site)) || sites.find((x) => x.active)?.id)))
   const blockedN = (audit?.checks ?? []).filter((c) => c.status === 'blocked').length
   // Stored `unknown` counts blocked checks too (no schema change); split them for display.
-  const unreadN = Math.max(0, (audit?.unknown ?? 0) - blockedN)
+  const unreadN = audit?.unknown == null ? null : Math.max(0, audit.unknown - blockedN)
   const groups = new Map<string, Check[]>()
   for (const c of audit?.checks ?? []) {
     const k = c.page ?? 'Whole site'
@@ -79,7 +79,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
         <>
           <p className="text-[12px] text-ink-faint">
             Audit #{audit.id} of {site?.base_url.replace(/^https?:\/\//, '')} · {when(audit.finished_at ?? audit.started_at)} · fetched from the {audit.fetched_from ?? 'dashboard server'} ·{' '}
-            {audit.status === 'done' ? `${audit.passed} pass, ${audit.failed} fix, ${audit.warned} improve${blockedN ? `, ${blockedN} blocked` : ''}, ${unreadN} couldn't check` : audit.status}
+            {audit.status === 'done' ? `${audit.passed} pass, ${audit.failed} fix, ${audit.warned} improve${blockedN ? `, ${blockedN} blocked` : ''}, ${unreadN ?? '—'} couldn't check` : audit.status}
             {audit.error ? ` · ${audit.error}` : ''}
           </p>
           {[...groups.entries()].map(([page, checks]) => (
