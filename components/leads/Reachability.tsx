@@ -9,7 +9,7 @@ export function Reachability({ items }: { items: ReachabilityItem[] }) {
       <SectionHeader title="Reachability" />
       <ul className="flex flex-wrap gap-2">
         {items.map((it) => (
-          <li key={it.key} className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px]">
+          <li key={it.key} className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs">
             <Pill tone={it.ok ? 'good' : 'neutral'}>{it.label}</Pill>
             <span className={`min-w-0 [overflow-wrap:anywhere] ${it.ok ? 'text-ink' : 'text-ink-faint'}`}>{it.value ?? 'Not found'}</span>
           </li>
