@@ -110,7 +110,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       meta={filtered || q.view !== 'table' ? `${meta} · ${facets.total.toLocaleString('en-US')} in the database` : meta}
       actions={
 <>
-          <Link href="/leads/duplicates" prefetch={false} className="text-[12px] text-ink-faint hover:text-ink">
+          <Link href="/leads/duplicates" prefetch={false} className="text-xs text-ink-faint hover:text-ink">
             Find duplicates
           </Link>
           <Link href="/leads/import" className={BUTTON}>
@@ -133,13 +133,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         />
       </div>
       {adv.source?.kind === 'segment' ? (
-        <p className="mb-3 text-[12px] text-ink-faint">
+        <p className="mb-3 text-xs text-ink-faint">
           Filtered by segment “{adv.source.name}”.
         </p>
       ) : null}
       {note ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[12px] text-ink-faint">
+          <p className="text-xs text-ink-faint">
             {VIEW_LABELS[q.view]}: {note}
           </p>
           {q.view === 'verify' ? (
