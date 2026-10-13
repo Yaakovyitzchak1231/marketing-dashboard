@@ -116,27 +116,27 @@ export function AngleManager({
   return (
     <div className="space-y-8">
       {error && (
-        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-xs text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
-        <h2 className="text-[12px] font-medium text-ink">New angle</h2>
+        <h2 className="text-xs font-medium text-ink">New angle</h2>
         <form onSubmit={create} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end">
           <label className="sm:col-span-2">
-            <span className="mb-1 block text-[11px] text-ink-muted">Name</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Name</span>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Penalty-fear opener"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <label>
-            <span className="mb-1 block text-[11px] text-ink-muted">Campaign</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Campaign</span>
             <select
               value={campaignId}
               onChange={e => setCampaignId(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             >
               <option value="">None</option>
               {campaigns.map(c => (
@@ -145,23 +145,23 @@ export function AngleManager({
             </select>
           </label>
           <label>
-            <span className="mb-1 block text-[11px] text-ink-muted">Variant label</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Variant label</span>
             <input
               value={variant}
               onChange={e => setVariant(e.target.value)}
               placeholder="A / B"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="rounded bg-ink px-4 py-2 text-[13px] text-white disabled:opacity-40 sm:col-start-4"
+            className="rounded bg-ink px-4 py-2 text-sm text-white disabled:opacity-40 sm:col-start-4"
           >
             {saving ? 'Saving…' : 'Add angle'}
           </button>
         </form>
-        <p className="mt-2 text-[11px] text-ink-faint">
+        <p className="mt-2 text-2xs text-ink-faint">
           A campaign with one angle gets that campaign&apos;s metrics. With two or more angles,
           metrics cannot be split honestly and stay unattributed.
         </p>
@@ -169,15 +169,15 @@ export function AngleManager({
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             Human-reply rate — {PERFORMANCE_RANGE_LABEL}
           </h2>
           {perf.length > 0 && (
-            <div className="flex items-center gap-2 text-[12px]">
+            <div className="flex items-center gap-2 text-xs">
               <button
                 type="button"
                 onClick={handleExportPerformance}
-                className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
+                className="text-2xs text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
               >
                 Export visible CSV
               </button>
@@ -207,12 +207,12 @@ export function AngleManager({
           )}
         </div>
         {perf.length === 0 ? (
-          <p className="text-[13px] text-ink-faint">No angle metrics yet.</p>
+          <p className="text-sm text-ink-faint">No angle metrics yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
+                <tr className="border-b border-line text-left text-2xs uppercase tracking-[0.06em] text-ink-muted">
                   <th className="px-4 py-2 font-medium">Angle</th>
                   <th className="px-4 py-2 font-medium">Campaign</th>
                   <th className="px-4 py-2 text-right font-medium">Sent</th>
@@ -244,7 +244,7 @@ export function AngleManager({
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             All angles
           </h2>
           {angles.length > 0 && (
@@ -253,7 +253,7 @@ export function AngleManager({
               placeholder="Search angles or campaigns..."
               value={angleQuery}
               onChange={e => setAngleQuery(e.target.value)}
-              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted min-w-64"
+              className="h-8 rounded border border-line bg-surface px-2 text-xs text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted min-w-64"
             />
           )}
         </div>
@@ -264,8 +264,8 @@ export function AngleManager({
               className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
             >
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-ink">{a.name}</p>
-                <p className="mt-1 text-[11px] text-ink-faint">
+                <p className="text-sm font-medium text-ink">{a.name}</p>
+                <p className="mt-1 text-2xs text-ink-faint">
                   {a.campaigns?.name ?? 'No campaign'}
                   {a.variant_label ? ` · variant ${a.variant_label}` : ''}
                 </p>
@@ -273,17 +273,17 @@ export function AngleManager({
               <button
                 onClick={() => remove(a.id)}
                 aria-label={`Delete angle: ${a.name}`}
-                className="shrink-0 text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+                className="shrink-0 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline"
               >
                 Delete
               </button>
             </div>
           ))}
           {angles.length > 0 && filteredAngles.length === 0 && (
-            <p className="text-[13px] text-ink-faint">No angles match your search.</p>
+            <p className="text-sm text-ink-faint">No angles match your search.</p>
           )}
           {angles.length === 0 && (
-            <p className="text-[13px] text-ink-faint">No angles yet. Add the first one above.</p>
+            <p className="text-sm text-ink-faint">No angles yet. Add the first one above.</p>
           )}
         </div>
       </section>
