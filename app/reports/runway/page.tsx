@@ -54,13 +54,13 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
             {segments.map((s) => (
               <Card key={s.segment} className="px-4 py-4">
                 <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-[13px] font-semibold text-ink">{SEGMENT_LABEL[s.segment]}</h3>
+                  <h3 className="text-sm font-semibold text-ink">{SEGMENT_LABEL[s.segment]}</h3>
                   <LevelPill level={s.level} />
                 </div>
-                <p className="mt-2 font-numeric text-[26px] font-semibold tabular-nums tracking-[-0.02em] text-ink" data-testid={`seg-days-${s.segment}`}>
+                <p className="mt-2 font-numeric text-2xl font-semibold tabular-nums tracking-[-0.02em] text-ink" data-testid={`seg-days-${s.segment}`}>
                   {s.level === 'not_sending' ? 'Not sending' : formatDays(s.days)}
                 </p>
-                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                   <dt className="text-ink-faint">Verified, unused</dt>
                   <dd className="text-right font-numeric tabular-nums">{fmtInt(s.ready)}</dd>
                   <dt className="text-ink-faint">Loaded, not contacted</dt>
@@ -87,7 +87,7 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
           </div>
         )}
         {noSegment > 0 ? (
-          <p className="mt-2 text-[12px] text-ink-faint">
+          <p className="mt-2 text-xs text-ink-faint">
             {noSegment} sending campaign{noSegment === 1 ? ' has' : 's have'} no segment set, so {noSegment === 1 ? 'it isn’t' : 'they aren’t'} counted above.{' '}
             <Link href="/reports/costs#campaign-setup" className="text-accent">
               Set segments
@@ -119,7 +119,7 @@ export default async function RunwayPage({ searchParams }: { searchParams: Promi
                   <tr key={c.id} className="border-b border-line-soft last:border-0" data-testid="runway-row">
                     <td className={TD}>
                       <div className="font-medium">{c.name}</div>
-                      <div className="text-[11px] text-ink-faint">
+                      <div className="text-2xs text-ink-faint">
                         {c.status}
                         {c.segment ? ` · ${SEGMENT_LABEL[c.segment] ?? c.segment}` : ''}
                         {c.angle ? ` · ${c.angle}` : ''}
