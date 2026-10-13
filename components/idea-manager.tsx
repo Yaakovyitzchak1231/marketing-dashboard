@@ -128,34 +128,34 @@ export function IdeaManager({
   return (
     <div className="space-y-8">
       {error && (
-        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-xs text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
-        <h2 className="text-[12px] font-medium text-ink">New idea</h2>
+        <h2 className="text-xs font-medium text-ink">New idea</h2>
         <form onSubmit={create} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="flex-1">
-            <span className="mb-1 block text-[11px] text-ink-muted">Name</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Name</span>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Jewelry retailers outreach"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <label className="flex-[2]">
-            <span className="mb-1 block text-[11px] text-ink-muted">Description</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Description</span>
             <input
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="What is the offer, who is it for?"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="rounded bg-ink px-4 py-2 text-[13px] text-white disabled:opacity-40"
+            className="rounded bg-ink px-4 py-2 text-sm text-white disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Add idea'}
           </button>
@@ -164,15 +164,15 @@ export function IdeaManager({
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             Performance — {PERFORMANCE_RANGE_LABEL}
           </h2>
           {perf.length > 0 && (
-            <div className="flex items-center gap-2 text-[12px]">
+            <div className="flex items-center gap-2 text-xs">
               <button
                 type="button"
                 onClick={handleExportPerformance}
-                className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
+                className="text-2xs text-ink-muted hover:text-ink underline underline-offset-2 mr-2"
               >
                 Export visible CSV
               </button>
@@ -206,14 +206,14 @@ export function IdeaManager({
           )}
         </div>
         {perf.length === 0 ? (
-          <p className="text-[13px] text-ink-faint">
+          <p className="text-sm text-ink-faint">
             No spend or outcomes recorded yet. Add costs on the Costs page and link campaigns to ideas.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
+                <tr className="border-b border-line text-left text-2xs uppercase tracking-[0.06em] text-ink-muted">
                   <th className="px-4 py-2 font-medium">Idea</th>
                   <th className="px-4 py-2 text-right font-medium">Spend</th>
                   <th className="px-4 py-2 text-right font-medium">Meetings / $100</th>
@@ -251,7 +251,7 @@ export function IdeaManager({
 
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             All ideas
           </h2>
           {ideas.length > 0 && (
@@ -260,7 +260,7 @@ export function IdeaManager({
               placeholder="Search ideas..."
               value={ideaQuery}
               onChange={e => setIdeaQuery(e.target.value)}
-              className="h-8 rounded border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="h-8 rounded border border-line bg-surface px-2 text-xs text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           )}
         </div>
@@ -271,28 +271,28 @@ export function IdeaManager({
               className="flex items-start justify-between gap-4 rounded-card border border-line bg-surface px-4 py-3"
             >
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-ink">{idea.name}</p>
+                <p className="text-sm font-medium text-ink">{idea.name}</p>
                 {idea.description && (
-                  <p className="mt-0.5 text-[12px] text-ink-faint">{idea.description}</p>
+                  <p className="mt-0.5 text-xs text-ink-faint">{idea.description}</p>
                 )}
-                <p className="mt-1 text-[11px] text-ink-faint">
+                <p className="mt-1 text-2xs text-ink-faint">
                   {idea.channels?.name ?? 'No channel'} · {idea.status}
                 </p>
               </div>
               <button
                 onClick={() => remove(idea.id)}
                 aria-label={`Delete idea: ${idea.name}`}
-                className="shrink-0 text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+                className="shrink-0 text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline"
               >
                 Delete
               </button>
             </div>
           ))}
           {ideas.length > 0 && filteredIdeas.length === 0 && (
-            <p className="text-[13px] text-ink-faint">No ideas match your search.</p>
+            <p className="text-sm text-ink-faint">No ideas match your search.</p>
           )}
           {ideas.length === 0 && (
-            <p className="text-[13px] text-ink-faint">No ideas yet. Add the first one above.</p>
+            <p className="text-sm text-ink-faint">No ideas yet. Add the first one above.</p>
           )}
         </div>
       </section>
