@@ -28,7 +28,7 @@ export interface StepsEditorProps {
   leads: { company_id: number; company_name: string; email: string | null }[]
 }
 
-const input = 'w-full rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint'
+const input = 'w-full rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint'
 
 function Warnings({ list }: { list: CopyWarning[] }) {
   if (!list.length) return <Pill tone="good">Copy checks pass</Pill>
@@ -72,20 +72,20 @@ function StepForm({
         setBusy(false)
       }}
     >
-      <label className="block text-[12px] text-ink-muted">
+      <label className="block text-xs text-ink-muted">
         Subject
         <input className={input} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Quick question, {{firstName}}" />
       </label>
-      <label className="block text-[12px] text-ink-muted">
+      <label className="block text-xs text-ink-muted">
         Body
         <textarea className={`${input} min-h-[140px] font-[inherit]`} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Hi {{firstName}}, ..." />
       </label>
       <div className="flex flex-wrap gap-3">
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-xs text-ink-muted">
           Wait (days)
           <input className={`${input} w-20`} type="number" min={0} max={365} value={delay} onChange={(e) => setDelay(e.target.value)} />
         </label>
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-xs text-ink-muted">
           Variant
           <input className={`${input} w-20`} value={variant} onChange={(e) => setVariant(e.target.value)} />
         </label>
@@ -100,7 +100,7 @@ function StepForm({
           </button>
         ) : null}
         {error ? (
-          <span role="alert" className="text-[12px] text-bad">
+          <span role="alert" className="text-xs text-bad">
             {error}
           </span>
         ) : null}
@@ -131,7 +131,7 @@ export function StepsEditor({ campaign, steps, fields, fieldsFrom, pushRequests,
       <section aria-labelledby="steps-h">
         <SectionHeader id="steps-h" title="Email steps" meta={`${steps.length} step${steps.length === 1 ? '' : 's'} · checks are warnings, not blockers: no links, 55–80 words, end with a question`} />
         {error ? (
-          <p role="alert" className="mb-2 text-[12px] text-bad">
+          <p role="alert" className="mb-2 text-xs text-bad">
             {error}
           </p>
         ) : null}
@@ -142,7 +142,7 @@ export function StepsEditor({ campaign, steps, fields, fieldsFrom, pushRequests,
             return (
               <li key={s.id}>
                 <Card className="p-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px] text-ink-muted">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                     <span className="font-semibold text-ink">Step {s.step_number}</span>
                     <Pill tone="neutral">Variant {s.variant}</Pill>
                     <span>{s.step_number === 1 ? 'Sends first' : `Waits ${s.delay_days} day${s.delay_days === 1 ? '' : 's'}`}</span>
@@ -182,8 +182,8 @@ export function StepsEditor({ campaign, steps, fields, fieldsFrom, pushRequests,
                     />
                   ) : (
                     <>
-                      <p className="text-[13px] font-medium text-ink">{s.subject || <span className="text-ink-faint">(no subject)</span>}</p>
-                      <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-muted">{s.body}</p>
+                      <p className="text-sm font-medium text-ink">{s.subject || <span className="text-ink-faint">(no subject)</span>}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-ink-muted">{s.body}</p>
                       <div className="mt-2">
                         <Warnings list={s.warnings} />
                       </div>
@@ -269,7 +269,7 @@ function InstantlyLink({ campaign, requests, hasSteps, onChanged }: { campaign: 
             void run('/instantly', 'PUT', { instantly_campaign_id: value.trim() || null }, value.trim() ? 'Linked. Nothing was sent.' : 'Unlinked.')
           }}
         >
-          <label className="min-w-[260px] flex-1 text-[12px] text-ink-muted">
+          <label className="min-w-[260px] flex-1 text-xs text-ink-muted">
             Instantly campaign id or link
             <input className={input} value={value} onChange={(e) => setValue(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" />
           </label>
@@ -287,16 +287,16 @@ function InstantlyLink({ campaign, requests, hasSteps, onChanged }: { campaign: 
             >
               Ask to push steps + Ready leads
             </button>
-            <span className="text-[12px] text-ink-faint">Only Ready leads ever upload, and only after a person approves.</span>
+            <span className="text-xs text-ink-faint">Only Ready leads ever upload, and only after a person approves.</span>
           </div>
         ) : null}
         {msg ? (
-          <p role={msg.tone === 'bad' ? 'alert' : 'status'} className={`text-[12px] ${msg.tone === 'bad' ? 'text-bad' : 'text-good'}`}>
+          <p role={msg.tone === 'bad' ? 'alert' : 'status'} className={`text-xs ${msg.tone === 'bad' ? 'text-bad' : 'text-good'}`}>
             {msg.text}
           </p>
         ) : null}
         {requests.length ? (
-          <ul className="space-y-1 text-[12px] text-ink-muted" aria-label="Push requests">
+          <ul className="space-y-1 text-xs text-ink-muted" aria-label="Push requests">
             {requests.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2">
                 <Pill tone={r.status === 'pending' ? 'warn' : r.status === 'approved' ? 'good' : 'neutral'}>{r.status === 'pending' ? 'Waiting for OK' : r.status}</Pill>
