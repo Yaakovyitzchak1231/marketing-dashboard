@@ -63,6 +63,7 @@ describe('2. the export says emails vs leads and skips merged rows', () => {
     const b = await addCompany(db, { name: 'Merged Away' })
     await addContact(db, b, 'x@merged.com', 'valid')
     await db.query('update lp.companies set merged_into = $1 where id = $2', [a, b])
+    await addCompany(db, { name: 'No Email Yet' })
   })
   afterAll(async () => db.close())
 
@@ -71,7 +72,8 @@ describe('2. the export says emails vs leads and skips merged rows', () => {
     expect(r.rows).toBe(2)
     expect(r.leads).toBe(1)
     expect(r.csv).not.toContain('x@merged.com')
-    expect(await liveExportCounts(db)).toEqual({ emails: 2, leads: 1 })
+    expect(await liveExportCounts(db)).toEqual({ emails: 2, leads: 1, leadsWithoutEmail: 1 })
+    expect(r.csv).not.toContain('No Email Yet')
   })
 })
 
