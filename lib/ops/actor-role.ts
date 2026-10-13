@@ -40,7 +40,7 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'entity_history', 'recent_changes', 'list_fields',
   'is_suppressed', 'list_suppressions',
   'list_settings', 'get_setting', 'secret_status',
-  'list_integrations', 'get_integration', 'latest_integration_metrics',
+  'list_integrations', 'get_integration', 'latest_integration_metrics', 'warmbly_snapshot',
   'campaign_for_newsletter_list', 'campaign_for_utm_campaign',
   'list_jobs', 'get_job', 'job_runs',
   'recent_lead_events', 'list_event_types',
