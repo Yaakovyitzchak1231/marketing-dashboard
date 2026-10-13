@@ -59,20 +59,20 @@ export function AskToChange({
     }
   }
 
-  const input = 'w-full rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-[12px] text-ink'
+  const input = 'w-full rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-xs text-ink'
   return (
     <div className="mt-1 text-left">
       {open ? (
         <form onSubmit={send} className="space-y-1" aria-label={`Ask to change ${label}`}>
-          <label className="block text-[11px] text-ink-faint">
+          <label className="block text-2xs text-ink-faint">
             Should read
             <input className={`${input} tabular-nums`} inputMode="numeric" value={proposed} onChange={(e) => setProposed(e.target.value)} />
           </label>
-          <label className="block text-[11px] text-ink-faint">
+          <label className="block text-2xs text-ink-faint">
             Why
             <input className={input} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
-          <div className="flex gap-2 text-[11.5px]">
+          <div className="flex gap-2 text-xs">
             <button type="submit" className="text-accent hover:underline disabled:opacity-50" disabled={busy || !proposed.trim() || !reason.trim()}>
               {busy ? 'Sending…' : 'Send for OK'}
             </button>
@@ -87,13 +87,13 @@ export function AskToChange({
           onClick={start}
           aria-label={viewer ? `Ask to change ${label} (view-only)` : `Ask to change ${label}`}
           {...(viewer ? VIEW_ONLY_PROPS : {})}
-          className={`text-[11px] ${viewer ? 'cursor-not-allowed text-ink-faint opacity-50' : 'text-ink-faint hover:text-ink'}`}
+          className={`text-2xs ${viewer ? 'cursor-not-allowed text-ink-faint opacity-50' : 'text-ink-faint hover:text-ink'}`}
         >
           Ask to change
         </button>
       )}
       {note ? (
-        <p role="status" className={`mt-1 text-[11px] ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
+        <p role="status" className={`mt-1 text-2xs ${note.tone === 'good' ? 'text-good' : 'text-bad'}`}>
           {note.text}
         </p>
       ) : null}
