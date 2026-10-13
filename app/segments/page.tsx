@@ -92,13 +92,13 @@ export default async function SegmentsPage() {
           <table className="w-full min-w-[720px]">
             <thead className="border-b border-line">
               <tr>
-                <th className="px-3 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Name</th>
-                <th className="px-3 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Campaign</th>
-                <th className="px-3 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Kind</th>
-                <th className="px-3 py-2 text-right text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Companies</th>
-                <th className="px-3 py-2 text-right text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Contacts</th>
-                <th className="px-3 py-2 text-right text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Verified-sendable</th>
-                <th className="px-3 py-2 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-faint">Last snapshot</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Name</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Campaign</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Kind</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Companies</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Contacts</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-ink-faint">Verified-sendable</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">Last snapshot</th>
               </tr>
             </thead>
             <tbody>
@@ -109,14 +109,14 @@ export default async function SegmentsPage() {
                       {seg.name}
                     </Link>
                     {seg.is_preset ? <Pill tone="neutral"> template</Pill> : null}
-                    <p className="mt-0.5 max-w-[360px] text-[11.5px] text-ink-faint">{rb}</p>
+                    <p className="mt-0.5 max-w-[360px] text-xs text-ink-faint">{rb}</p>
                   </td>
-                  <td className="px-3 py-2 text-[12.5px] text-ink-muted">{seg.campaign_id ? (campaignName.get(seg.campaign_id) ?? `#${seg.campaign_id}`) : 'All campaigns'}</td>
+                  <td className="px-3 py-2 text-xs text-ink-muted">{seg.campaign_id ? (campaignName.get(seg.campaign_id) ?? `#${seg.campaign_id}`) : 'All campaigns'}</td>
                   <td className="px-3 py-2"><Pill tone={seg.kind === 'static' ? 'warn' : 'accent'}>{seg.kind}</Pill></td>
-                  <td className="px-3 py-2 text-right text-[12.5px] text-ink">{n(counts.companies)}</td>
-                  <td className="px-3 py-2 text-right text-[12.5px] text-ink">{n(counts.contacts)}</td>
-                  <td className="px-3 py-2 text-right text-[12.5px] text-ink">{n(counts.verified_sendable)}</td>
-                  <td className="px-3 py-2 text-[12px] text-ink-faint">{snapshot ? `${n(snapshot.companies)} / ${n(snapshot.contacts)} on ${new Date(snapshot.taken_on).toLocaleDateString('en-US')}` : 'none yet'}</td>
+                  <td className="px-3 py-2 text-right text-xs text-ink">{n(counts.companies)}</td>
+                  <td className="px-3 py-2 text-right text-xs text-ink">{n(counts.contacts)}</td>
+                  <td className="px-3 py-2 text-right text-xs text-ink">{n(counts.verified_sendable)}</td>
+                  <td className="px-3 py-2 text-xs text-ink-faint">{snapshot ? `${n(snapshot.companies)} / ${n(snapshot.contacts)} on ${new Date(snapshot.taken_on).toLocaleDateString('en-US')}` : 'none yet'}</td>
                 </tr>
               ))}
             </tbody>
