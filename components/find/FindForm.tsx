@@ -94,8 +94,8 @@ export function FindForm({
     }
   }
 
-  const label = 'block text-[12px] font-medium text-ink-muted'
-  const input = 'mt-1 w-full rounded-md border border-line bg-canvas px-2.5 py-1.5 text-[13.5px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-accent'
+  const label = 'block text-xs font-medium text-ink-muted'
+  const input = 'mt-1 w-full rounded-control border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-ink-muted focus:border-accent'
 
   return (
     <form onSubmit={submit} className="grid gap-4 p-4 sm:p-5">
@@ -107,7 +107,7 @@ export function FindForm({
             role="radio"
             aria-checked={segment === p.id}
             onClick={() => pickSegment(p.id)}
-            className={`rounded-full border px-3 py-1 text-[12.5px] ${segment === p.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:border-ink-faint'}`}
+            className={`rounded-full border px-3 py-1 text-xs ${segment === p.id ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:border-ink-faint'}`}
           >
             {p.label}
           </button>
@@ -118,21 +118,21 @@ export function FindForm({
         <label className={label}>
           Where
           <input className={input} value={where} onChange={(e) => setWhere(e.target.value)} disabled={allUs} placeholder="MD, VA  or  Towson, MD; Columbia, MD" />
-          <span className="mt-1 block text-[11.5px] font-normal text-ink-faint">States (MD, VA) or cities (&quot;Towson, MD&quot;, separated by ;). Cities come from the top-1000 US cities list.</span>
+          <span className="mt-1 block text-xs font-normal text-ink-faint">States (MD, VA) or cities (&quot;Towson, MD&quot;, separated by ;). Cities come from the top-1000 US cities list.</span>
         </label>
         <label className={label}>
           Max businesses
           <input className={`${input} tabular-nums`} inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value.replace(/\D/g, ''))} />
         </label>
       </div>
-      <label className="flex items-center gap-2 text-[12.5px] text-ink-muted">
+      <label className="flex items-center gap-2 text-xs text-ink-muted">
         <input type="checkbox" checked={allUs} onChange={(e) => setAllUs(e.target.checked)} /> All of the US (top-1000 cities)
       </label>
 
       <label className={label}>
         Searches
         <input className={input} value={queries} onChange={(e) => setQueries(e.target.value)} />
-        <span className="mt-1 block text-[11.5px] font-normal text-ink-faint">
+        <span className="mt-1 block text-xs font-normal text-ink-faint">
           {poolHasDefaultQueries
             ? 'This pool ships with a built-in default search set. Edit it, or set the campaign\'s approved search phrases in its Profile so every run uses them.'
             : 'No built-in default searches for this pool yet — add some here, or set the campaign\'s approved search phrases in its Profile so every run uses them.'}
@@ -143,7 +143,7 @@ export function FindForm({
         <legend className={label}>Steps</legend>
         <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
           {STAGES.map((s) => (
-            <label key={s.id} className="flex items-start gap-2 rounded-md border border-line px-2.5 py-2 text-[12.5px]">
+            <label key={s.id} className="flex items-start gap-2 rounded-control border border-line px-2.5 py-2 text-xs">
               <input
                 type="checkbox"
                 className="mt-0.5"
@@ -153,23 +153,23 @@ export function FindForm({
               />
               <span>
                 <span className="text-ink">{s.label}</span>
-                {'extra' in s && s.extra ? <span className="ml-1.5 text-[11px] text-ink-faint">opt-in</span> : null}
-                <span className="block text-[11.5px] text-ink-faint">{s.hint}</span>
+                {'extra' in s && s.extra ? <span className="ml-1.5 text-2xs text-ink-faint">opt-in</span> : null}
+                <span className="block text-xs text-ink-faint">{s.hint}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      <label className="flex items-center gap-2 text-[12.5px] text-ink-muted">
+      <label className="flex items-center gap-2 text-xs text-ink-muted">
         <input type="checkbox" checked={proxies} onChange={(e) => setProxies(e.target.checked)} /> Rotate proxies (uses the runner&apos;s ENGINE_PROXIES list)
       </label>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={busy} className="rounded-md bg-ink px-4 py-2 text-[13px] font-medium text-surface disabled:opacity-50">
+        <button type="submit" disabled={busy} className="rounded-control bg-ink px-4 py-2 text-sm font-medium text-surface disabled:opacity-50">
           {busy ? 'Starting…' : 'Find leads'}
         </button>
-        {msg ? <p className={`text-[12.5px] ${msg.tone === 'good' ? 'text-good' : 'text-bad'}`}>{msg.text}</p> : null}
+        {msg ? <p className={`text-xs ${msg.tone === 'good' ? 'text-good' : 'text-bad'}`}>{msg.text}</p> : null}
       </div>
     </form>
   )
