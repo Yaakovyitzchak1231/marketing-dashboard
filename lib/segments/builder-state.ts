@@ -29,10 +29,6 @@ export function defaultQualityCondition(): Condition {
   return { kind: 'quality', op: 'verified_sendable' }
 }
 
-export function defaultCampaignMembershipCondition(): Condition {
-  return { kind: 'campaign_membership', mode: 'any_active_campaign' }
-}
-
 export function addGroup(groups: ConditionGroup[], firstCondition: Condition): ConditionGroup[] {
   return [...groups, { conditions: [firstCondition] }]
 }

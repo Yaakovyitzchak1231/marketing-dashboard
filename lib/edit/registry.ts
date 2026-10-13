@@ -211,9 +211,3 @@ export function fieldDef(type: string, field: string): FieldDef {
   if (!def) throw new RegistryError(`"${field}" can't be edited on a ${type}. Fields: ${Object.keys(entity).join(', ')}.`, 404)
   return def
 }
-
-export function entityFields(type: string): Record<string, FieldDef> {
-  const entity = (REGISTRY as Registry)[type as EntityType]
-  if (!entity) throw new RegistryError(`"${type}" is not an editable entity type. Entities: ${ENTITY_TYPES.join(', ')}.`, 404)
-  return entity
-}

@@ -9,7 +9,7 @@
 import { actorFor } from '@/lib/auth/act'
 import { revalidatePath } from 'next/cache'
 import { getDb } from '@/lib/db'
-import { updateEntity, updateEntityFields, RegistryError, LeadEditError } from '@/lib/edit/update'
+import { updateEntity, RegistryError, LeadEditError } from '@/lib/edit/update'
 import { FieldError } from '@/lib/fields/store'
 import { entityHistory, type HistoryRow } from '@/lib/edit/history'
 import { requestValueChange } from '@/lib/edit/ask-change'
@@ -49,27 +49,6 @@ export async function updateEntityAction(input: {
     revalidatePath('/leads')
     revalidatePath('/campaigns')
     return { ok: true, ...r }
-  } catch (e) {
-    return fail(e)
-  }
-}
-
-export async function updateEntityFieldsAction(input: {
-  type: string
-  id: string | number
-  fields: Record<string, unknown>
-  note?: string
-}): Promise<{ ok: true; results: UpdateEntityActionResult[] } | Fail> {
-  const who = await actorFor('editor').catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
-  if (who instanceof Error) return { ok: false, error: who.message }
-  const ME = who
-  const db = getDb()
-  if (!db) return NOT_CONNECTED
-  try {
-    const results = await updateEntityFields(db, ME, { ...input, via: 'ui' })
-    revalidatePath('/leads')
-    revalidatePath('/campaigns')
-    return { ok: true, results: results.map((r) => ({ ok: true as const, ...r })) }
   } catch (e) {
     return fail(e)
   }

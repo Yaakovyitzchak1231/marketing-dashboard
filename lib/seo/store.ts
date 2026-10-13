@@ -210,17 +210,6 @@ async function seoProjectId(q: Queryable): Promise<number | null> {
 
 const LIVE = ['queued', 'claimed', 'running', 'blocked', 'needs_approval']
 
-export async function competitorCounts(q: Queryable): Promise<{ name: string; count: number }[]> {
-  const { rows } = await q.query<{ name: string; count: number }>(
-    `with latest as (select distinct on (provider) id from lp.seo_visibility_runs where status = 'done' order by provider, id desc)
-     select c as name, count(*)::int as count
-       from lp.seo_visibility_results r, unnest(r.competitors) c
-      where r.run_id in (select id from latest)
-      group by c order by count desc, c`,
-  )
-  return rows
-}
-
 /** Create a task per open fix (deduped while live); close live, unclaimed tasks whose check now passes. */
 export async function syncFixes(db: Db, actor: string, site: SiteRow, audit: AuditRow): Promise<{ created: number; closed: number }> {
   const fs: FixSite = { id: site.id, name: site.name, base_url: site.base_url, platform: site.platform, host: site.host, campaign: site.campaign }
@@ -540,7 +529,4 @@ export async function latestRuns(q: Queryable): Promise<VisRun[]> {
 export async function runResults(q: Queryable, runIds: number[]): Promise<VisResult[]> {
   if (!runIds.length) return []
   return (await q.query<VisResult>('select * from lp.seo_visibility_results where run_id = any($1) order by id', [runIds])).rows
-}
-export async function recentRuns(q: Queryable, limit = 20): Promise<VisRun[]> {
-  return (await q.query<VisRun>('select * from lp.seo_visibility_runs order by id desc limit $1', [limit])).rows
 }

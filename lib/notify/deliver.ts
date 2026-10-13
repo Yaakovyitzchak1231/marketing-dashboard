@@ -563,15 +563,3 @@ export async function taskDeliveryStates(q: Queryable, taskId: number): Promise<
   )
   return rows
 }
-
-export async function deliveryStatesFor(q: Queryable, ids: number[]): Promise<Map<number, DeliveryState>> {
-  if (!ids.length) return new Map()
-  const { rows } = await q.query<DeliveryState>(
-    `select n.id as notification_id, n.recipient, a.display_name as recipient_name, a.kind as recipient_kind, n.summary, n.created_at,
-            s.status, s.last_error, s.held_until
-       from lp.notifications n join lp.actors a on a.id = n.recipient
-       join lp.notification_delivery s on s.notification_id = n.id where n.id = any($1)`,
-    [ids],
-  )
-  return new Map(rows.map((r) => [r.notification_id, r]))
-}
