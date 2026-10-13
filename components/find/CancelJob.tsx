@@ -20,11 +20,11 @@ export function CancelJob({ id }: { id: number }) {
           setBusy(false)
           router.refresh()
         }}
-        className="text-[12px] text-bad hover:underline disabled:opacity-50"
+        className="text-xs text-bad hover:underline disabled:opacity-50"
       >
         {busy ? 'Stopping…' : 'Cancel'}
       </button>
-      {err ? <span className="text-[11.5px] text-bad">{err}</span> : null}
+      {err ? <span className="text-xs text-bad">{err}</span> : null}
     </span>
   )
 }
