@@ -104,8 +104,9 @@ export const MAX_MESSAGES = 50
 
 /**
  * The panel state for a lead with these (already normalized) addresses.
- * `actor` is the signed-in person viewing the page, used only to save a
- * rotated refresh token under their name in the audit log.
+ * Callers show this to the Owner only (it is the Owner's private mail).
+ * `actor` is the Owner's actor id, used only to save a rotated refresh token
+ * under their name in the audit log; pass null to never write.
  */
 export async function leadMailbox(addresses: string[], actor: string | null): Promise<LeadMailboxState> {
   const setup = await outlookSetup()

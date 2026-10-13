@@ -44,7 +44,8 @@ It is behind a feature flag and is off until all of this is done.
 5. Open any lead → **Timeline** → **Connect Outlook**, and sign in as
    Yaakov@TapDash.co. Microsoft sends you back to the lead and the list appears.
 
-Only an Owner can connect. To disconnect, clear **Outlook connection** in
+Only an Owner can connect, and only an Owner sees the list: it is your private
+mail, so editors and viewers see no section and nothing is read for them. To disconnect, clear **Outlook connection** in
 Settings → Mailboxes (and, to cut access at Microsoft's end too, remove the app
 under myaccount.microsoft.com → Apps). The client secret expires on the date
 Microsoft shows for it; make a new one before then.

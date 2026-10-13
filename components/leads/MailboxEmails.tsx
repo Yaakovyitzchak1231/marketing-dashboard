@@ -8,15 +8,18 @@ import type { LeadMailboxState } from '@/lib/mailbox/types'
 /**
  * "Emails with you" on the lead's Timeline tab (TAP-114): the 1:1 emails
  * between the connected Outlook and this lead's addresses, read live and
- * read-only. Renders nothing while the mailbox flag is off.
+ * read-only. Owner only. Renders nothing while the mailbox flag is off.
  */
 export async function MailboxEmails({ addresses, companyId }: { addresses: string[]; companyId: number }) {
+  // The connected inbox is the Owner's private mail: only the Owner sees it,
+  // and only the Owner's own page views can save a rotated token. Editors and
+  // viewers get nothing, and nothing is read from Outlook for them.
+  if ((await currentRole().catch(() => null)) !== 'owner') return null
   const actor = await currentActorId().catch(() => null)
   const state = await leadMailbox(addresses, actor)
   if (state.state === 'off') return null
-  const isOwner = (await currentRole().catch(() => null)) === 'owner'
   const next = `/leads/${companyId}?tab=timeline`
-  return <MailboxEmailsView state={state} isOwner={isOwner} next={next} />
+  return <MailboxEmailsView state={state} isOwner next={next} />
 }
 
 /** Pure view, rendered directly in tests. */

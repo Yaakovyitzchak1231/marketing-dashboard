@@ -6,8 +6,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import React from 'react'
 
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/auth/session', () => ({ currentActorId: async () => 'owner', currentRole: async () => 'owner' }))
-vi.mock('@/lib/mailbox/server', () => ({ leadMailbox: async () => ({ state: 'off' }) }))
+const { role, read } = vi.hoisted(() => ({ role: { value: 'owner' as string | null }, read: { calls: 0 } }))
+vi.mock('@/lib/auth/session', () => ({ currentActorId: async () => 'owner', currentRole: async () => role.value }))
+vi.mock('@/lib/mailbox/server', () => ({
+  leadMailbox: async () => {
+    read.calls++
+    return { state: 'off' }
+  },
+}))
 
 import { MailboxEmails, MailboxEmailsView } from '@/components/leads/MailboxEmails'
 
@@ -30,8 +36,22 @@ const msg = (id: string, direction: 'sent' | 'received', subject: string) => ({
 
 describe('MailboxEmails', () => {
   it('renders nothing while the flag is off', async () => {
+    role.value = 'owner'
     const el = await MailboxEmails({ addresses: ['jane@lead.io'], companyId: 7 })
     expect(el).toBeNull()
+  })
+
+  it('shows the owner’s mail to the owner only, and reads nothing for anyone else', async () => {
+    for (const r of ['editor', 'viewer', null]) {
+      role.value = r
+      read.calls = 0
+      expect(await MailboxEmails({ addresses: ['jane@lead.io'], companyId: 7 })).toBeNull()
+      expect(read.calls).toBe(0)
+    }
+    role.value = 'owner'
+    read.calls = 0
+    await MailboxEmails({ addresses: ['jane@lead.io'], companyId: 7 })
+    expect(read.calls).toBe(1)
   })
 
   it('tells the owner what is missing, and offers Connect when not connected', () => {
