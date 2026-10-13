@@ -2,7 +2,7 @@
 import type { Queryable } from '@/lib/db/types'
 import { STAGES, type Stage } from './types'
 import { replyDeskCounts } from './replies'
-import { TOUCH_COMPANY_REL, hasMergedIntoColumn } from './queries'
+import { TOUCH_COMPANY_REL } from './queries'
 import { overviewReadiness, type OverviewReadiness } from '../rules/readiness'
 import { PENDING_APPROVALS_COUNT_SQL } from '../ops/counters'
 import { ROUTINE_EVENT_SQL } from '../ops/routine'
@@ -37,16 +37,18 @@ export interface OverviewData {
 /**
  * A merged-away company or contact is a tombstone (merged_into, 0026): the lead lives on as
  * the row it was merged into. Counting tombstones double-counts every merged lead, which is
- * how the Overview reached 34,632. Exported so the tests pin the exact predicates.
+ * how the Overview reached 34,632. Migration 0026 is a hard requirement of the app (export,
+ * segments, scoring and reconcile all filter on it without a fallback), so this does not check for it.
  */
-export function liveFilters(mergedReady: boolean): { co: string; ct: string; joinedCo: string; joinedCt: string; coJoin: string } {
-  return mergedReady
-    ? { co: 'merged_into is null', ct: 'merged_into is null', joinedCo: 'co.merged_into is null', joinedCt: 'ct.merged_into is null', coJoin: 'and exists (select 1 from lp.companies lc where lc.id = tc.co and lc.merged_into is null)' }
-    : { co: 'true', ct: 'true', joinedCo: 'true', joinedCt: 'true', coJoin: '' }
+const live = {
+  co: 'merged_into is null',
+  ct: 'merged_into is null',
+  joinedCo: 'co.merged_into is null',
+  joinedCt: 'ct.merged_into is null',
+  coJoin: 'and exists (select 1 from lp.companies lc where lc.id = tc.co and lc.merged_into is null)',
 }
 
 export async function loadOverview(db: Queryable): Promise<OverviewData> {
-  const live = liveFilters(await hasMergedIntoColumn(db))
   const [stage, totals, tasks, agents, recent, desk, readiness] = await Promise.all([
     db.query<{ stage: Stage; n: number }>(`select stage, count(*)::int as n from lp.companies where ${live.co} group by stage`),
     db.query<{

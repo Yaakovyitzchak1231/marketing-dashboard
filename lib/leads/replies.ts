@@ -91,11 +91,16 @@ const DESK_CTE = `with desk as (
      ), latest as (
        select distinct on (lead_key) * from desk where lead_key is not null
         order by lead_key, occurred_at desc, id desc
+     ), last_sent as (
+       -- Newest send per lead, computed once. A per-lead EXISTS here ran once per desk lead.
+       select lower(coalesce(s.email, s.payload->>'lead_email')) as lead_key, max(s.occurred_at) as at
+         from lp.campaign_touches s
+        where s.event_type = 'email_sent'
+        group by 1
      )`
 
-const ANSWERED_AFTER_SQL = `exists (select 1 from lp.campaign_touches s
-                     where s.event_type = 'email_sent' and s.occurred_at > l.occurred_at
-                       and lower(coalesce(s.email, s.payload->>'lead_email')) = l.lead_key)`
+/** True when a send went out after the lead's newest desk event. Needs a `left join last_sent ls on ls.lead_key = l.lead_key`. */
+const ANSWERED_AFTER_SQL = `coalesce(ls.at > l.occurred_at, false)`
 
 /**
  * How many leads sit in each bucket, over EVERY lead with a desk event. The list below is
@@ -105,7 +110,7 @@ const ANSWERED_AFTER_SQL = `exists (select 1 from lp.campaign_touches s
  */
 export async function replyDeskCounts(db: Queryable): Promise<Record<ReplyBucket, number> & { total: number }> {
   const { rows } = await db.query<{ event_type: string; answered_after: boolean; n: number }>(
-    `${DESK_CTE}, b as (select l.event_type, ${ANSWERED_AFTER_SQL} as answered_after from latest l)
+    `${DESK_CTE}, b as (select l.event_type, ${ANSWERED_AFTER_SQL} as answered_after from latest l left join last_sent ls on ls.lead_key = l.lead_key)
      select event_type, answered_after, count(*)::int as n from b group by event_type, answered_after`,
     [DESK_EVENTS],
   )
@@ -133,7 +138,9 @@ export async function loadReplyDesk(db: Queryable, limitPerLead = 500): Promise<
             (select count(*)::int from desk d where d.lead_key = l.lead_key and d.event_type = 'reply_received') as replies,
             (select d.payload from desk d where d.lead_key = l.lead_key and d.event_type = 'reply_received'
               order by d.occurred_at desc, d.id desc limit 1) as last_reply_payload
-       from latest l left join lp.companies co on co.id = l.co_id
+       from latest l
+       left join last_sent ls on ls.lead_key = l.lead_key
+       left join lp.companies co on co.id = l.co_id
       order by l.occurred_at desc, l.id desc
       limit $2`,
     [DESK_EVENTS, limitPerLead],

@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createTestDb } from './helpers/pglite-db'
 import { addCompany, addContact, addTouch } from './helpers/lead-fixtures'
-import { loadOverview, liveFilters } from '@/lib/leads/overview'
+import { loadOverview } from '@/lib/leads/overview'
 import { compileSegment, countSegment, matchQuerySql } from '@/lib/segments/compile'
 import { exportCsv, liveExportCounts } from '@/lib/export/lead-master'
 import { finishRun, latestRunPerJob, listJobRuns, recentFailedRuns, upsertJob } from '@/lib/jobs/store'
@@ -39,10 +39,6 @@ describe('1. merged leads are not counted (Overview showed 34,632)', () => {
     expect(o.contacts).toBe(1)
     expect(Object.values(o.byStage).reduce((a, b) => a + b, 0)).toBe(2)
     expect(o.needsVerificationCompanies).toBe(1)
-  })
-
-  it('a database before migration 0026 still loads (no merged_into filter)', () => {
-    expect(liveFilters(false)).toEqual({ co: 'true', ct: 'true', joinedCo: 'true', joinedCt: 'true', coJoin: '' })
   })
 
   it('segments leave merged tombstones out too', async () => {
@@ -208,5 +204,18 @@ describe('B. reply counts are not capped by the 500-lead list', () => {
     expect(counts.bounced).toBe(5)
     expect(counts.total).toBe(6)
     expect((await loadOverview(db)).repliesWaiting).toBe(1)
+  })
+
+  it('a reply is answered only by a send after it', async () => {
+    await addTouch(db, { email: 'later@send.com', event: 'reply_received', at: '2026-09-02T10:00:00Z' })
+    await addTouch(db, { email: 'later@send.com', event: 'email_sent', at: '2026-09-02T11:00:00Z' })
+    await addTouch(db, { email: 'earlier@send.com', event: 'email_sent', at: '2026-09-02T09:00:00Z' })
+    await addTouch(db, { email: 'earlier@send.com', event: 'reply_received', at: '2026-09-02T10:00:00Z' })
+    const counts = await replyDeskCounts(db)
+    expect(counts.answered).toBe(1)
+    expect(counts.needs_reply).toBe(2)
+    const byEmail = Object.fromEntries((await loadReplyDesk(db)).map((i) => [i.email, i.bucket]))
+    expect(byEmail['later@send.com']).toBe('answered')
+    expect(byEmail['earlier@send.com']).toBe('needs_reply')
   })
 })
