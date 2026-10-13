@@ -54,13 +54,13 @@ export function filterEvents(events: LeadEventRow[], opts: { category?: string |
 
 export function TimelineFilters({ category, q }: { category: string | null; q: string | null }) {
   return (
-    <form method="get" className="mb-3 flex flex-wrap items-center gap-2 text-[12px]">
+    <form method="get" className="mb-3 flex flex-wrap items-center gap-2 text-xs">
       {/* Keep the Timeline tab open on submit (review fix, #79: it used to jump back to Overview). */}
       <input type="hidden" name="tab" value="timeline" />
       <select
         name="tl_cat"
         defaultValue={category ?? ''}
-        className="rounded-md border border-line bg-canvas px-2 py-1 text-ink"
+        className="rounded-control border border-line bg-canvas px-2 py-1 text-ink"
       >
         <option value="">All categories</option>
         {TIMELINE_CATEGORIES.map((c) => (
@@ -74,9 +74,9 @@ export function TimelineFilters({ category, q }: { category: string | null; q: s
         name="tl_q"
         defaultValue={q ?? ''}
         placeholder="Search timeline…"
-        className="min-w-[160px] flex-1 rounded-md border border-line bg-canvas px-2 py-1 text-ink"
+        className="min-w-[160px] flex-1 rounded-control border border-line bg-canvas px-2 py-1 text-ink"
       />
-      <button type="submit" className="rounded-md border border-line px-2 py-1 text-ink-muted hover:text-ink">
+      <button type="submit" className="rounded-control border border-line px-2 py-1 text-ink-muted hover:text-ink">
         Filter
       </button>
       {category || q ? (
@@ -93,14 +93,14 @@ export function LeadTimeline({ events }: { events: LeadEventRow[] }) {
   return (
     <ol className="divide-y divide-line-soft">
       {events.map((e) => (
-        <li key={e.id} className="px-4 py-2.5 text-[13px]">
+        <li key={e.id} className="px-4 py-2.5 text-sm">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{eventLabel(e)}</span>
-            <span className="text-[12px] tabular-nums text-ink-faint" title={new Date(e.occurred_at).toLocaleString('en-US')}>
+            <span className="text-xs tabular-nums text-ink-faint" title={new Date(e.occurred_at).toLocaleString('en-US')}>
               {relativeTime(e.occurred_at)}
             </span>
           </div>
-          {e.campaign_name ? <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">{e.campaign_name}</div> : null}
+          {e.campaign_name ? <div className="text-xs text-ink-faint [overflow-wrap:anywhere]">{e.campaign_name}</div> : null}
         </li>
       ))}
     </ol>
