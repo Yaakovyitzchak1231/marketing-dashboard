@@ -6,14 +6,16 @@
  */
 import { validatePublicHttpsUrl } from './safe-url.ts'
 
-export type SettingGroup = 'Workspace' | 'Email sending' | 'Sending' | 'Verification' | 'AI' | 'Google' | 'Webhooks' | 'Integrations'
+export type SettingGroup = 'Workspace' | 'Email sending' | 'Sending' | 'Verification' | 'AI' | 'Google' | 'Mailboxes' | 'Webhooks' | 'Integrations'
 
-export const SETTING_GROUPS: SettingGroup[] = ['Workspace', 'Email sending', 'Sending', 'Verification', 'AI', 'Google', 'Webhooks', 'Integrations']
+export const SETTING_GROUPS: SettingGroup[] = ['Workspace', 'Email sending', 'Sending', 'Verification', 'AI', 'Google', 'Mailboxes', 'Webhooks', 'Integrations']
 
 /** One plain line under a group's heading on /settings, where the group needs explaining. */
 export const SETTING_GROUP_HELP: Partial<Record<SettingGroup, string>> = {
   'Email sending':
-    'The dashboard emails a notice the moment something needs attention, like a new page comment or a task handed to an agent. It sends through a free Resend or Brevo account. Settings values are used first, with Vercel environment variables as fallback. Until all three mail settings are available, the emails wait, then go out once they are.'
+    'The dashboard emails a notice the moment something needs attention, like a new page comment or a task handed to an agent. It sends through a free Resend or Brevo account. Settings values are used first, with Vercel environment variables as fallback. Until all three mail settings are available, the emails wait, then go out once they are.',
+  Mailboxes:
+    'Shows your own 1:1 emails with a lead on that lead’s page (Timeline tab), read live from your Outlook. Read-only: the dashboard can only list mail, never send, move or delete it, and stores no message text. Turn it on, add the Microsoft app ID and secret, then press Connect Outlook on any lead’s Timeline tab.',
 }
 
 export interface SettingOption {
@@ -69,6 +71,16 @@ function isUrl(value: string): string | null {
 
 function isSheetId(value: string): string | null {
   return /^[A-Za-z0-9_-]{20,100}$/.test(value.trim()) ? null : 'That does not look like a Google Sheet id (the long id in the sheet’s URL).'
+}
+
+function isEmail(value: string): string | null {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) ? null : 'That does not look like an email address.'
+}
+
+function isTenant(value: string): string | null {
+  return /^(common|organizations|consumers|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9.-]+\.[a-z]{2,})$/i.test(value.trim())
+    ? null
+    : 'Use "common", "organizations", or your directory (tenant) id.'
 }
 
 export const MAIL_PROVIDER_OPTIONS: SettingOption[] = [
@@ -249,6 +261,67 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     envFallback: 'GOOGLE_SERVICE_ACCOUNT_JSON',
     multiline: true,
     help: 'A service account with Editor access to the sheets above (preferred over a short-lived access token).',
+  },
+  // ---------------------------------------------------------------- Mailboxes
+  {
+    key: 'mailbox.outlook.enabled',
+    label: 'Show Outlook emails on lead pages',
+    group: 'Mailboxes',
+    secret: false,
+    envFallback: 'MAILBOX_OUTLOOK_ENABLED',
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'on', label: 'On' },
+    ],
+    optional: true,
+    help: 'The feature flag. Off (the default) hides the panel and reads nothing.',
+  },
+  {
+    key: 'mailbox.outlook.client_id',
+    label: 'Microsoft app (client) ID',
+    group: 'Mailboxes',
+    secret: false,
+    envFallback: 'MS_GRAPH_CLIENT_ID',
+    placeholder: '00000000-0000-0000-0000-000000000000',
+    optional: true,
+    help: 'From the app registration in Microsoft Entra (portal.azure.com → App registrations). Delegated permission: Mail.Read only.',
+  },
+  {
+    key: 'mailbox.outlook.client_secret',
+    label: 'Microsoft app client secret',
+    group: 'Mailboxes',
+    secret: true,
+    envFallback: 'MS_GRAPH_CLIENT_SECRET',
+    optional: true,
+    help: 'The secret’s Value (not its ID), from the same app registration → Certificates & secrets.',
+  },
+  {
+    key: 'mailbox.outlook.tenant',
+    label: 'Microsoft tenant',
+    group: 'Mailboxes',
+    secret: false,
+    envFallback: 'MS_GRAPH_TENANT',
+    placeholder: 'common',
+    optional: true,
+    help: 'Leave empty for "common". Use your directory (tenant) id if the app is single-tenant.',
+    validate: isTenant,
+  },
+  {
+    key: 'mailbox.outlook.address',
+    label: 'Connected Outlook address',
+    group: 'Mailboxes',
+    secret: false,
+    optional: true,
+    help: 'Filled in by Connect Outlook with the account that signed in.',
+    validate: isEmail,
+  },
+  {
+    key: 'mailbox.outlook.refresh_token',
+    label: 'Outlook connection',
+    group: 'Mailboxes',
+    secret: true,
+    optional: true,
+    help: 'Saved by Connect Outlook (encrypted). Clear it to disconnect.',
   },
   // -------------------------------------------------------------- Webhooks
   {

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { getDb } from '@/lib/db'
 import type { LeadDetail } from '@/lib/leads/detail'
 import { getLeadProfile } from '@/lib/leads/profile'
@@ -31,6 +31,8 @@ import { CustomFieldsBlock } from '@/components/leads/CustomFieldsBlock'
 import { listFieldDefsSafe } from '@/lib/fields/registry'
 import { ForgetContactButton } from '@/components/leads/ForgetContactButton'
 import { LeadListsCard } from '@/components/leads/LeadListsCard'
+import { MailboxEmails } from '@/components/leads/MailboxEmails'
+import { leadAddresses } from '@/lib/mailbox/match'
 
 export const dynamic = 'force-dynamic'
 
@@ -241,6 +243,10 @@ export default async function LeadPage({
               <EmptyNote>Not in any Instantly campaign yet.</EmptyNote>
             )}
           </Section>
+          {/* TAP-114: 1:1 emails from the connected inbox. Renders nothing while the mailbox flag is off; streams in so Outlook never holds up the page. */}
+          <Suspense fallback={null}>
+            <MailboxEmails addresses={leadAddresses(d.contacts.map((ct) => ct.email))} companyId={c.id} />
+          </Suspense>
         </div>
       ) : null}
 
