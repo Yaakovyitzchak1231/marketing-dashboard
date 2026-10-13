@@ -92,6 +92,12 @@ function Bucket({ bucket, items, compact = false }: { bucket: ReplyBucket; items
 
 function ReplyRow({ r, compact }: { r: ReplyItem; compact: boolean }) {
   const where = place(r.city, r.state)
+  const ms = Date.now() - new Date(r.occurred_at).getTime()
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24))
+  const waitPill = r.bucket === 'needs_reply' && days > 0 ? (
+     <span className="ml-2 font-medium text-warn">{days} day{days === 1 ? '' : 's'} waiting</span>
+  ) : null
+
   return (
     <li className="px-4 py-3 text-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
@@ -104,6 +110,7 @@ function ReplyRow({ r, compact }: { r: ReplyItem; compact: boolean }) {
             <span className="font-medium text-ink">{r.email ?? 'Unknown lead'}</span>
           )}
           {where ? <span className="ml-2 text-xs text-ink-faint">{where}</span> : null}
+          {waitPill}
         </span>
         <span className="shrink-0 text-xs tabular-nums text-ink-faint">{dateTime(r.occurred_at)}</span>
       </div>
