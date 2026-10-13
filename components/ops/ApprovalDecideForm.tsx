@@ -20,7 +20,7 @@ export function ApprovalDecideForm({
   action: (fd: FormData) => void | Promise<void>
 }) {
   if (isValueChangePayload(payload) && role !== 'owner') {
-    return <p className="text-[12px] text-ink-muted">Waiting for an owner to decide.</p>
+    return <p className="text-xs text-ink-muted">Waiting for an owner to decide.</p>
   }
   return (
     <form action={action} className="space-y-2">
