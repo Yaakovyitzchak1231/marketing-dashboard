@@ -115,7 +115,7 @@ function Card({ children, testId }: { children: ReactNode; testId: string }) {
 
 function Label({ children }: { children: ReactNode }) {
   return (
-    <h2 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+    <h2 className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted">
       {children}
     </h2>
   )
@@ -132,14 +132,14 @@ function EmptyOrError({
 }) {
   if (rows === null) {
     return (
-      <p data-testid={testId} data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
+      <p data-testid={testId} data-unavailable="true" className="mt-2 text-sm text-ink-faint">
         {COPY.error}
       </p>
     )
   }
   if (rows.length === 0) {
     return (
-      <p data-testid={testId} className="mt-2 text-[13px] text-ink-faint">
+      <p data-testid={testId} className="mt-2 text-sm text-ink-faint">
         {empty}
       </p>
     )
@@ -164,7 +164,7 @@ function ActionButton({
       data-testid={testId}
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+      className="rounded border border-line px-2.5 py-1 text-sm text-ink"
     >
       {children}
     </button>
@@ -205,12 +205,12 @@ function CommentThread({
           className="border-t border-line-soft py-2"
         >
           {comment.rowName ? (
-            <p className="text-[13px] text-ink">{COPY.workspace.commentOn(comment.rowName)}</p>
+            <p className="text-sm text-ink">{COPY.workspace.commentOn(comment.rowName)}</p>
           ) : null}
-          <p data-testid="comment-author" className="text-[12px] text-ink-muted">
+          <p data-testid="comment-author" className="text-xs text-ink-muted">
             {recordedActor(comment.actor) ?? COPY.workspace.authorNotRecorded}
           </p>
-          {comment.body ? <p className="text-[13px] text-ink-muted">{comment.body}</p> : null}
+          {comment.body ? <p className="text-sm text-ink-muted">{comment.body}</p> : null}
           <CommentThread comments={comments} parentId={comment.id} />
         </li>
       ))}
@@ -315,10 +315,10 @@ export function SharedWorkspace({
   return (
     <main className="mx-auto w-full max-w-shell px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h1 className="text-[15px] font-medium tracking-[-0.01em] text-ink">
+        <h1 className="text-base font-medium tracking-[-0.01em] text-ink">
           {COPY.workspace.title}
         </h1>
-        <Link href="/" className="text-[12px] text-ink-muted underline-offset-4 hover:underline">
+        <Link href="/" className="text-xs text-ink-muted underline-offset-4 hover:underline">
           {COPY.workspace.back}
         </Link>
       </header>
@@ -327,28 +327,28 @@ export function SharedWorkspace({
         <Card testId="workspace-intro">
           <dl className="flex flex-col gap-3">
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+              <dt className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted">
                 {COPY.workspace.whatItIs}
               </dt>
-              <dd className="mt-0.5 text-[13px] text-ink">{COPY.workspace.whatItIsBody}</dd>
+              <dd className="mt-0.5 text-sm text-ink">{COPY.workspace.whatItIsBody}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+              <dt className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted">
                 {COPY.workspace.whoIsInIt}
               </dt>
-              <dd className="mt-0.5 text-[13px] text-ink">{COPY.workspace.whoBody}</dd>
+              <dd className="mt-0.5 text-sm text-ink">{COPY.workspace.whoBody}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+              <dt className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted">
                 {COPY.workspace.whatItCosts}
               </dt>
-              <dd className="mt-0.5 text-[13px] text-ink">{COPY.workspace.costBody}</dd>
+              <dd className="mt-0.5 text-sm text-ink">{COPY.workspace.costBody}</dd>
             </div>
           </dl>
           <p
             data-testid="workspace-boundary-badge"
             data-boundary={shared ? 'shared' : 'local'}
-            className="mt-4 inline-flex items-center gap-2 rounded-card border border-line px-2 py-1 text-[11px] text-ink-muted"
+            className="mt-4 inline-flex items-center gap-2 rounded-control border border-line px-2 py-1 text-2xs text-ink-muted"
           >
             <span data-testid="jar-icon" dangerouslySetInnerHTML={{ __html: JAR_MARK }} />
             {boundary}
@@ -357,7 +357,7 @@ export function SharedWorkspace({
 
         <Card testId="workspace-history">
           <Label>{COPY.workspace.changeHistory}</Label>
-          <p className="mt-1 text-[13px] text-ink-muted">{COPY.workspace.revisionsStayLocal}</p>
+          <p className="mt-1 text-sm text-ink-muted">{COPY.workspace.revisionsStayLocal}</p>
           <EmptyOrError
             rows={revisions}
             empty={COPY.workspace.noRevisions}
@@ -369,21 +369,21 @@ export function SharedWorkspace({
                 const savedBy = recordedActor(revision.actor)
                 return (
                   <li key={revision.id} data-readonly="false" data-kind="write" className="border-t border-line-soft py-2">
-                    <p className="text-[13px] text-ink">
+                    <p className="text-sm text-ink">
                       {savedBy ? COPY.workspace.savedBy(savedBy) : COPY.workspace.authorNotRecorded}
                     </p>
                     {revision.kind ? (
-                      <p className="text-[12px] text-ink-muted">
+                      <p className="text-xs text-ink-muted">
                         {COPY.workspace.changeKind}: {revision.kind}
                       </p>
                     ) : null}
                     {revision.message ? (
-                      <p className="text-[13px] text-ink-muted">
+                      <p className="text-sm text-ink-muted">
                         {COPY.workspace.changeMessage}: {revision.message}
                       </p>
                     ) : null}
                     {revision.at ? (
-                      <p className="font-numeric text-[11px] text-ink-faint">
+                      <p className="font-numeric text-2xs text-ink-faint">
                         {COPY.workspace.changeWhen}: {revision.at}
                       </p>
                     ) : null}
@@ -392,7 +392,7 @@ export function SharedWorkspace({
                         <ActionButton onClick={() => onRestore(revision.id)}>
                           {COPY.workspace.restoreThisVersion}
                         </ActionButton>
-                        <p className="mt-1 text-[12px] text-ink-faint">{COPY.workspace.restoreNote}</p>
+                        <p className="mt-1 text-xs text-ink-faint">{COPY.workspace.restoreNote}</p>
                       </div>
                     ) : null}
                   </li>
@@ -405,13 +405,13 @@ export function SharedWorkspace({
               {onSave ? (
                 <div>
                   <ActionButton onClick={onSave}>{COPY.workspace.save}</ActionButton>
-                  <p className="mt-1 text-[12px] text-ink-faint">{COPY.workspace.saveNote}</p>
+                  <p className="mt-1 text-xs text-ink-faint">{COPY.workspace.saveNote}</p>
                 </div>
               ) : null}
               {onPin ? (
                 <div>
                   <ActionButton onClick={onPin}>{COPY.workspace.pinThisVersion}</ActionButton>
-                  <p className="mt-1 text-[12px] text-ink-faint">{COPY.workspace.pinNote}</p>
+                  <p className="mt-1 text-xs text-ink-faint">{COPY.workspace.pinNote}</p>
                 </div>
               ) : null}
             </div>
@@ -421,30 +421,30 @@ export function SharedWorkspace({
         <Card testId="workspace-approvals">
           <Label>{COPY.workspace.approvals}</Label>
           <div data-testid="ownership-panel">
-            <p data-testid="workspace-owner" className="mt-2 text-[13px] text-ink">
+            <p data-testid="workspace-owner" className="mt-2 text-sm text-ink">
               {owner ? COPY.workspace.owner(owner) : COPY.workspace.ownerNotRecorded}
             </p>
             {actor ? (
-              <p data-testid="artifact-last-actor" className="mt-1 text-[13px] text-ink-muted">
+              <p data-testid="artifact-last-actor" className="mt-1 text-sm text-ink-muted">
                 {COPY.workspace.lastChangedBy(actor)}
               </p>
             ) : null}
             {lastChangeAt ? (
-              <p data-testid="artifact-last-change" className="mt-1 font-numeric text-[13px] tabular-nums text-ink">
+              <p data-testid="artifact-last-change" className="mt-1 font-numeric text-sm tabular-nums text-ink">
                 {COPY.workspace.changeWhen}: {lastChangeAt}
               </p>
             ) : null}
           </div>
           {shownApprovals === null ? (
-            <p data-testid="workspace-approvals-state" data-unavailable="true" className="mt-2 text-[13px] text-ink-faint">
+            <p data-testid="workspace-approvals-state" data-unavailable="true" className="mt-2 text-sm text-ink-faint">
               {COPY.error}
             </p>
           ) : null}
           {shownApprovals && shownApprovals.length === 0 ? (
             <div data-testid="workspace-approvals-state" className="mt-2">
-              <p className="text-[13px] text-ink-faint">{COPY.workspace.noApprovals}</p>
+              <p className="text-sm text-ink-faint">{COPY.workspace.noApprovals}</p>
               {approvalNeeded ? null : (
-                <p className="mt-1 text-[13px] text-ink-faint">{COPY.workspace.noApprovalNeeded}</p>
+                <p className="mt-1 text-sm text-ink-faint">{COPY.workspace.noApprovalNeeded}</p>
               )}
             </div>
           ) : null}
@@ -456,11 +456,11 @@ export function SharedWorkspace({
                   data-testid={approval.at ? 'audit-entry' : undefined}
                   data-kind={approval.status}
                   data-author={approval.actor ?? ''}
-                  className="border-t border-line-soft py-2 text-[13px] text-ink"
+                  className="border-t border-line-soft py-2 text-sm text-ink"
                 >
                   <p>{approvalText(approval)}</p>
                   {approval.at ? (
-                    <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-faint">
+                    <p className="mt-1 flex flex-wrap gap-x-3 text-2xs text-ink-faint">
                       <span data-testid="audit-author">
                         {recordedActor(approval.actor) ?? COPY.workspace.authorNotRecorded}
                       </span>
@@ -489,20 +489,20 @@ export function SharedWorkspace({
               ) : null}
               {onDismiss ? (
                 <form onSubmit={dismiss} className="flex flex-col gap-2">
-                  <label className="text-[12px] text-ink-muted">
+                  <label className="text-xs text-ink-muted">
                     {COPY.workspace.reason}
                     <input
                       name="reason"
                       data-testid="dismiss-reason"
-                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+                      className="mt-1 block w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                     />
                   </label>
-                  <p className="text-[12px] text-ink-faint">{COPY.workspace.dismissNote}</p>
+                  <p className="text-xs text-ink-faint">{COPY.workspace.dismissNote}</p>
                   <button
                     type="submit"
                     data-testid="dismiss"
                     disabled={!canAct()}
-                    className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+                    className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink"
                   >
                     {COPY.workspace.dismiss}
                   </button>
@@ -523,10 +523,10 @@ export function SharedWorkspace({
             <div data-testid="artifact-rows">
               {rows.map((row) => (
                 <article key={row.id} data-testid="artifact-row" data-row-id={row.id} className="mt-3">
-                  <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+                  <h3 className="text-2xs font-medium uppercase tracking-[0.08em] text-ink-muted">
                     {row.label}
                   </h3>
-                  <p data-testid={`row-text-${row.id}`} className="mt-1 text-[13px] text-ink">
+                  <p data-testid={`row-text-${row.id}`} className="mt-1 text-sm text-ink">
                     {row.text}
                   </p>
                   {onComment ? (
@@ -535,12 +535,12 @@ export function SharedWorkspace({
                         name="body"
                         data-testid={`comment-input-${row.id}`}
                         aria-label={COPY.workspace.commentOn(row.label)}
-                        className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+                        className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
                       />
                       <button
                         type="submit"
                         data-testid={`comment-submit-${row.id}`}
-                        className="w-fit rounded border border-line px-2.5 py-1 text-[13px] text-ink"
+                        className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink"
                       >
                         {COPY.workspace.commentOn(row.label)}
                       </button>
@@ -556,10 +556,10 @@ export function SharedWorkspace({
         </Card>
 
         <Card testId="workspace-boundary">
-          <h2 className="text-[13px] font-medium text-ink">{COPY.workspace.boundaryTitle}</h2>
+          <h2 className="text-sm font-medium text-ink">{COPY.workspace.boundaryTitle}</h2>
           <ul className="mt-2 flex flex-col gap-1">
             {BOUNDARY_RULES.map((rule) => (
-              <li key={rule} className="text-[13px] text-ink-muted">
+              <li key={rule} className="text-sm text-ink-muted">
                 {rule}
               </li>
             ))}
