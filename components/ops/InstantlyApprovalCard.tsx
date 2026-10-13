@@ -27,7 +27,7 @@ export function InstantlyApprovalCard({ approvalId, preview, enabled }: { approv
         : `Resume “${campaign}” in Instantly now? It starts sending again on its schedule.`
   return (
     <div className="space-y-2" data-testid="instantly-approval">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
         <dt className="text-ink-faint">Campaign</dt>
         <dd className="min-w-0 break-words text-ink">{campaign}</dd>
         {p.kind === 'add_leads' ? (
@@ -39,9 +39,9 @@ export function InstantlyApprovalCard({ approvalId, preview, enabled }: { approv
           </>
         ) : null}
       </dl>
-      {p.reason ? <p className="text-[12px] leading-snug text-ink-muted">Why: {p.reason}</p> : null}
+      {p.reason ? <p className="text-xs leading-snug text-ink-muted">Why: {p.reason}</p> : null}
       {p.diff.length ? (
-        <ul className="rounded-card border border-line-soft bg-canvas px-2.5 py-1.5 text-[12px]" aria-label="What changes">
+        <ul className="rounded-control border border-line-soft bg-canvas px-2.5 py-1.5 text-xs" aria-label="What changes">
           {p.diff.map((d) => (
             <li key={d.field} className="leading-snug">
               <span className="text-ink-faint">{d.field}:</span> <span className="text-ink-muted line-through decoration-ink-faint/60">{d.from}</span> → <span className="text-ink">{d.to}</span>
@@ -50,7 +50,7 @@ export function InstantlyApprovalCard({ approvalId, preview, enabled }: { approv
         </ul>
       ) : null}
       {p.sample && p.sample.length ? (
-        <div className="text-[12px]">
+        <div className="text-xs">
           <p className="text-ink-faint">First {p.sample.length} of {readyN ?? 'unknown'}</p>
           <ul className="mt-0.5 space-y-0.5">
             {p.sample.map((l) => (
@@ -63,11 +63,11 @@ export function InstantlyApprovalCard({ approvalId, preview, enabled }: { approv
         </div>
       ) : null}
       {reasons.length ? (
-        <p className="text-[12px] leading-snug text-ink-faint">Left out: {reasons.map(([r, n]) => `${n} ${EXCLUDE_WORDS[r]?.toLowerCase() ?? r}`).join(' · ')}</p>
+        <p className="text-xs leading-snug text-ink-faint">Left out: {reasons.map(([r, n]) => `${n} ${EXCLUDE_WORDS[r]?.toLowerCase() ?? r}`).join(' · ')}</p>
       ) : null}
-      {p.instantly_note ? <p className="text-[11.5px] leading-snug text-ink-faint">{p.instantly_note}</p> : null}
+      {p.instantly_note ? <p className="text-xs leading-snug text-ink-faint">{p.instantly_note}</p> : null}
       {p.kind === 'add_leads' ? (
-        <Link className="text-[12px] text-accent" prefetch={false} href={`/leads/instantly?action=${p.instantly_action_id}`}>See every lead</Link>
+        <Link className="text-xs text-accent" prefetch={false} href={`/leads/instantly?action=${p.instantly_action_id}`}>See every lead</Link>
       ) : null}
       <div className="flex flex-wrap gap-2 pt-1">
         <ConfirmAction
