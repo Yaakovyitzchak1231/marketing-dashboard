@@ -83,7 +83,8 @@ describe('reconcileInstantly', () => {
 
     const desk = await loadReplyDesk(db)
     const bounce = desk.find((i) => i.email === 'bounce@shop-c.example')
-    expect(bounce?.bucket).toBe('needs_reply')
+    // A delivery-failure notice is a bounce on the desk, never a human reply waiting for an answer.
+    expect(bounce?.bucket).toBe('bounced')
     expect(desk.some((i) => i.email === 'ann@shop-a.example')).toBe(true)
   })
 

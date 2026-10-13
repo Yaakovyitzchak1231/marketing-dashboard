@@ -166,6 +166,14 @@ export function isAutoReply(email: ApiEmail): boolean {
   return AUTO_REPLY_SUBJECT.test(email.subject ?? '')
 }
 
+/** Bounce notices (DSNs) that arrive in a thread: a failed delivery, not a person writing back. */
+const BOUNCE_SUBJECT = /\b(delivery status notification|undeliverable|mail delivery (failed|subsystem)|returned mail|delivery (has )?failed)\b/i
+
+/** True when a received thread email is a bounce notice, which the reply desk must file as a bounce. */
+export function isBounceNotice(email: ApiEmail): boolean {
+  return BOUNCE_SUBJECT.test(email.subject ?? '')
+}
+
 function replyEventInput(
   email: ApiEmail,
   contact: ReconcileContact,
@@ -268,7 +276,8 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
       inputs.push(input)
       if (input.occurred_at && input.dedupe_key) {
         touches.set(input.dedupe_key, {
-          contact, email: addr, eventType: input.type,
+          // A bounce notice is not a human reply: on the desk it is a bounce, as the webhook would file it.
+          contact, email: addr, eventType: isBounceNotice(email) ? 'email_bounced' : input.type,
           instantlyCampaignId: email.campaign_id ?? null,
           campaignName: campaign?.name ?? null,
           occurredAt: new Date(input.occurred_at).toISOString(),
