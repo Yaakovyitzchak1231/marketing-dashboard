@@ -45,7 +45,7 @@ export default async function UsersRolesPage() {
 
   return (
     <PageFrame title="Users & roles" meta="Who can sign in, and what they can do">
-      <p className="mb-4 text-[12.5px] text-ink-faint">
+      <p className="mb-4 text-xs text-ink-faint">
         <Link href="/settings" prefetch={false} className="underline hover:text-ink">
           Back to Settings
         </Link>
@@ -55,7 +55,7 @@ export default async function UsersRolesPage() {
         <SectionHeader title="People" meta={isOwner ? 'You are an owner: you can add, change and remove people' : 'Only an owner can change this list'} />
         <Card className="p-4">
           {needsMigration ? (
-            <p className="text-[13px] text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
+            <p className="text-sm text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
           ) : (
             <TeamSection members={members} isOwner={isOwner} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
           )}
@@ -68,8 +68,8 @@ export default async function UsersRolesPage() {
           <dl data-testid="role-table">
             {ROLE_ROWS.map((r) => (
               <div key={r.role} className="flex gap-4 border-b border-line-soft px-4 py-3 last:border-b-0">
-                <dt className="w-16 shrink-0 text-[13px] font-medium text-ink">{r.role}</dt>
-                <dd className="text-[13px] leading-snug text-ink-muted">{r.can}</dd>
+                <dt className="w-16 shrink-0 text-sm font-medium text-ink">{r.role}</dt>
+                <dd className="text-sm leading-snug text-ink-muted">{r.can}</dd>
               </div>
             ))}
           </dl>
