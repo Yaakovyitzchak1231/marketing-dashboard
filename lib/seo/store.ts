@@ -168,12 +168,12 @@ export async function runSiteAudit(
       const { rows } = await q.query<AuditRow>(
         `update lp.seo_audits set status = 'done', checks = $2, pages = $3, sitemap_urls = $4, passed = $5, failed = $6, warned = $7, unknown = $8, finished_at = now()
           where id = $1 returning *`,
-        [id, JSON.stringify(res.checks), JSON.stringify(res.pages), res.sitemapUrls ? JSON.stringify(res.sitemapUrls) : null, s.passed, s.failed, s.warned, s.unknown],
+        [id, JSON.stringify(res.checks), JSON.stringify(res.pages), res.sitemapUrls ? JSON.stringify(res.sitemapUrls) : null, s.passed, s.failed, s.warned, s.unknown + s.blocked],
       )
       await logEvent(q, {
         actor,
         kind: 'seo.audit',
-        summary: `SEO audit of ${site.name}: ${s.passed} passed, ${s.failed} failed, ${s.warned} to improve, ${s.unknown} couldn't be checked`,
+        summary: `SEO audit of ${site.name}: ${s.passed} passed, ${s.failed} failed, ${s.warned} to improve, ${s.blocked ? `${s.blocked} blocked from our checker, ` : ''}${s.unknown} couldn't be checked`,
         entity_type: 'seo_audit',
         entity_id: id,
       })
@@ -252,6 +252,13 @@ export async function syncFixes(db: Db, actor: string, site: SiteRow, audit: Aud
   // Close what the audit now shows as fixed (only checks this audit actually measured as pass).
   const passed = new Set(audit.checks.filter((c) => c.status === 'pass').map((c) => `seo:${site.id}:${c.id}:${c.page ?? ''}`))
   const informational = new Set(audit.checks.filter((c) => c.status === 'info').map((c) => `seo:${site.id}:${c.id}:${c.page ?? ''}`))
+  // Checks our checker was blocked from reading: an open fix for one came from an earlier
+  // read we can no longer confirm (often a blocked request misread as a failure).
+  const blockedChecks = audit.checks.filter((c) => c.status === 'blocked')
+  const blockedReason = (k: string): string | null => {
+    const c = blockedChecks.find((x) => k === `seo:${site.id}:${x.id}:${x.page ?? ''}` || (x.id === 'sitemap' && k.startsWith(`seo:${site.id}:sitemap:`)))
+    return c ? (c.reason ?? c.detail) : null
+  }
   const open = new Set(fixes.map((f) => `seo:${site.id}:${f.key}`))
   const { rows: live } = await db.query<{ id: number; dedupe_key: string }>(
     `select id, dedupe_key from lp.tasks where kind = $1 and dedupe_key like $2 and status = any($3) and claimed_by is null`,
@@ -269,6 +276,16 @@ export async function syncFixes(db: Db, actor: string, site: SiteRow, audit: Aud
         if (!retired.rows.length) return
         await addComment(q, 'system', { task_id: t.id, body: `Audit #${audit.id}: this is optional guidance or an unverified content idea, not a required fix. Review new content opportunities from stored citation evidence.`, kind: 'report' })
         await logEvent(q, { actor: 'system', kind: 'task.cancelled', summary: `Retired unsupported SEO recommendation #${t.id}.`, task_id: t.id, entity_type: 'task', entity_id: t.id })
+      })
+      continue
+    }
+    const blockedNow = blockedReason(k)
+    if (blockedNow) {
+      await db.tx(async (q) => {
+        const retired = await q.query("update lp.tasks set status = 'cancelled', finished_at = now() where id = $1 and claimed_by is null and status in ('queued','blocked') returning id", [t.id])
+        if (!retired.rows.length) return
+        await addComment(q, 'system', { task_id: t.id, body: `Audit #${audit.id} couldn't read this: ${blockedNow}. Not a confirmed site problem, so it's off the fix list; a readable audit re-adds it if it's real.`, kind: 'report' })
+        await logEvent(q, { actor: 'system', kind: 'task.cancelled', summary: `Retired SEO fix #${t.id}: audit #${audit.id} was blocked from reading it.`, task_id: t.id, entity_type: 'task', entity_id: t.id })
       })
       continue
     }

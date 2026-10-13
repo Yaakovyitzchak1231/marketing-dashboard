@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { generateKeyPairSync, createVerify } from 'node:crypto'
 import { createTestDb } from './helpers/pglite-db'
-import { healthySite } from './helpers/seo-fake-web'
+import { fakeWeb, healthySite, page, WALL } from './helpers/seo-fake-web'
 import {
   addCompetitor, addPrompt, addSite, getFixTask, latestAudits, latestRuns, listFixTasks, listSites, normalizeBaseUrl, parsePaths, runSiteAudit, runVisibility, runResults,
 } from '@/lib/seo/store'
@@ -357,5 +357,30 @@ describe('Search Console (mocked Google)', () => {
     expect(r.startDate).toBe('2026-09-08')
     expect(r.queries[0]).toEqual({ key: 'jewelry card processing', clicks: 3, impressions: 120, ctr: 0.025, position: 14.2 })
     expect(r.pages[0].key).toBe('https://gempay.test/jewelers/')
+  })
+})
+
+describe('a blocked re-audit retires a fix it can no longer confirm', () => {
+  it('a "No sitemap" fix from a misread run is cancelled once the sitemap is seen as bot blocked', async () => {
+    const site = await addSite(db, 'owner', { name: 'Blocky', base_url: 'https://blocky.test', platform: 'wordpress', host: 'siteground', campaign: null, pages: [] })
+    const home = { body: page({ title: 'Blocky card processing', description: 'For shops.', canonical: 'https://blocky.test/', h1: ['Blocky'] }) }
+    const robots = { body: 'User-agent: *\nDisallow:\n', type: 'text/plain' }
+    // Run 1: every sitemap URL answers 404 -> a real "No XML sitemap found" fix.
+    const r1 = await runSiteAudit(db, 'owner', site.id, { fetcher: fakeWeb({ 'https://blocky.test/robots.txt': robots, 'https://blocky.test/': home }).fetcher })
+    expect(r1.audit.checks.find((c) => c.id === 'sitemap')?.status).toBe('fail')
+    const fix = (await listFixTasks(db, { siteId: site.id, open: true })).find((f) => f.payload.fix.check_id === 'sitemap')
+    expect(fix).toBeTruthy()
+    // Run 2: the sitemap is behind SiteGround's captcha -> blocked, and the old fix leaves the list.
+    const SG = { status: 202, body: WALL }
+    const r2 = await runSiteAudit(db, 'owner', site.id, {
+      fetcher: fakeWeb({ 'https://blocky.test/robots.txt': robots, 'https://blocky.test/': home, 'https://blocky.test/sitemap_index.xml': SG, 'https://blocky.test/sitemap.xml': SG, 'https://blocky.test/wp-sitemap.xml': SG }).fetcher,
+    })
+    expect(r2.audit.checks.find((c) => c.id === 'sitemap')?.status).toBe('blocked')
+    expect(r2.audit.unknown).toBeGreaterThanOrEqual(1)
+    expect((await getFixTask(db, fix!.id))?.status).toBe('cancelled')
+    const c = await db.query<{ body: string }>('select body from lp.comments where task_id = $1 order by id desc limit 1', [fix!.id])
+    expect(c.rows[0].body).toContain('Blocked: SiteGround captcha (HTTP 202)')
+    const ev = await db.query<{ summary: string }>("select summary from lp.events where kind = 'seo.audit' order by id desc limit 1")
+    expect(ev.rows[0].summary).toContain('blocked from our checker')
   })
 })

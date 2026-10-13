@@ -75,7 +75,7 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
                               ['Pass', a.passed, 'text-good'],
                               ['Fix', a.failed, 'text-bad'],
                               ['Improve', a.warned, 'text-warn'],
-                              ["Couldn't check", a.unknown, 'text-ink-muted'],
+                              ['Blocked / error', a.unknown, 'text-ink-muted'],
                             ] as const
                           ).map(([label, v, cls]) => (
                             <div key={label} className="rounded-card border border-line bg-canvas px-1 py-2">
