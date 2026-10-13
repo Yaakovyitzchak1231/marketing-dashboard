@@ -55,7 +55,7 @@ function SnippetCard() {
         short snippet exposes exactly those fields (and prints the page&rsquo;s schema in the head). Install the free <b>Code Snippets</b> plugin, then Snippets &gt; Add New,
         paste, choose &ldquo;Run everywhere&rdquo;, Save and Activate.
       </p>
-      <textarea readOnly rows={12} defaultValue={WP_SNIPPET} className={`${inputCls} font-numeric text-[11px]`} />
+      <textarea readOnly rows={12} defaultValue={WP_SNIPPET} className={`${inputCls} font-numeric text-2xs`} />
     </SetupCard>
   )
 }
@@ -68,7 +68,7 @@ async function Preview({ db, site, task, input, back }: { db: NonNullable<Return
   } catch (e) {
     err = (e as Error).message
   }
-  if (err || !pv) return <p role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">Preview failed: {err}</p>
+  if (err || !pv) return <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">Preview failed: {err}</p>
   const needs = pv.needsSnippet && input.kind !== 'create_draft' && !(input.kind === 'hide_page' && input.mode === 'draft')
   const fields: Record<string, string | number | null> = { site_id: site.id, task_id: task.id, kind: input.kind, return_to: back }
   if (input.kind === 'set_meta') Object.assign(fields, { field: input.field, path: input.path, value: input.value })
@@ -77,7 +77,7 @@ async function Preview({ db, site, task, input, back }: { db: NonNullable<Return
   if (input.kind === 'create_draft') Object.assign(fields, { title: input.title, slug: input.slug, content: input.content })
   return (
     <div className="space-y-3" data-testid="seo-preview">
-      <p className="text-[12px] text-ink-faint">Live from WordPress: {pv.target}</p>
+      <p className="text-xs text-ink-faint">Live from WordPress: {pv.target}</p>
       <Diff before={pv.before} after={pv.after} />
       {needs ? (
         <SnippetCard />
@@ -86,7 +86,7 @@ async function Preview({ db, site, task, input, back }: { db: NonNullable<Return
           <Hidden fields={fields} />
           {input.kind === 'set_meta' || input.kind === 'add_schema' ? <input type="hidden" name="expect_before" value={pv.before ?? ''} /> : null}
           <button className={BUTTON_PRIMARY}>{input.kind === 'create_draft' ? 'Create draft in WordPress' : 'Apply to WordPress'}</button>
-          <span className="text-[12px] text-ink-faint">{input.kind === 'create_draft' ? 'Saved as a draft; nothing goes live.' : 'Logged to Activity; undo stays available.'}</span>
+          <span className="text-xs text-ink-faint">{input.kind === 'create_draft' ? 'Saved as a draft; nothing goes live.' : 'Logged to Activity; undo stays available.'}</span>
         </form>
       )}
     </div>
@@ -123,10 +123,10 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
   } else if (a.type === 'copy_file') {
     panel = (
       <div className="space-y-3">
-        <p className="text-[13px] text-ink">{a.where}</p>
-        <label className="block text-[12px] text-ink-muted">
+        <p className="text-sm text-ink">{a.where}</p>
+        <label className="block text-xs text-ink-muted">
           {a.filename}
-          <textarea readOnly rows={12} defaultValue={a.content} className={`${inputCls} mt-1 font-numeric text-[11px]`} />
+          <textarea readOnly rows={12} defaultValue={a.content} className={`${inputCls} mt-1 font-numeric text-2xs`} />
         </label>
         <Recheck site={site} back={back} />
       </div>
@@ -136,9 +136,9 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
       <div className="space-y-3">
         <WpSetup />
         {a.type === 'set_meta' || a.type === 'add_schema' ? (
-          <label className="block text-[12px] text-ink-muted">
+          <label className="block text-xs text-ink-muted">
             Or paste it by hand ({a.type === 'set_meta' ? `Yoast > ${a.field}` : 'schema JSON-LD'}):
-            <textarea readOnly rows={a.type === 'add_schema' ? 12 : 3} defaultValue={a.proposed} className={`${inputCls} mt-1 font-numeric text-[12px]`} />
+            <textarea readOnly rows={a.type === 'add_schema' ? 12 : 3} defaultValue={a.proposed} className={`${inputCls} mt-1 font-numeric text-xs`} />
           </label>
         ) : null}
         <Recheck site={site} back={back} label="I did it by hand, re-check" />
@@ -149,10 +149,10 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
     const path = fix.page ?? '/'
     panel = (
       <div className="space-y-4">
-        {a.type === 'set_meta' ? <p className="text-[13px] text-ink-muted">Now: {a.current ? `“${a.current}”` : 'not set'}</p> : null}
+        {a.type === 'set_meta' ? <p className="text-sm text-ink-muted">Now: {a.current ? `“${a.current}”` : 'not set'}</p> : null}
         <form method="get" className="space-y-2">
           <input type="hidden" name="preview" value="1" />
-          <textarea name="value" rows={a.type === 'add_schema' ? 16 : 3} defaultValue={value} className={`${inputCls} font-numeric text-[12px]`} />
+          <textarea name="value" rows={a.type === 'add_schema' ? 16 : 3} defaultValue={value} className={`${inputCls} font-numeric text-xs`} />
           <button className={BUTTON}>Preview change</button>
         </form>
         {previewing ? (
@@ -176,7 +176,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
             const p = new URL(u).pathname
             return (
               <li key={u} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                <a href={u} target="_blank" rel="noreferrer" className="text-[13px] text-ink underline">{p}</a>
+                <a href={u} target="_blank" rel="noreferrer" className="text-sm text-ink underline">{p}</a>
                 <div className="flex gap-2">
                   <Link prefetch={false} className={BUTTON} href={`${back}?preview=1&url=${encodeURIComponent(p)}&mode=noindex`}>Hide from Google</Link>
                   <Link prefetch={false} className={BUTTON} href={`${back}?preview=1&url=${encodeURIComponent(p)}&mode=draft`}>Move to draft</Link>
@@ -185,7 +185,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
             )
           })}
         </ul>
-        <p className="text-[12px] text-ink-faint">&ldquo;Hide from Google&rdquo; keeps the page working (right for thank-you and form pages). &ldquo;Move to draft&rdquo; takes it off the site (right for test pages).</p>
+        <p className="text-xs text-ink-faint">&ldquo;Hide from Google&rdquo; keeps the page working (right for thank-you and form pages). &ldquo;Move to draft&rdquo; takes it off the site (right for test pages).</p>
         {previewing && url ? <Preview db={db} site={site} task={task} back={back} input={{ kind: 'hide_page', path: url, mode }} /> : null}
         <Recheck site={site} back={back} label="Re-check sitemap" />
       </div>
@@ -199,8 +199,8 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
         <form method="get" className="space-y-2">
           <input type="hidden" name="preview" value="1" />
           <input name="title" defaultValue={title} className={inputCls} />
-          <input name="slug" defaultValue={slug} className={`${inputCls} font-numeric text-[12px]`} />
-          <textarea name="content" rows={12} defaultValue={content} className={`${inputCls} font-numeric text-[12px]`} />
+          <input name="slug" defaultValue={slug} className={`${inputCls} font-numeric text-xs`} />
+          <textarea name="content" rows={12} defaultValue={content} className={`${inputCls} font-numeric text-xs`} />
           <button className={BUTTON}>Preview draft</button>
         </form>
         {previewing ? <Preview db={db} site={site} task={task} back={back} input={{ kind: 'create_draft', title, slug, content }} /> : null}
@@ -212,9 +212,9 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
     <div className="space-y-6">
       <Flash sp={sp} />
       <div>
-        <Link href="/seo/todos" className="text-[12px] text-accent underline">← Fix list</Link>
-        <h2 className="mt-2 text-[16px] font-semibold tracking-[-0.01em] text-ink" data-testid="seo-fix-title">{fix.title}</h2>
-        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-faint">
+        <Link href="/seo/todos" className="text-xs text-accent underline">← Fix list</Link>
+        <h2 className="mt-2 text-base font-semibold tracking-[-0.01em] text-ink" data-testid="seo-fix-title">{fix.title}</h2>
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
           <CheckPill status={fix.severity === 'fail' ? 'fail' : fix.severity === 'unknown' ? 'unknown' : 'warn'} />
           <span>{site.name}</span>
           {fix.page ? <span>· {fix.page}</span> : null}
@@ -227,9 +227,9 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
       </div>
 
       <Card className="px-4 py-4">
-        <p className="text-[13px] leading-relaxed text-ink">{fix.detail}</p>
-        {evidenceUrl && citation ? <p className="mt-2 text-[12px] text-ink-muted"><Link className="text-accent underline" href={evidenceUrl}>View stored answer #{citation.result_id} and citations</Link> · {citation.provider} · {citation.model}. Completing this task does not verify a visibility gain.</p> : null}
-        {fix.fix ? <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">What fixes it: {fix.fix}</p> : null}
+        <p className="text-sm leading-relaxed text-ink">{fix.detail}</p>
+        {evidenceUrl && citation ? <p className="mt-2 text-xs text-ink-muted"><Link className="text-accent underline" href={evidenceUrl}>View stored answer #{citation.result_id} and citations</Link> · {citation.provider} · {citation.model}. Completing this task does not verify a visibility gain.</p> : null}
+        {fix.fix ? <p className="mt-2 text-sm leading-relaxed text-ink-muted">What fixes it: {fix.fix}</p> : null}
       </Card>
 
       <section>
@@ -280,7 +280,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
             <ul className="divide-y divide-line">
               {changes.map((c: ChangeRow) => (
                 <li key={c.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-testid="seo-change">
-                  <span className="text-[13px] text-ink">
+                  <span className="text-sm text-ink">
                     #{c.id} {c.kind.replace('_', ' ')} · {c.target} <span className="text-ink-faint">· {c.applied_at ? when(c.applied_at) : 'Not confirmed applied'}</span>
                     <ChangeNotice status={c.status} />
                   </span>
@@ -298,7 +298,7 @@ export default async function SeoFix({ params, searchParams }: { params: Promise
           </Card>
         </section>
       ) : null}
-      <p className="text-[12px] text-ink-faint">
+      <p className="text-xs text-ink-faint">
         Agents pick these up as <Env name="seo_fix" /> tasks through the ops API (claim, report, complete) like any other board task.
       </p>
     </div>
