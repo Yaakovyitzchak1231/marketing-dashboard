@@ -46,11 +46,11 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
     return str ? `/tools?${str}` : '/tools'
   }
   const chip = (active: boolean) =>
-    `rounded-full border px-2.5 py-1 text-[12px] ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
+    `rounded-full border px-2.5 py-1 text-xs ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
 
   return (
     <PageFrame title="Tools" meta="Every tool you run, with live health and the numbers your background runner has read">
-      {sp.error ? <p className="mb-4 rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[12.5px] text-bad">{sp.error}</p> : null}
+      {sp.error ? <p className="mb-4 rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-xs text-bad">{sp.error}</p> : null}
 
       {campaigns.length ? (
         <div className="mb-4 flex flex-wrap gap-1.5" aria-label="Filter by campaign">
@@ -77,7 +77,7 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
 
           {docs.length ? (
             <div>
-              <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">Docs &amp; sheets</h2>
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-[0.06em] text-ink-muted">Docs &amp; sheets</h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {docs.map((integration) => (
                   <LinkCard key={integration.id} integration={integration} />
