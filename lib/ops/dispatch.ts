@@ -55,6 +55,7 @@ import { POOL_OPS } from '../pools/ops.ts'
 import { SCORING_OPS } from '../scoring/ops.ts'
 import { TAG_OPS } from '../tags/ops.ts'
 import { SEGMENT_OPS } from '../segments/ops.ts'
+import { GEO_OPS } from '../geo/ops.ts'
 import { LEAD_PROFILE_OPS } from '../leads/profile-ops.ts'
 import { TRAIT_OPS } from '../traits/ops.ts'
 import { CAMPAIGN_SOURCE_OPS } from '../segments/campaign-sources.ts'
@@ -522,6 +523,8 @@ export const OPS: Record<string, Op> = {
   // list/create/update/archive, segment_preview (counts + readback + samples),
   // static-list membership, and the snapshot job for 2.12.
   ...SEGMENT_OPS,
+  // Radius search (lib/geo/ops.ts, TAP-171): geocode_place, leads_near, geo_status, geo_backfill, geo_load_centroids.
+  ...GEO_OPS,
   ...LEAD_PROFILE_OPS,
   ...TRAIT_OPS,
   // Segments as campaign sources/exclusions (plan 2.6): campaign_add_from_segment.

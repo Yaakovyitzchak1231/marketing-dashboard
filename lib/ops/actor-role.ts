@@ -51,6 +51,7 @@ export const VIEWER_OPS: ReadonlySet<string> = new Set([
   'count_tagged', // #87: counts leads with a tag before a change (read-only)
   'list_retention_policies', 'retention_preview',
   'list_segments', 'get_segment', 'segment_preview', 'segment_members', 'segment_stats',
+  'geocode_place', 'leads_near', 'geo_status', // TAP-171 radius search (reads; geocode_place may cache a lookup)
   'lead_profile', 'list_traits', 'get_trait', 'trait_preview',
   'list_triggers', 'recent_trigger_fires',
   'journey_list', 'journey_get', 'journey_runs', 'journey_run_log', 'journey_validate',
@@ -69,6 +70,7 @@ export const OWNER_OPS: ReadonlySet<string> = new Set([
   'instantly_reconcile_run',
   // merge, delete-a-person, retention
   'merge', 'forget_contact', 'set_retention_policy', 'retention_sweep',
+  'geo_load_centroids', 'geo_backfill', // TAP-171 one-time radius-search setup
 ])
 
 /**
