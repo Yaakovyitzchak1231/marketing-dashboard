@@ -83,7 +83,7 @@ function StepsDetail({ c }: { c: CampaignRow }) {
   const best = bestStep(steps)
   return (
     <div className="space-y-3">
-      <dl className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
+      <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
         <Stat label="Open rate"><OpenRate c={c} /></Stat>
         <Stat label="Positive replies"><Val value={c.counts.positive}>{formatCount(c.counts.positive)}</Val></Stat>
         <Stat label="Meetings"><Val value={c.counts.meetingsBooked}>{formatCount(c.counts.meetingsBooked)}</Val></Stat>
@@ -93,14 +93,14 @@ function StepsDetail({ c }: { c: CampaignRow }) {
       </dl>
       {c.plan ? <SequencePlanView plan={c.plan} /> : null}
       {steps.length === 0 ? (
-        <p className="text-[12px] text-ink-faint">No per-step numbers reported for this campaign in this range.</p>
+        <p className="text-xs text-ink-faint">No per-step numbers reported for this campaign in this range.</p>
       ) : (
         <>
         <ul className="divide-y divide-line-soft rounded-card border border-line-soft bg-surface sm:hidden">
           {steps.map((s) => {
             const isBest = best !== null && s === best
             return (
-              <li key={`${s.step}-${s.variant}`} className="px-3 py-2.5 text-[12px]">
+              <li key={`${s.step}-${s.variant}`} className="px-3 py-2.5 text-xs">
                 <div className="flex gap-2">
                   <span className="w-6 shrink-0 font-numeric text-ink-muted">
                     {s.step}
@@ -120,7 +120,7 @@ function StepsDetail({ c }: { c: CampaignRow }) {
           })}
         </ul>
         <div className="hidden overflow-x-auto rounded-card border border-line-soft bg-surface sm:block">
-          <table className="w-full min-w-[520px] text-[12px]">
+          <table className="w-full min-w-[520px] text-xs">
             <thead>
               <tr className="border-b border-line-soft text-left text-ink-faint">
                 <th className="px-3 py-2 font-medium">Step</th>
@@ -247,9 +247,9 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
             {rows.length === 0 ? <EmptyNote>None of your campaigns sent anything in this range.</EmptyNote> : null}
             {/* Desktop table */}
             <div className={`hidden overflow-x-auto ${rows.length ? 'md:block' : ''}`}>
-              <table className="w-full text-[13px]" data-testid="campaign-table">
+              <table className="w-full text-sm" data-testid="campaign-table">
                 <thead>
-                  <tr className="border-b border-line text-left text-[12px] text-ink-faint">
+                  <tr className="border-b border-line text-left text-xs text-ink-faint">
                     <th className="py-2.5 pl-4 pr-2 font-medium" aria-sort={ariaSort('name')}>
                       <button type="button" onClick={() => setSortKey('name')} className="hover:text-ink">Campaign{arrow('name')}</button>
                     </th>
@@ -310,16 +310,16 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
                   <li key={c.id} className="px-4 py-3">
                     <button type="button" onClick={() => toggle(c.id)} aria-expanded={isOpen} className="flex w-full items-start gap-2 text-left">
                       <span className="mt-1"><Chevron open={isOpen} /></span>
-                      <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink">{c.name}</span>
+                      <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-ink">{c.name}</span>
                       <StatusPill status={c.status} />
                     </button>
-                    <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 pl-5 text-[12px]">
+                    <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 pl-5 text-xs">
                       {(['contacted', 'replyRate', 'positiveRate', 'sent', 'bounceRate', 'leadsRemaining'] as SortKey[]).map((k) => {
                         const col = COLUMNS.find((x) => x.key === k)!
                         return (
                           <div key={k}>
                             <dt className="text-ink-faint">{col.label}</dt>
-                            <dd className="font-numeric text-[13px] text-ink">{cellValue(c, k)}</dd>
+                            <dd className="font-numeric text-sm text-ink">{cellValue(c, k)}</dd>
                           </div>
                         )
                       })}
@@ -338,7 +338,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
               <button
                 type="button"
                 onClick={() => setShowIdle((v) => !v)}
-                className="w-full border-t border-line-soft px-4 py-2.5 text-left text-[12px] font-medium text-accent hover:underline"
+                className="w-full border-t border-line-soft px-4 py-2.5 text-left text-xs font-medium text-accent hover:underline"
               >
                 {showIdle ? 'Hide' : 'Show'} {idle.length} campaign{idle.length === 1 ? '' : 's'} with no sends in this range
               </button>
@@ -346,7 +346,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignRow[] }) {
           </>
         )}
       </Card>
-      <p className="mt-2 px-1 text-[11px] text-ink-faint">
+      <p className="mt-2 px-1 text-2xs text-ink-faint">
         Open a campaign for per-step results and subject lines. A dash (—) means the number was not reported by Instantly.
       </p>
     </section>
