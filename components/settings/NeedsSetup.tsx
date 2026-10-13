@@ -8,8 +8,8 @@ export function NeedsSetup({ items }: { items: SetupItem[] }) {
   if (!required.length) {
     return (
       <Card className="mb-6 border-good/40 p-4">
-        <p className="text-[13px] font-semibold text-good">Everything is set up.</p>
-        {optional.length ? <p className="mt-1 text-[12.5px] text-ink-muted">Optional, not set: {optional.map((i) => i.label).join(', ')}.</p> : null}
+        <p className="text-sm font-semibold text-good">Everything is set up.</p>
+        {optional.length ? <p className="mt-1 text-xs text-ink-muted">Optional, not set: {optional.map((i) => i.label).join(', ')}.</p> : null}
       </Card>
     )
   }
@@ -21,13 +21,13 @@ export function NeedsSetup({ items }: { items: SetupItem[] }) {
   }
   return (
     <Card className="mb-6 border-warn/40 p-4">
-      <p className="text-[13px] font-semibold text-warn">
+      <p className="text-sm font-semibold text-warn">
         {required.length} {required.length === 1 ? 'thing needs' : 'things need'} setup
       </p>
-      <p className="mt-0.5 text-[12px] text-ink-faint">Tap one to jump to it. Each is marked “Not set” below.</p>
+      <p className="mt-0.5 text-xs text-ink-faint">Tap one to jump to it. Each is marked “Not set” below.</p>
       <ul className="mt-2 space-y-1">
         {groups.map((g) => (
-          <li key={g.group} className="text-[12.5px] leading-snug">
+          <li key={g.group} className="text-xs leading-snug">
             <span className="text-ink-muted">{g.group}: </span>
             {g.items.map((i, n) => (
               <span key={i.key}>
@@ -40,7 +40,7 @@ export function NeedsSetup({ items }: { items: SetupItem[] }) {
           </li>
         ))}
       </ul>
-      {optional.length ? <p className="mt-2 text-[12px] text-ink-faint">Optional: {optional.map((i) => i.label).join(', ')}.</p> : null}
+      {optional.length ? <p className="mt-2 text-xs text-ink-faint">Optional: {optional.map((i) => i.label).join(', ')}.</p> : null}
     </Card>
   )
 }
