@@ -136,17 +136,17 @@ function detectWall(status: number | null, body: string, h: (n: string) => strin
     return { provider: 'Cloudflare', what: /captcha|challenge/.test(low) ? 'challenge' : 'firewall block' }
   }
   // Sucuri
-  if (h('x-sucuri-block') || (notServed && h('x-sucuri-id')) || /sucuri website firewall/i.test(b)) return { provider: 'Sucuri', what: 'firewall block' }
+  if (h('x-sucuri-block') || (notServed && (h('x-sucuri-id') || /sucuri website firewall/i.test(b)))) return { provider: 'Sucuri', what: 'firewall block' }
   // Imperva / Incapsula
-  if (/incapsula incident|_incapsula_resource/i.test(b) || (notServed && (h('x-iinfo') || /incap_ses|visid_incap/.test(cookies)))) return { provider: 'Imperva', what: 'bot challenge' }
+  if (/incapsula incident/i.test(b) || (notServed && (/_incapsula_resource/i.test(b) || h('x-iinfo') || /incap_ses|visid_incap/.test(cookies)))) return { provider: 'Imperva', what: 'bot challenge' }
   // DataDome
   if (/captcha-delivery\.com|geo\.captcha-delivery/i.test(b) || (notServed && (h('x-datadome') || h('x-dd-b') || /datadome=/.test(cookies)))) return { provider: 'DataDome', what: 'captcha' }
   // PerimeterX / HUMAN
-  if (/px-captcha|_pxappid|perimeterx/i.test(b) || (notServed && /_pxhd=|_px3=/.test(cookies))) return { provider: 'PerimeterX', what: 'captcha' }
+  if (/px-captcha/i.test(b) || (notServed && (/_pxappid|perimeterx/i.test(b) || /_pxhd=|_px3=/.test(cookies)))) return { provider: 'PerimeterX', what: 'captcha' }
   // Akamai
   if (notServed && (/akamaighost/.test(server) || h('akamai-grn') || (/access denied/i.test(b) && /reference\s*#\d/i.test(b)) || /errors\.edgesuite\.net/i.test(b))) return { provider: 'Akamai', what: 'bot block' }
   // AWS WAF
-  if (h('x-amzn-waf-action') || /awswaf|aws-waf-token/i.test(b)) return { provider: 'AWS WAF', what: 'challenge' }
+  if (h('x-amzn-waf-action') || (notServed && /awswaf|aws-waf-token/i.test(b))) return { provider: 'AWS WAF', what: 'challenge' }
   // Wordfence (WordPress security plugin)
   if (notServed && /wordfence/i.test(b)) return { provider: 'Wordfence', what: 'firewall block' }
   // Vercel's own bot protection
