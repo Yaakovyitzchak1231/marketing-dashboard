@@ -26,7 +26,7 @@ export async function ProfileSummaryCard({ db, campaignId }: { db: Db; campaignI
   const totalItems = Object.values(items).reduce((n, list) => n + list.filter((i) => i.status === 'approved').length, 0)
   return (
     <Card className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-      <p className="min-w-0 truncate text-[13px] text-ink">
+      <p className="min-w-0 truncate text-sm text-ink">
         {exists && profile.industry ? (
           <>
             <span className="font-medium text-ink">{profile.industry}</span>
@@ -43,7 +43,7 @@ export async function ProfileSummaryCard({ db, campaignId }: { db: Db; campaignI
           <span className="text-ink-faint">No campaign profile set up yet{totalItems ? ` (${totalItems} item${totalItems === 1 ? '' : 's'} pending)` : ''}.</span>
         )}
       </p>
-      <Link href={`/campaigns/${campaignId}/profile`} className="shrink-0 text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent">
+      <Link href={`/campaigns/${campaignId}/profile`} className="shrink-0 text-xs text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent">
         {exists && profile.setup_status === 'active' ? 'Edit profile' : 'Set up profile'}
       </Link>
     </Card>
