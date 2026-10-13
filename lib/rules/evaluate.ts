@@ -243,8 +243,14 @@ export function resolveField(f: PersonalizationField, co: CompanyFacts, ct: Cont
   const { ok } = usable(candidates(f.source, co, ct, facts), f.min_confidence, f.max_age_days, now)
   if (!ok.length) return null
   // Best evidence first: highest confidence, then most recently checked.
-  ok.sort((a, b) => confidenceRank(b.confidence) - confidenceRank(a.confidence) || (ageDays(a.dated, now) ?? 1e9) - (ageDays(b.dated, now) ?? 1e9))
-  const v = ok[0].value
+  let best = ok[0]
+  for (let i = 1; i < ok.length; i++) {
+    const a = best
+    const b = ok[i]
+    const diff = confidenceRank(b.confidence) - confidenceRank(a.confidence) || (ageDays(a.dated, now) ?? 1e9) - (ageDays(b.dated, now) ?? 1e9)
+    if (diff > 0) best = b
+  }
+  const v = best.value
   return typeof v === 'string' ? v.trim() : v == null ? null : String(v)
 }
 
@@ -290,18 +296,20 @@ export function evaluateLead(lead: LeadFacts, rs: RuleSetLike, now: Date = new D
     return { company_id: lead.company.id, contact_id: null, tier: 'parked', batch: 'standard', reasons, merge: {}, missing: [], contacts, rule_set_id: rs.id, version: rs.version }
   }
   const byId = new Map(lead.contacts.map((c) => [c.id, c]))
-  const ordered = [...contacts].sort((a, b) => {
+  let best = contacts[0]
+  for (let i = 1; i < contacts.length; i++) {
+    const a = best
+    const b = contacts[i]
     const ca = byId.get(a.contact_id)!
     const cb = byId.get(b.contact_id)!
-    return (
+    const diff =
       TIER_ORDER[a.tier] - TIER_ORDER[b.tier] ||
       Number(cb.verification_status === 'valid') - Number(ca.verification_status === 'valid') ||
       Number(ca.is_role_address === true) - Number(cb.is_role_address === true) ||
       a.reasons.length - b.reasons.length ||
       a.contact_id - b.contact_id
-    )
-  })
-  const best = ordered[0]
+    if (diff > 0) best = b
+  }
   return {
     company_id: lead.company.id,
     contact_id: best.contact_id,

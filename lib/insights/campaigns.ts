@@ -44,13 +44,27 @@ export function eligibleCampaigns(campaigns: CampaignRow[], metric: Metric, sour
 /** Best = highest Wilson lower bound (ties: higher rate, then more volume, then id). */
 export function pickBest(s: Scored[]): Scored | null {
   if (!s.length) return null
-  return [...s].sort((a, b) => b.lower - a.lower || b.p - a.p || b.n - a.n || a.c.id.localeCompare(b.c.id))[0]
+  let best = s[0]
+  for (let i = 1; i < s.length; i++) {
+    const a = s[i]
+    const b = best
+    const diff = b.lower - a.lower || b.p - a.p || b.n - a.n || a.c.id.localeCompare(b.c.id)
+    if (diff < 0) best = a
+  }
+  return best
 }
 
 /** Worst = lowest Wilson upper bound (ties: lower rate, then more volume, then id). */
 export function pickWorst(s: Scored[]): Scored | null {
   if (!s.length) return null
-  return [...s].sort((a, b) => a.upper - b.upper || a.p - b.p || b.n - a.n || a.c.id.localeCompare(b.c.id))[0]
+  let worst = s[0]
+  for (let i = 1; i < s.length; i++) {
+    const a = s[i]
+    const b = worst
+    const diff = a.upper - b.upper || a.p - b.p || b.n - a.n || a.c.id.localeCompare(b.c.id)
+    if (diff < 0) worst = a
+  }
+  return worst
 }
 
 function autoNote(c: CampaignRow, inner = false): string {
