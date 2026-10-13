@@ -15,7 +15,7 @@ export function CampaignTabs({ campaignId, active }: { campaignId: number; activ
           href={t.href}
           prefetch={false}
           aria-current={t.key === active ? 'page' : undefined}
-          className={`-mb-px border-b-2 px-3 py-2 text-[13px] ${
+          className={`-mb-px border-b-2 px-3 py-2 text-sm ${
             t.key === active ? 'border-accent font-medium text-ink' : 'border-transparent text-ink-muted hover:text-ink'
           }`}
         >
