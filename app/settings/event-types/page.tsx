@@ -34,7 +34,7 @@ export default async function EventTypesSettingsPage({ searchParams }: { searchP
     <PageFrame title="Event types" meta={meta}>
       <Notice error={sp.error} saved={sp.saved} />
       {needsMigration ? (
-        <p className="text-[13px] text-ink-muted">Needs migration 0018 — it runs on the next production deploy.</p>
+        <p className="text-sm text-ink-muted">Needs migration 0018 — it runs on the next production deploy.</p>
       ) : (
         <EventTypesSection
           types={types}
