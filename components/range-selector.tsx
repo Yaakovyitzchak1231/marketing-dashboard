@@ -25,7 +25,7 @@ export function RangeSelector({
     <div
       role="group"
       aria-label={COPY.rangeSelector}
-      className="flex gap-2 text-[12px] bg-surface border border-line rounded p-1"
+      className="flex gap-2 text-xs bg-surface border border-line rounded p-1"
     >
       {SUPPORTED_RANGE_KEYS.map((range) => {
         const isActive = currentRange === range
