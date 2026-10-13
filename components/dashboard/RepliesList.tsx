@@ -43,23 +43,23 @@ function LeadItem({ l }: { l: RepliedLead }) {
     <li className="min-w-0 px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <span className="text-[14px] font-medium text-ink">{who}</span>
-          {l.company ? <span className="text-[13px] text-ink-muted"> · {l.company}</span> : null}
+          <span className="text-sm font-medium text-ink">{who}</span>
+          {l.company ? <span className="text-sm text-ink-muted"> · {l.company}</span> : null}
         </div>
         <div className="flex items-center gap-2">
           <Pill tone={i.tone}>{i.label}</Pill>
           {l.awaitingOurReply ? (
-            <span className={`whitespace-nowrap font-numeric text-[12px] ${w.urgent ? 'font-medium text-bad' : 'text-ink-muted'}`}>{w.text}</span>
+            <span className={`whitespace-nowrap font-numeric text-xs ${w.urgent ? 'font-medium text-bad' : 'text-ink-muted'}`}>{w.text}</span>
           ) : null}
         </div>
       </div>
-      <div className="mt-0.5 text-[12px] text-ink-faint">
+      <div className="mt-0.5 text-xs text-ink-faint">
         {l.name ? <span className="break-all">{l.email}</span> : null}
         {l.name && l.campaignName ? ' · ' : null}
         {l.campaignName ? <span>{l.campaignName}</span> : null}
       </div>
       {l.lastReplySnippet ? (
-        <p className="mt-1.5 line-clamp-2 [overflow-wrap:anywhere] border-l-2 border-line pl-2.5 text-[13px] leading-relaxed text-ink-muted">{l.lastReplySnippet}</p>
+        <p className="mt-1.5 line-clamp-2 [overflow-wrap:anywhere] border-l-2 border-line pl-2.5 text-sm leading-relaxed text-ink-muted">{l.lastReplySnippet}</p>
       ) : null}
     </li>
   )
@@ -87,7 +87,7 @@ export function RepliesList({ leads }: { leads: RepliedLead[] }) {
         )}
         {others.length ? (
           <details className="group border-t border-line-soft">
-            <summary className="cursor-pointer list-none px-4 py-2.5 text-[12px] font-medium text-accent hover:underline sm:px-5">
+            <summary className="cursor-pointer list-none px-4 py-2.5 text-xs font-medium text-accent hover:underline sm:px-5">
               <span className="group-open:hidden">Show {others.length} answered repl{others.length === 1 ? 'y' : 'ies'}</span>
               <span className="hidden group-open:inline">Hide answered replies</span>
             </summary>
