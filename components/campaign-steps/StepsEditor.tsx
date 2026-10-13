@@ -153,6 +153,12 @@ export function StepsEditor({ campaign, steps, fields, fieldsFrom, pushRequests,
                       <button type="button" className={BUTTON} aria-label={`Move step ${s.step_number} down`} disabled={idx >= numbers.length - 1} onClick={() => act('/reorder', 'POST', { order: swap(numbers, idx, idx + 1) })}>
                         ↓
                       </button>
+                      <button type="button" className={BUTTON} onClick={() => {
+                        const text = (s.subject ? `Subject: ${s.subject}\n\n` : '') + s.body
+                        void navigator.clipboard.writeText(text)
+                      }}>
+                        Copy
+                      </button>
                       <button type="button" className={BUTTON} onClick={() => setEditing(editing === s.id ? null : s.id)}>
                         Edit
                       </button>
