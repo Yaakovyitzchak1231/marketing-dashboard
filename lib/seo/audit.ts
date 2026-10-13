@@ -1,6 +1,6 @@
+import { classifyFetch, type FetchVerdict } from './fetch-classify'
 import {
   AI_CRAWLERS,
-  detectBotWall,
   parseLlmsTxt,
   parsePage,
   parseRobots,
@@ -16,7 +16,8 @@ import {
  * (a bot wall, a timeout, a missing key) — never a guess dressed as a result.
  */
 
-export type CheckStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'info'
+/** `blocked` = our checker was kept out (bot wall, 403, login, rate limit); never a site failure by itself. */
+export type CheckStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'info' | 'blocked'
 export interface Check {
   id: string
   label: string
@@ -24,6 +25,8 @@ export interface Check {
   detail: string
   fix?: string
   page?: string
+  /** Why a resource couldn't be read (blocked / unknown checks), shown verbatim, e.g. "Blocked: SiteGround captcha (HTTP 202)". */
+  reason?: string
 }
 
 export interface FetchResult {
@@ -33,6 +36,8 @@ export interface FetchResult {
   error: string | null
   wall: string | null
   finalUrl: string | null
+  /** Why this fetch did or didn't give us the resource. */
+  verdict: FetchVerdict
 }
 
 export type Fetcher = (url: string, init?: { headers?: Record<string, string>; signal?: AbortSignal }) => Promise<{
@@ -63,16 +68,20 @@ async function grab(fetcher: Fetcher, url: string, timeoutMs: number): Promise<F
   try {
     const r = await fetcher(url, { headers: { 'User-Agent': AUDIT_UA, Accept: '*/*' }, signal: AbortSignal.timeout(timeoutMs) })
     const body = await r.text()
+    const finalUrl = r.url || url
+    const verdict = classifyFetch({ status: r.status, body, headers: r.headers, finalUrl, requestedUrl: url, timeoutMs })
     return {
       status: r.status,
       contentType: r.headers.get('content-type'),
       body,
       error: null,
-      wall: detectBotWall(r.status, body),
-      finalUrl: r.url || url,
+      wall: verdict.status === 'blocked' ? verdict.reason : null,
+      finalUrl,
+      verdict,
     }
   } catch (e) {
-    return { status: null, contentType: null, body: '', error: (e as Error).message || String(e), wall: null, finalUrl: null }
+    const verdict = classifyFetch({ status: null, error: e, requestedUrl: url, timeoutMs })
+    return { status: null, contentType: null, body: '', error: verdict.reason, wall: null, finalUrl: null, verdict }
   }
 }
 
@@ -89,11 +98,25 @@ function wpFix(site: AuditSite, wp: string, other: string): string {
 
 export function summarize(checks: Check[]) {
   const n = (s: CheckStatus) => checks.filter((c) => c.status === s).length
-  return { passed: n('pass'), failed: n('fail'), warned: n('warn'), unknown: n('unknown') }
+  return { passed: n('pass'), failed: n('fail'), warned: n('warn'), unknown: n('unknown'), blocked: n('blocked') }
 }
 
-const WALLED = (what: string, wall: string): Check['detail'] =>
-  `Couldn't read ${what}: the server answered with a ${wall} instead of the page.`
+/**
+ * A check for a resource we couldn't read: `blocked` when something kept our
+ * checker out, `unknown` for other errors. The reason leads the detail so the
+ * UI says exactly why, and it never counts as a Fix.
+ */
+function unread(id: string, label: string, what: string, url: string, v: FetchVerdict, site: AuditSite, page?: string): Check {
+  const hint =
+    v.kind === 'access_denied' && (site.host ?? '').toLowerCase() === 'siteground'
+      ? " This site is on SiteGround, whose anti-bot often refuses cloud servers like the dashboard's."
+      : ''
+  const tail =
+    v.status === 'blocked'
+      ? `Couldn't read ${what}, so this is not a site failure. Open ${url} in a normal browser to confirm it's live.${hint}`
+      : `Couldn't read ${what}. Re-run the audit; if it keeps failing, open ${url} in a browser.`
+  return { id, label, status: v.status === 'blocked' ? 'blocked' : 'unknown', reason: v.reason, detail: `${v.reason}. ${tail}`, ...(page ? { page } : {}) }
+}
 
 export interface AuditPage {
   url: string
@@ -116,17 +139,22 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
   const timeoutMs = opts.timeoutMs ?? 15000
   const origin = originOf(site.base_url)
   const checks: Check[] = []
-  const walls: string[] = []
+  const walls: { url: string; v: FetchVerdict }[] = []
+  let requests = 0
+  const get = async (url: string) => {
+    requests++
+    const r = await grab(fetcher, url, timeoutMs)
+    if (r.verdict.status === 'blocked') walls.push({ url, v: r.verdict })
+    return r
+  }
 
   // ---- robots.txt
-  const robotsRes = await grab(fetcher, `${origin}/robots.txt`, timeoutMs)
+  const robotsUrl = `${origin}/robots.txt`
+  const robotsRes = await get(robotsUrl)
   let sitemapHints: string[] = []
-  if (robotsRes.wall) {
-    walls.push(robotsRes.wall)
-    checks.push({ id: 'robots', label: 'AI crawlers in robots.txt', status: 'unknown', detail: WALLED('robots.txt', robotsRes.wall) })
-  } else if (robotsRes.error || robotsRes.status == null) {
-    checks.push({ id: 'robots', label: 'AI crawlers in robots.txt', status: 'unknown', detail: `robots.txt didn't load (${robotsRes.error ?? 'no answer'}).` })
-  } else if (robotsRes.status === 404) {
+  if (robotsRes.verdict.status === 'blocked' || robotsRes.verdict.status === 'error') {
+    checks.push(unread('robots', 'AI crawlers in robots.txt', 'robots.txt', robotsUrl, robotsRes.verdict, site))
+  } else if (robotsRes.verdict.status === 'missing') {
     checks.push({
       id: 'robots',
       label: 'AI crawlers in robots.txt',
@@ -134,7 +162,7 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
       detail: 'No robots.txt (HTTP 404). Crawlers are allowed by default, but there is no Sitemap line pointing them to your pages.',
       fix: wpFix(site, 'Yoast creates one automatically: Yoast SEO > Tools > File editor, or check that nothing deletes it.', 'Add a robots.txt with "User-agent: *", "Allow: /" and a Sitemap: line.'),
     })
-  } else if (robotsRes.status >= 200 && robotsRes.status < 300) {
+  } else if (robotsRes.verdict.status === 'ok') {
     const robots = parseRobots(robotsRes.body)
     sitemapHints = robots.sitemaps
     const paths = [...new Set(['/', ...(site.pages ?? []).map((p) => p.startsWith('/') ? p : `/${p}`)])]
@@ -163,15 +191,15 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
           },
     )
   } else {
-    checks.push({ id: 'robots', label: 'AI crawlers in robots.txt', status: 'unknown', detail: `robots.txt answered HTTP ${robotsRes.status}.` })
+    checks.push(unread('robots', 'AI crawlers in robots.txt', 'robots.txt', robotsUrl, robotsRes.verdict, site))
   }
 
   // ---- llms.txt
-  const llms = await grab(fetcher, `${origin}/llms.txt`, timeoutMs)
-  if (llms.wall) {
-    walls.push(llms.wall)
-    checks.push({ id: 'llms_txt', label: 'llms.txt', status: 'unknown', detail: WALLED('/llms.txt', llms.wall) })
-  } else if (llms.status === 200) {
+  const llmsUrl = `${origin}/llms.txt`
+  const llms = await get(llmsUrl)
+  if (llms.verdict.status === 'blocked' || llms.verdict.status === 'error') {
+    checks.push(unread('llms_txt', 'llms.txt', '/llms.txt', llmsUrl, llms.verdict, site))
+  } else if (llms.verdict.status === 'ok') {
     const p = parseLlmsTxt(llms.body, llms.contentType)
     checks.push(
       p.valid
@@ -188,42 +216,60 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
             detail: 'The optional /llms.txt endpoint does not look like a markdown map. This is not a search eligibility requirement.',
           },
     )
-  } else if (llms.status != null) {
+  } else {
     checks.push({
       id: 'llms_txt',
       label: 'llms.txt',
       status: 'info',
       detail: `Optional llms.txt not available (HTTP ${llms.status}). Google does not require AI text files or special markup for AI search features. No fix is required for its absence.`,
     })
-  } else {
-    checks.push({ id: 'llms_txt', label: 'llms.txt', status: 'unknown', detail: `/llms.txt didn't load (${llms.error ?? 'no answer'}).` })
   }
 
   // ---- sitemap
   const candidates = [...new Set([...sitemapHints, `${origin}/sitemap_index.xml`, `${origin}/sitemap.xml`, `${origin}/wp-sitemap.xml`])]
   let sitemapUrls: string[] | null = null
   let sitemapAt: string | null = null
-  let sitemapWall: string | null = null
+  // The first candidate we couldn't read (blocked beats error: it explains the rest).
+  let smBlocked: { url: string; v: FetchVerdict } | null = null
+  let smError: { url: string; v: FetchVerdict } | null = null
+  // Child sitemaps of an index that we couldn't read.
+  const childUnread: { url: string; v: FetchVerdict }[] = []
+  let childCount = 0
   for (const c of candidates) {
-    const r = await grab(fetcher, c, timeoutMs)
-    if (r.wall) {
-      sitemapWall = r.wall
+    const r = await get(c)
+    if (r.verdict.status === 'blocked') {
+      smBlocked ??= { url: c, v: r.verdict }
       continue
     }
-    if (r.status !== 200 || !/<(urlset|sitemapindex)\b/i.test(r.body)) continue
+    if (r.verdict.status === 'error') {
+      smError ??= { url: c, v: r.verdict }
+      continue
+    }
+    if (r.verdict.status !== 'ok' || !/<(urlset|sitemapindex)\b/i.test(r.body)) continue
     const top = parseSitemap(r.body)
     sitemapAt = c
     if (top.isIndex) {
       const urls: string[] = []
-      for (const child of top.urls.slice(0, opts.maxChildSitemaps ?? 5)) {
-        const cr = await grab(fetcher, child, timeoutMs)
-        if (cr.status === 200 && !cr.wall) urls.push(...parseSitemap(cr.body).urls)
+      const children = top.urls.slice(0, opts.maxChildSitemaps ?? 5)
+      childCount = children.length
+      for (const child of children) {
+        const cr = await get(child)
+        if (cr.verdict.status === 'ok') urls.push(...parseSitemap(cr.body).urls)
+        else if (cr.verdict.status !== 'missing') childUnread.push({ url: child, v: cr.verdict })
       }
       sitemapUrls = urls
     } else sitemapUrls = top.urls
     break
   }
-  if (sitemapUrls) {
+  if (sitemapUrls && sitemapAt && childUnread.length && sitemapUrls.length === 0) {
+    // Found the index, but every child we tried was blocked or errored: we can't judge its pages.
+    const first = childUnread.find((x) => x.v.status === 'blocked') ?? childUnread[0]
+    const c = unread('sitemap', 'Sitemap', `the ${childUnread.length === childCount ? '' : `${childUnread.length} of ${childCount} `}child sitemaps listed in ${sitemapAt}`, first.url, first.v, site)
+    checks.push({ ...c, detail: `Sitemap index found at ${sitemapAt}. ${c.detail}` })
+  } else if (sitemapUrls) {
+    const partial = childUnread.length
+      ? ` (${childUnread.length} of ${childCount} child sitemaps not read: ${childUnread[0].v.reason})`
+      : ''
     const sus = suspiciousSitemapUrls(sitemapUrls)
     checks.push(
       sus.length
@@ -231,18 +277,19 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
             id: 'sitemap',
             label: 'Sitemap',
             status: 'warn',
-            detail: `Sitemap (${sitemapAt}) lists ${sitemapUrls.length} pages, including ${sus.length} that look like tests or leftovers: ${sus.slice(0, 8).map((u) => new URL(u).pathname).join(', ')}${sus.length > 8 ? '…' : ''}.`,
+            detail: `Sitemap (${sitemapAt}) lists ${sitemapUrls.length} pages${partial}, including ${sus.length} that look like tests or leftovers: ${sus.slice(0, 8).map((u) => new URL(u).pathname).join(', ')}${sus.length > 8 ? '…' : ''}.`,
             fix: wpFix(
               site,
               'For each page: edit it > Yoast box > Advanced > "Allow search engines to show this page in search results?" = No (or delete the test pages). Yoast drops noindexed pages from the sitemap.',
               'Remove these pages or mark them noindex.',
             ),
           }
-        : { id: 'sitemap', label: 'Sitemap', status: 'pass', detail: `Sitemap (${sitemapAt}) lists ${sitemapUrls.length} pages; none look like test pages.` },
+        : { id: 'sitemap', label: 'Sitemap', status: 'pass', detail: `Sitemap (${sitemapAt}) lists ${sitemapUrls.length} pages${partial}; none look like test pages.` },
     )
-  } else if (sitemapWall) {
-    walls.push(sitemapWall)
-    checks.push({ id: 'sitemap', label: 'Sitemap', status: 'unknown', detail: WALLED('the sitemap', sitemapWall) })
+  } else if (smBlocked || smError) {
+    // We never got a straight "not there" from every place a sitemap lives, so "no sitemap" would be a guess.
+    const x = (smBlocked ?? smError)!
+    checks.push(unread('sitemap', 'Sitemap', 'the sitemap', x.url, x.v, site))
   } else {
     checks.push({
       id: 'sitemap',
@@ -259,20 +306,14 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
   const pages: Record<string, AuditPage> = {}
   for (const path of paths) {
     const url = `${origin}${path.startsWith('/') ? path : `/${path}`}`
-    const r = await grab(fetcher, url, timeoutMs)
-    if (r.wall) {
-      walls.push(r.wall)
-      checks.push({ id: 'page', label: 'Page loads', status: 'unknown', detail: WALLED(path, r.wall), page: path })
+    const r = await get(url)
+    if (r.verdict.status === 'blocked' || r.verdict.status === 'error') {
+      checks.push(unread('page', 'Page loads', path, url, r.verdict, site, path))
       continue
     }
-    if (r.status !== 200) {
-      checks.push({
-        id: 'page',
-        label: 'Page loads',
-        status: r.status == null ? 'unknown' : 'fail',
-        detail: r.status == null ? `Didn't load (${r.error ?? 'no answer'}).` : `HTTP ${r.status}.`,
-        page: path,
-      })
+    if (r.verdict.status === 'missing') {
+      // A real "not found": this one is a site problem.
+      checks.push({ id: 'page', label: 'Page loads', status: 'fail', reason: r.verdict.reason, detail: `${r.verdict.reason}. The page is gone or moved.`, fix: 'Restore the page, or redirect it (301) to its new address and remove it from the tracked pages.', page: path })
       continue
     }
     const f = parsePage(r.body)
@@ -297,20 +338,29 @@ export async function runAudit(site: AuditSite, opts: AuditOptions = {}): Promis
     )
   }
 
-  // ---- bot wall: the one finding that hides all the others from AI crawlers
+  // ---- bot wall: consistent with every blocked fetch above. If our checker was
+  // challenged anywhere, this flags it (with the exact reasons), never "Pass".
   if (walls.length) {
+    const tally = new Map<string, number>()
+    for (const w of walls) {
+      const r = w.v.reason.replace(/^Blocked: /, '')
+      tally.set(r, (tally.get(r) ?? 0) + 1)
+    }
+    const reasons = [...tally.entries()].map(([r, n]) => (tally.size === 1 ? r : `${r} ×${n}`)).join('; ')
+    const shown = [...new Set(walls.map((w) => { try { return new URL(w.url).pathname } catch { return w.url } }))]
     checks.unshift({
       id: 'bot_wall',
       label: 'Bot wall in front of the site',
       status: 'fail',
-      detail: `${walls.length} of our requests got a ${walls[0]} instead of the page. This proves the audit encountered a challenge, not that verified search crawlers were blocked. Inspect host logs to determine their access.`,
+      reason: walls[0].v.reason,
+      detail: `${walls.length} of our ${requests} requests were blocked: ${reasons}. Paths: ${shown.slice(0, 6).join(', ')}${shown.length > 6 ? ` and ${shown.length - 6} more` : ''}. This proves the audit's checker was challenged, not that verified search crawlers are blocked. Inspect host logs to determine their access.`,
       fix:
         (site.host ?? '').toLowerCase() === 'siteground'
           ? 'Check SiteGround access and security logs for verified Googlebot, Bingbot, PerplexityBot and OAI-SearchBot. Confirm challenges before requesting narrow search-crawler exceptions; preserve training opt-outs and security protections.'
           : 'Ask the host to verify search-crawler access and apply narrow exceptions only where challenges are confirmed.',
     })
   } else {
-    checks.unshift({ id: 'bot_wall', label: 'Bot wall in front of the site', status: 'pass', detail: 'Every request got the real content (no captcha or challenge page).' })
+    checks.unshift({ id: 'bot_wall', label: 'Bot wall in front of the site', status: 'pass', detail: `All ${requests} requests got through (no captcha, challenge, login, rate limit or 403).` })
   }
 
   // ---- PageSpeed (Google's free API; needs a free key)

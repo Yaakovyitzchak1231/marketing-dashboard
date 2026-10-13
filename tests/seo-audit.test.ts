@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runAudit, summarize } from '@/lib/seo/audit'
 import { buildFixes, contentDrafts } from '@/lib/seo/fixes'
-import { fakeWeb, healthySite, WALL } from './helpers/seo-fake-web'
+import { fakeWeb, healthySite, page, WALL } from './helpers/seo-fake-web'
 
 const SITE = { base_url: 'https://gempay.test', platform: 'wordpress', host: 'siteground', pages: ['/jewelers/', '/partners/'] }
 
@@ -31,7 +31,7 @@ describe('runAudit', () => {
     expect(web.asked.some((u) => u.includes('pagespeedonline'))).toBe(false)
   })
 
-  it('a bot wall makes page checks unknown and becomes the top failure', async () => {
+  it('a bot wall makes page checks blocked (with the reason) and becomes the top failure', async () => {
     const web = fakeWeb({
       'https://walled.test/robots.txt': { body: 'User-agent: *\nDisallow:\n', type: 'text/plain' },
       'https://walled.test/llms.txt': { status: 202, body: WALL },
@@ -44,15 +44,65 @@ describe('runAudit', () => {
     expect(r.checks[0].id).toBe('bot_wall')
     expect(r.checks[0].status).toBe('fail')
     expect(r.checks[0].fix).toContain('SiteGround')
-    expect(r.checks.find((c) => c.id === 'page')?.status).toBe('unknown')
-    expect(r.checks.find((c) => c.id === 'llms_txt')?.status).toBe('unknown')
+    expect(r.checks.find((c) => c.id === 'page')?.status).toBe('blocked')
+    expect(r.checks.find((c) => c.id === 'llms_txt')?.status).toBe('blocked')
+    expect(r.checks.find((c) => c.id === 'llms_txt')?.reason).toBe('Blocked: SiteGround captcha (HTTP 202)')
     const s = summarize(r.checks)
     expect(s.failed).toBe(1)
+    expect(s.blocked).toBe(3)
     const fixes = buildFixes({ id: 1, name: 'W', base_url: 'https://walled.test', platform: 'wordpress', host: 'siteground', campaign: null }, r.checks, r.pages, r.sitemapUrls)
     expect(fixes[0].check_id).toBe('bot_wall')
     expect(fixes[0].action.type).toBe('manual')
     // unknowns caused by the wall don't become their own fixes
     expect(fixes.some((f) => f.check_id === 'llms_txt')).toBe(false)
+  })
+
+  it('tapdash.co from a cloud server: SiteGround 202 captcha and bare 403s are "blocked" with a reason, never a false Fix', async () => {
+    const SG = { status: 202, body: WALL }
+    const F403 = { status: 403, body: '<html><head><title>403 Forbidden</title></head><body>Forbidden</body></html>' }
+    const web = fakeWeb({
+      'https://td.test/robots.txt': { body: 'User-agent: *\nDisallow:\n\nSitemap: https://td.test/sitemap_index.xml\n', type: 'text/plain' },
+      'https://td.test/sitemap_index.xml': SG,
+      'https://td.test/sitemap.xml': SG,
+      'https://td.test/wp-sitemap.xml': SG,
+      'https://td.test/llms.txt': F403,
+      'https://td.test/': F403,
+      'https://td.test/jewelers/': SG,
+    })
+    const r = await runAudit({ base_url: 'https://td.test', platform: 'wordpress', host: 'siteground', pages: ['/jewelers/'] }, { fetcher: web.fetcher })
+    const by = (id: string, page?: string) => r.checks.find((c) => c.id === id && (page === undefined || c.page === page))!
+    expect(by('sitemap').status).toBe('blocked')
+    expect(by('sitemap').detail).toBe("Blocked: SiteGround captcha (HTTP 202). Couldn't read the sitemap, so this is not a site failure. Open https://td.test/sitemap_index.xml in a normal browser to confirm it's live.")
+    expect(by('llms_txt').status).toBe('blocked')
+    expect(by('llms_txt').reason).toBe('Blocked: server refused access (HTTP 403)')
+    expect(by('llms_txt').detail).toContain('SiteGround, whose anti-bot often refuses cloud servers')
+    expect(by('page', '/').reason).toBe('Blocked: server refused access (HTTP 403)')
+    expect(by('page', '/jewelers/').reason).toBe('Blocked: SiteGround captcha (HTTP 202)')
+    // The bot wall check agrees with what the checker hit, and names the reasons.
+    expect(by('bot_wall').status).toBe('fail')
+    expect(by('bot_wall').detail).toContain('6 of our 7 requests were blocked')
+    expect(by('bot_wall').detail).toContain('SiteGround captcha (HTTP 202) ×4')
+    expect(by('bot_wall').detail).toContain('server refused access (HTTP 403) ×2')
+    const s = summarize(r.checks)
+    expect(s.failed).toBe(1) // the bot wall only
+    expect(s.blocked).toBe(4)
+    const fixes = buildFixes({ id: 1, name: 'T', base_url: 'https://td.test', platform: 'wordpress', host: 'siteground', campaign: null }, r.checks, r.pages, r.sitemapUrls)
+    // Only the bot wall (plus the key-less PageSpeed setup task); nothing for sitemap, llms.txt or pages.
+    expect(fixes.map((f) => f.check_id).sort()).toEqual(['bot_wall', 'pagespeed'])
+  })
+
+  it('genuinely missing things still fail; server errors say why and are not fails', async () => {
+    const web = fakeWeb({
+      'https://m.test/robots.txt': { body: 'User-agent: *\nDisallow:\n', type: 'text/plain' },
+      'https://m.test/': { body: page({ title: 'Home page', description: 'x', canonical: 'https://m.test/', h1: ['H'] }) },
+      'https://m.test/down/': { status: 502, body: '<title>Bad gateway</title>' },
+    })
+    const r = await runAudit({ base_url: 'https://m.test', pages: ['/gone/', '/down/'] }, { fetcher: web.fetcher })
+    const by = (id: string, page?: string) => r.checks.find((c) => c.id === id && (page === undefined || c.page === page))!
+    expect(by('sitemap').status).toBe('fail')
+    expect(by('page', '/gone/')).toMatchObject({ status: 'fail', reason: 'Not found (HTTP 404)' })
+    expect(by('page', '/down/')).toMatchObject({ status: 'unknown', reason: 'Server error: bad gateway (HTTP 502)' })
+    expect(by('bot_wall').status).toBe('pass')
   })
 
   it('training opt-outs are policy choices, not search failures', async () => {

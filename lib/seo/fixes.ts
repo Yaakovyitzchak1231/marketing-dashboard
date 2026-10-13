@@ -137,6 +137,7 @@ export function buildFixes(site: FixSite, checks: Check[], pages: Record<string,
   const add = (f: Omit<Fix, 'priority'>) => out.push({ ...f, priority: PRIORITY[f.check_id] ?? 10 })
   for (const c of checks) {
     if (c.status === 'pass' || c.status === 'info' || c.id === 'llms_txt' || c.id === 'crawler_policy') continue
+    if (c.status === 'blocked') continue // our checker was kept out: shown with its reason, never a fix item (the bot wall fix covers it)
     if (c.status === 'unknown' && c.id !== 'pagespeed' && c.id !== 'robots') continue // can't fix what we couldn't read; the bot wall fix covers it
     const page = c.page ?? null
     const base = { check_id: c.id, page, severity: c.status as Fix['severity'], detail: c.detail, fix: c.fix ?? null, key: `${c.id}:${page ?? ''}` }
