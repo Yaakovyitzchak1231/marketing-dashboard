@@ -130,7 +130,7 @@ export default async function LeadPage({
       meta={[place(c.city, c.state), SEGMENT_LABELS[c.segment] ?? c.segment, `added ${shortDate(c.created_at)}`].filter(Boolean).join(' · ')}
       actions={
         <>
-          <Link href="/leads" prefetch={false} className="text-[12px] text-ink-faint hover:text-ink">
+          <Link href="/leads" prefetch={false} className="text-xs text-ink-faint hover:text-ink">
             ← All leads
           </Link>
           <StageSelect companyId={c.id} stage={c.stage} name={c.name} />
@@ -169,16 +169,16 @@ export default async function LeadPage({
               {d.tasks.length ? (
                 <ul className="divide-y divide-line-soft">
                   {d.tasks.map((t) => (
-                    <li key={t.id} className="px-4 py-2.5 text-[13px]">
+                    <li key={t.id} className="px-4 py-2.5 text-sm">
                       <div className="flex items-start justify-between gap-2">
                         <span className="min-w-0 flex-1 text-ink [overflow-wrap:anywhere]">{t.title}</span>
                         <Pill tone={t.status === 'done' ? 'good' : t.status === 'failed' ? 'bad' : t.status === 'needs_approval' ? 'warn' : 'neutral'}>{t.status.replace(/_/g, ' ')}</Pill>
                       </div>
-                      <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">
+                      <div className="text-xs text-ink-faint [overflow-wrap:anywhere]">
                         {[t.claimed_by ? `by ${t.claimed_by}` : t.assigned_to ? `for ${t.assigned_to}` : 'unclaimed', shortDate(t.updated_at)].join(' · ')}
                       </div>
-                      {t.report ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted [overflow-wrap:anywhere]">{t.report}</p> : null}
-                      {t.error ? <p className="mt-1 text-[12px] text-bad [overflow-wrap:anywhere]">{t.error}</p> : null}
+                      {t.report ? <p className="mt-1 line-clamp-3 text-xs text-ink-muted [overflow-wrap:anywhere]">{t.report}</p> : null}
+                      {t.error ? <p className="mt-1 text-xs text-bad [overflow-wrap:anywhere]">{t.error}</p> : null}
                     </li>
                   ))}
                 </ul>
@@ -192,17 +192,17 @@ export default async function LeadPage({
                 {d.comments.length ? (
                   <ul className="flex flex-col gap-3">
                     {d.comments.map((cm) => (
-                      <li key={cm.id} className="text-[13px]">
+                      <li key={cm.id} className="text-sm">
                         <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                           <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{cm.author_name}</span>
-                          <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
+                          <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-ink-faint">{dateTime(cm.created_at)}</span>
                         </div>
                         <p className="whitespace-pre-wrap text-ink-muted [overflow-wrap:anywhere]">{cm.body}</p>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-[12px] text-ink-faint">No comments yet.</p>
+                  <p className="text-xs text-ink-faint">No comments yet.</p>
                 )}
                 <CommentForm companyId={c.id} handles={d.actors.filter((a) => a.kind === 'agent').map((a) => a.id)} />
               </div>
@@ -226,13 +226,13 @@ export default async function LeadPage({
                 {d.touches.map((t) => {
                   const snippet = typeof t.payload?.reply_text_snippet === 'string' ? t.payload.reply_text_snippet : null
                   return (
-                    <li key={t.id} className="px-4 py-2.5 text-[13px]">
+                    <li key={t.id} className="px-4 py-2.5 text-sm">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <span className="min-w-0 font-medium text-ink [overflow-wrap:anywhere]">{EVENT_LABEL[t.event_type] ?? t.event_type.replace(/_/g, ' ')}</span>
-                        <span className="text-[12px] tabular-nums text-ink-faint">{dateTime(t.occurred_at)}</span>
+                        <span className="text-xs tabular-nums text-ink-faint">{dateTime(t.occurred_at)}</span>
                       </div>
-                      <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">{[t.campaign_name, t.email].filter(Boolean).join(' · ')}</div>
-                      {snippet ? <p className="mt-1 line-clamp-3 text-[12px] text-ink-muted [overflow-wrap:anywhere]">“{snippet}”</p> : null}
+                      <div className="text-xs text-ink-faint [overflow-wrap:anywhere]">{[t.campaign_name, t.email].filter(Boolean).join(' · ')}</div>
+                      {snippet ? <p className="mt-1 line-clamp-3 text-xs text-ink-muted [overflow-wrap:anywhere]">“{snippet}”</p> : null}
                     </li>
                   )
                 })}
@@ -264,9 +264,9 @@ export default async function LeadPage({
                   ]}
                 />
               </div>
-              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fact label="Stage"><StagePill stage={c.stage} /></Fact>
-                <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-[12px] text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
+                <Fact label="Research"><ResearchPill status={c.research_status} />{c.last_researched_at ? <span className="ml-2 text-xs text-ink-faint">{shortDate(c.last_researched_at)}</span> : null}</Fact>
                 <Fact label="Owner">{c.owner_name}</Fact>
                 <Fact label="Website">{site ? <a href={site} target="_blank" rel="noreferrer noopener" className="text-accent">{c.website_domain ?? c.website}</a> : c.website}</Fact>
                 <Fact label="Phone"><InlineEditCell type="company" id={c.id} field="phone" value={c.phone} label="Phone" /></Fact>
@@ -291,15 +291,15 @@ export default async function LeadPage({
               {d.contacts.length ? (
                 <ul className="divide-y divide-line-soft">
                   {d.contacts.map((ct) => (
-                    <li key={ct.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
+                    <li key={ct.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                       <div className="min-w-0 flex-1 basis-[220px]">
                         <div className="font-medium text-ink [overflow-wrap:anywhere]">{ct.email ?? 'No email'}</div>
-                        <div className="text-[12px] text-ink-faint [overflow-wrap:anywhere]">
+                        <div className="text-xs text-ink-faint [overflow-wrap:anywhere]">
                           {[[ct.first_name, ct.last_name].filter(Boolean).join(' ') || (ct.suggested_first_name ? `maybe ${ct.suggested_first_name}` : null), ct.phone, ct.is_role_address ? 'shared inbox' : null, ct.email_source ? `found via ${ct.email_source}` : null, ct.status]
                             .filter(Boolean)
                             .join(' · ')}
                         </div>
-                        <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-[12px] text-ink-faint" />
+                        <InlineEditCell type="contact" id={ct.id} field="title" value={ct.title} label={`Title for ${ct.email ?? ct.id}`} placeholder="No title" className="text-xs text-ink-faint" />
                         <CustomFieldsBlock entity="contact" id={ct.id} defs={contactFields} values={ct.custom} label="Custom fields" />
                         <div className="mt-1"><ForgetContactButton contactId={ct.id} email={ct.email} /></div>
 
@@ -338,8 +338,8 @@ export default async function LeadPage({
                       <Td className="whitespace-nowrap text-ink-muted">{e.field.replace(/_/g, ' ')}</Td>
                       <Td className="max-w-[240px] text-ink [overflow-wrap:anywhere]">{e.value}</Td>
                       <Td>{e.confidence ? <Pill tone={e.confidence === 'high' ? 'good' : e.confidence === 'medium' ? 'neutral' : 'warn'}>{e.confidence}</Pill> : <Dash />}</Td>
-                      <Td className="min-w-[120px] text-[12px] text-ink-muted">{[e.method.replace(/_/g, ' '), e.actor_name].filter(Boolean).join(' · ')}</Td>
-                      <Td className="whitespace-nowrap tabular-nums text-[12px] text-ink-faint">{e.last_checked_at ? shortDate(e.last_checked_at) : <Dash />}</Td>
+                      <Td className="min-w-[120px] text-xs text-ink-muted">{[e.method.replace(/_/g, ' '), e.actor_name].filter(Boolean).join(' · ')}</Td>
+                      <Td className="whitespace-nowrap tabular-nums text-xs text-ink-faint">{e.last_checked_at ? shortDate(e.last_checked_at) : <Dash />}</Td>
                       <Td>{safeHref(e.evidence_url) ? <a href={safeHref(e.evidence_url)!} target="_blank" rel="noreferrer noopener" className="text-accent">source</a> : <Dash />}</Td>
                     </tr>
                   ))}
@@ -356,7 +356,7 @@ export default async function LeadPage({
                     <tr key={v.id}>
                       <Td className="max-w-[200px] truncate text-ink">{v.email}</Td>
                       <Td className="whitespace-nowrap text-ink-muted">{PROVIDER_LABEL[v.provider] ?? v.provider}</Td>
-                      <Td className="whitespace-nowrap"><VerificationPill status={v.verdict === 'pass' ? null : (v.verdict as VerificationStatus)} />{v.verdict === 'pass' ? <Pill tone="neutral">Passed free check</Pill> : null} <span className="ml-1 text-[11px] text-ink-faint">{v.result}{v.sub_result ? ` / ${v.sub_result}` : ''}</span></Td>
+                      <Td className="whitespace-nowrap"><VerificationPill status={v.verdict === 'pass' ? null : (v.verdict as VerificationStatus)} />{v.verdict === 'pass' ? <Pill tone="neutral">Passed free check</Pill> : null} <span className="ml-1 text-2xs text-ink-faint">{v.result}{v.sub_result ? ` / ${v.sub_result}` : ''}</span></Td>
                       <Td className="whitespace-nowrap text-right tabular-nums text-ink-muted">${Number(v.cost_usd).toFixed(4)}</Td>
                       <Td className="whitespace-nowrap tabular-nums text-ink-faint">{dateTime(v.checked_at)}</Td>
                     </tr>
@@ -373,7 +373,7 @@ export default async function LeadPage({
               {d.history.length ? (
                 <ol className="divide-y divide-line-soft">
                   {d.history.map((h) => (
-                    <li key={h.id} className="px-4 py-2 text-[12px] [overflow-wrap:anywhere]">
+                    <li key={h.id} className="px-4 py-2 text-xs [overflow-wrap:anywhere]">
                       <div className="text-ink-muted">
                         {h.entity_type === 'contact' ? <span className="text-ink-faint">{h.email ?? 'contact'} · </span> : null}
                         {historyLine(h.field, h.old_value, h.new_value)}
@@ -393,7 +393,7 @@ export default async function LeadPage({
               {d.sources.length ? (
                 <ul className="divide-y divide-line-soft">
                   {d.sources.map((s) => (
-                    <li key={s.id} className="px-4 py-2 text-[12px]">
+                    <li key={s.id} className="px-4 py-2 text-xs">
                       <div className="text-ink [overflow-wrap:anywhere]">{s.kind.replace(/_/g, ' ')}{s.source_ref ? <span className="text-ink-faint"> · {s.source_ref}</span> : null}</div>
                       <div className="flex justify-between gap-2 text-ink-faint">
                         {safeHref(s.url) ? <a className="min-w-0 truncate text-accent" href={safeHref(s.url)!} target="_blank" rel="noreferrer noopener">{s.url}</a> : <span />}
@@ -440,7 +440,7 @@ function Section({ title, meta, children }: { title: string; meta?: string; chil
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 items-baseline gap-3">
-      <dt className="w-[72px] shrink-0 text-[12px] text-ink-faint">{label}</dt>
+      <dt className="w-[72px] shrink-0 text-xs text-ink-faint">{label}</dt>
       <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{children === null || children === undefined || children === '' ? <Dash /> : children}</dd>
     </div>
   )
@@ -449,8 +449,8 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 function Table({ head, children }: { head: string[]; children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-left text-[13px]">
-        <thead className="border-b border-line bg-canvas/60 text-[11px] uppercase tracking-[0.05em] text-ink-faint">
+      <table className="w-full min-w-[560px] text-left text-sm">
+        <thead className="border-b border-line bg-canvas/60 text-2xs uppercase tracking-[0.05em] text-ink-faint">
           <tr>{head.map((h) => <th key={h} className="whitespace-nowrap px-4 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-line-soft">{children}</tbody>
@@ -475,16 +475,16 @@ function Readiness({ list, contacts }: { list: LeadReadiness[]; contacts: LeadDe
     <Section title="Ready for campaigns" meta="Scored live against the lead rules">
       <ul className="divide-y divide-line-soft">
         {list.map(({ ruleSet, verdict }) => (
-          <li key={ruleSet.id} className="px-4 py-2.5 text-[13px]">
+          <li key={ruleSet.id} className="px-4 py-2.5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <TierPill tier={verdict.tier} />
               <Link href={`/rules/${ruleSet.id}`} prefetch={false} className="min-w-0 font-medium text-ink hover:text-accent [overflow-wrap:anywhere]">
                 {ruleSet.name}
               </Link>
-              {verdict.contact_id ? <span className="min-w-0 text-[12px] text-ink-faint [overflow-wrap:anywhere]">via {email(verdict.contact_id) ?? `contact ${verdict.contact_id}`}</span> : null}
+              {verdict.contact_id ? <span className="min-w-0 text-xs text-ink-faint [overflow-wrap:anywhere]">via {email(verdict.contact_id) ?? `contact ${verdict.contact_id}`}</span> : null}
             </div>
             {verdict.reasons.length ? (
-              <ul className="mt-1 list-disc pl-5 text-[12.5px] text-ink-muted [overflow-wrap:anywhere]">
+              <ul className="mt-1 list-disc pl-5 text-xs text-ink-muted [overflow-wrap:anywhere]">
                 {verdict.reasons.map((r, i) => (
                   <li key={i}>
                     {r.label}: {r.detail}
@@ -494,13 +494,13 @@ function Readiness({ list, contacts }: { list: LeadReadiness[]; contacts: LeadDe
               </ul>
             ) : null}
             {verdict.tier !== 'parked' && verdict.batch === 'role-inbox' ? (
-              <p className="mt-1 text-[12.5px] text-ink-muted">Role inbox: goes out only in a role-inbox batch, with no-name copy.</p>
+              <p className="mt-1 text-xs text-ink-muted">Role inbox: goes out only in a role-inbox batch, with no-name copy.</p>
             ) : null}
             {verdict.tier !== 'parked' && verdict.batch !== 'role-inbox' && verdict.missing.length ? (
-              <p className="mt-1 text-[12.5px] text-ink-muted">Generic because these have no real value: {verdict.missing.join(', ')}</p>
+              <p className="mt-1 text-xs text-ink-muted">Generic because these have no real value: {verdict.missing.join(', ')}</p>
             ) : null}
             {verdict.tier !== 'parked' && Object.keys(verdict.merge).length ? (
-              <p className="mt-1 text-[12px] text-ink-faint [overflow-wrap:anywhere]">
+              <p className="mt-1 text-xs text-ink-faint [overflow-wrap:anywhere]">
                 Would send: {Object.entries(verdict.merge).map(([k, v]) => `{{${k}}} = “${v}”`).join(' · ')}
               </p>
             ) : null}
