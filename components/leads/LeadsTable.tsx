@@ -156,6 +156,7 @@ export function LeadsTable({
                   {r.primary_verification ? <VerificationPill status={r.primary_verification} /> : null}
                   {showResearch ? <ResearchPill status={r.research_status} /> : null}
                 </div>
+                {updatedLabels[r.id] ? <div className="mt-1 text-[11px] tabular-nums text-ink-faint">Updated {updatedLabels[r.id]}</div> : null}
               </div>
             </li>
           ))}
