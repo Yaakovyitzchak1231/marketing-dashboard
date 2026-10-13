@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Pill, type PillTone } from '@/components/dashboard/primitives'
 import { PageShell, DbNotConnected as AppDbNotConnected } from '@/components/app/PageShell'
+import { controlClass } from '@/components/ui/classes'
+import { buttonClass } from '@/components/ui/Button'
 
 /** "4m ago" with the exact time on hover. Server-rendered per request. */
 export function Ago({ at, now = new Date() }: { at: Date | string | null; now?: Date }) {
@@ -93,9 +95,7 @@ export function ActorLink({ id, name }: { id: string | null; name: string | null
   )
 }
 
-export const inputCls =
-  'w-full rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
-export const btnCls =
-  'inline-flex items-center justify-center rounded-card border border-line bg-surface px-3 py-1.5 text-[12.5px] font-medium text-ink hover:border-ink-faint'
-export const primaryBtnCls =
-  'inline-flex items-center justify-center rounded-card border border-accent bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white hover:opacity-90'
+/** Legacy names kept for the screens that import them; they are the design system's classes. */
+export const inputCls = controlClass
+export const btnCls = buttonClass({ variant: 'secondary', size: 'sm' })
+export const primaryBtnCls = buttonClass({ variant: 'primary', size: 'sm' })
