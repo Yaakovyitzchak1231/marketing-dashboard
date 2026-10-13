@@ -41,7 +41,7 @@ export function VerifyButton({
     <Link
       href={verifyHref({ contactIds, filter })}
       prefetch={false}
-      className={`inline-flex items-center rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-muted hover:text-ink ${className}`}
+      className={`inline-flex items-center rounded-control border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted hover:text-ink ${className}`}
       title="Runs the free check first and shows the cost before anything paid happens"
     >
       {label}
