@@ -33,9 +33,9 @@ export function EngagementPanel({ data, companyId }: { data: EngagementSection; 
               const ahead = avg > 0 ? mine >= avg : mine > 0
               return (
                 <div key={c.key} className="min-w-0 rounded-card border border-line-soft p-2 text-center xs:p-3">
-                  <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">{c.label}</div>
-                  <div className="mt-1 text-[20px] font-semibold tabular-nums text-ink">{mine}</div>
-                  <div className={`mt-0.5 text-[12px] ${ahead ? 'text-good' : 'text-ink-faint'}`}>campaign avg {avg}</div>
+                  <div className="text-2xs uppercase tracking-[0.04em] text-ink-faint">{c.label}</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-ink">{mine}</div>
+                  <div className={`mt-0.5 text-xs ${ahead ? 'text-good' : 'text-ink-faint'}`}>campaign avg {avg}</div>
                   {companyId ? <AskToChange companyId={companyId} campaignId={b.campaign_id} field={c.key} label={c.label} /> : null}
                 </div>
               )

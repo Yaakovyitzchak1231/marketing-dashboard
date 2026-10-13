@@ -12,7 +12,7 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
     <Link
       href={href}
       prefetch={false}
-      className={`rounded-full border px-2.5 py-1 text-[12px] ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
+      className={`rounded-full border px-2.5 py-1 text-xs ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
     >
       {children}
     </Link>
@@ -41,7 +41,7 @@ export default async function DuplicatesPage({ searchParams }: { searchParams: P
   if (needsMigration) {
     return (
       <PageShell title="Duplicates">
-        <div className="rounded-lg border border-line bg-paper p-4 text-[13px] text-ink-muted">
+        <div className="rounded-lg border border-line bg-paper p-4 text-sm text-ink-muted">
           Needs migration 0026 — it runs on the next production deploy.
         </div>
       </PageShell>
@@ -52,7 +52,7 @@ export default async function DuplicatesPage({ searchParams }: { searchParams: P
       title="Duplicates"
       meta="Likely duplicate stores and contacts, found by matching website, phone, name + address or email — pick which details to keep, then merge."
       actions={
-        <Link href="/leads" prefetch={false} className="text-[12px] text-ink-faint hover:text-ink">
+        <Link href="/leads" prefetch={false} className="text-xs text-ink-faint hover:text-ink">
           ← All leads
         </Link>
       }

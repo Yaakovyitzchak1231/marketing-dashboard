@@ -12,7 +12,7 @@ export function StepLogCard({ entries }: { entries: StepLogRow[] }) {
         {!entries.length ? (
           <EmptyNote>No actions run yet. Journey steps log here automatically; agents can run actions via the run_action op.</EmptyNote>
         ) : (
-          <table className="w-full text-[12px]">
+          <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-ink-muted">
                 <th className="py-1 pr-2">When</th>

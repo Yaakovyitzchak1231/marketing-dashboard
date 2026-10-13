@@ -43,12 +43,12 @@ export function ConfirmAction({
     )
   }
   return (
-    <form action={action} className="flex flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn-soft px-2.5 py-1.5" role="group" aria-label={`Confirm: ${label}`}>
+    <form action={action} className="flex flex-wrap items-center gap-2 rounded-control border border-warn/30 bg-warn-soft px-2.5 py-1.5" role="group" aria-label={`Confirm: ${label}`}>
       {Object.entries(fields).map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       <input type="hidden" name="confirm" value="yes" />
-      <span className="text-[12px] text-warn">{confirmText}</span>
+      <span className="text-xs text-warn">{confirmText}</span>
       <button type="submit" className={BUTTON_PRIMARY}>
         {confirmLabel}
       </button>

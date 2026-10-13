@@ -101,7 +101,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
 
         <section aria-labelledby="wk-angles">
           <SectionHeader id="wk-angles" title="Angles" />
-          <Card className="px-4 py-3 text-[13px]">
+          <Card className="px-4 py-3 text-sm">
             {r.best ? (
               <p>
                 <span className="text-ink-faint">Best:</span> <strong>{r.best.label}</strong>, {p(r.best.replyRate)} reply rate ({n(r.best.replied)} of {n(r.best.contacted)})
@@ -112,7 +112,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                 <span className="text-ink-faint">Worst:</span> <strong>{r.worst.label}</strong>, {p(r.worst.replyRate)} reply rate ({n(r.worst.replied)} of {n(r.worst.contacted)})
               </p>
             ) : null}
-            <p className={`text-[12px] text-ink-faint ${r.best ? 'mt-2' : ''}`}>{r.rankNote}</p>
+            <p className={`text-xs text-ink-faint ${r.best ? 'mt-2' : ''}`}>{r.rankNote}</p>
             {r.angles.length ? (
               <table className="mt-3 w-full border-collapse">
                 <thead className="border-b border-line">
@@ -140,7 +140,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
 
         <section aria-labelledby="wk-runway">
           <SectionHeader id="wk-runway" title="Lead runway" />
-          <Card className="divide-y divide-line-soft text-[13px]">
+          <Card className="divide-y divide-line-soft text-sm">
             {r.segmentRunway.length === 0 && r.campaignRunway.filter((c) => c.status === 'active').length === 0 ? (
               <EmptyNote>Nothing sending right now.</EmptyNote>
             ) : null}
@@ -171,7 +171,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
             {r.openItems.length === 0 ? <EmptyNote>Nothing open.</EmptyNote> : null}
             {r.openItems.map((i) => (
               <div key={i.id} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-testid="open-item">
-                <div className="min-w-0 text-[13px]">
+                <div className="min-w-0 text-sm">
                   <div className="text-ink">
                     {i.href ? (
                       <Link href={i.href} prefetch={false} className="hover:text-accent">{i.title}</Link>
@@ -179,7 +179,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                       i.title
                     )}
                   </div>
-                  {i.detail ? <div className="text-[12px] text-ink-faint">{i.detail}</div> : null}
+                  {i.detail ? <div className="text-xs text-ink-faint">{i.detail}</div> : null}
                 </div>
                 {i.kind !== 'task' && team.length ? (
                   <form action={assignFollowUpAction} className="flex shrink-0 items-center gap-1.5 print:hidden">
@@ -188,7 +188,7 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                     <input type="hidden" name="href" value={i.href ?? ''} />
                     <input type="hidden" name="item_id" value={i.id} />
                     <input type="hidden" name="return_to" value="/reports/weekly" />
-                    <select name="assigned_to" aria-label={`Who follows up on ${i.title}`} className="rounded-card border border-line bg-surface px-2 py-1 text-[12px]" defaultValue="tab">
+                    <select name="assigned_to" aria-label={`Who follows up on ${i.title}`} className="rounded-control border border-line bg-surface px-2 py-1 text-xs" defaultValue="tab">
                       {team.map((a) => (
                         <option key={a.id} value={a.id}>{a.display_name}</option>
                       ))}
@@ -196,14 +196,14 @@ export default async function WeeklyPage({ searchParams }: { searchParams: Promi
                     <button type="submit" className={BUTTON}>Assign follow-up</button>
                   </form>
                 ) : i.kind === 'task' ? (
-                  <span className="shrink-0 text-[12px] text-ink-faint">{i.assignedTo ? `with ${i.assignedTo}` : 'unassigned'}</span>
+                  <span className="shrink-0 text-xs text-ink-faint">{i.assignedTo ? `with ${i.assignedTo}` : 'unassigned'}</span>
                 ) : null}
               </div>
             ))}
           </Card>
         </section>
       </div>
-      <p className="mt-6 text-[11px] text-ink-faint">
+      <p className="mt-6 text-2xs text-ink-faint">
         Generated {r.generatedAt}. Numbers from Instantly and the lead database; “no data” means nobody reported it.
       </p>
     </PageShell>

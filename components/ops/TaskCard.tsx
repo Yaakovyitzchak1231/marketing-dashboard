@@ -18,18 +18,18 @@ export function TaskCard({ t, now }: { t: BoardTask; now: Date }) {
   return (
     <Link
       href={`/team/${t.id}`}
-      className="block rounded-card border border-line bg-surface px-3 py-2.5 shadow-card transition-colors hover:border-ink-faint"
+      className="block rounded-control border border-line bg-surface px-3 py-2.5 shadow-card transition-colors hover:border-ink-faint"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 text-[13px] font-medium leading-snug text-ink">{t.title}</p>
-        {t.priority > 0 ? <span className="shrink-0 text-[11px] tabular-nums text-warn">P{t.priority}</span> : null}
+        <p className="min-w-0 text-sm font-medium leading-snug text-ink">{t.title}</p>
+        {t.priority > 0 ? <span className="shrink-0 text-2xs tabular-nums text-warn">P{t.priority}</span> : null}
       </div>
-      <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+      <p className="mt-1 text-xs leading-snug text-ink-faint">
         {kindLabel(t.kind)}
         {t.project_name ? ` · ${t.project_name}` : ''}
         {t.company_name ? ` · ${t.company_name}` : ''}
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
         <span>
           {t.claimed_by ? (
             <>

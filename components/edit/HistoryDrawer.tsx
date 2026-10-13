@@ -54,31 +54,31 @@ export function HistoryDrawer({ type, id, label = 'History' }: { type: string; i
 
   return (
     <>
-      <button type="button" onClick={show} className="text-[12px] text-accent hover:underline">
+      <button type="button" onClick={show} className="text-xs text-accent hover:underline">
         {label}
       </button>
       {open ? (
         <div className="fixed inset-0 z-40 flex justify-end bg-ink/20" role="dialog" aria-label="History" onClick={() => setOpen(false)}>
           <div className="h-full w-full max-w-sm overflow-y-auto border-l border-line bg-surface p-4 shadow-card" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[14px] font-medium text-ink">History</h2>
-              <button type="button" onClick={() => setOpen(false)} className="text-[12px] text-ink-faint hover:text-ink" aria-label="Close history">
+              <h2 className="text-sm font-medium text-ink">History</h2>
+              <button type="button" onClick={() => setOpen(false)} className="text-xs text-ink-faint hover:text-ink" aria-label="Close history">
                 Close
               </button>
             </div>
-            {loading ? <p className="text-[12px] text-ink-faint">Loading…</p> : null}
+            {loading ? <p className="text-xs text-ink-faint">Loading…</p> : null}
             {error ? (
-              <p role="alert" className="text-[12px] text-bad">
+              <p role="alert" className="text-xs text-bad">
                 {error}
               </p>
             ) : null}
-            {!loading && !error && rows && rows.length === 0 ? <p className="text-[12px] text-ink-faint">No changes yet.</p> : null}
+            {!loading && !error && rows && rows.length === 0 ? <p className="text-xs text-ink-faint">No changes yet.</p> : null}
             {rows && rows.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {rows.map((r) => (
-                  <li key={r.id} className="border-b border-line-soft pb-2 text-[12px] text-ink-muted last:border-0">
+                  <li key={r.id} className="border-b border-line-soft pb-2 text-xs text-ink-muted last:border-0">
                     {line(r)}
-                    {r.note ? <div className="mt-0.5 text-[11px] text-ink-faint">{r.note}</div> : null}
+                    {r.note ? <div className="mt-0.5 text-2xs text-ink-faint">{r.note}</div> : null}
                   </li>
                 ))}
               </ul>

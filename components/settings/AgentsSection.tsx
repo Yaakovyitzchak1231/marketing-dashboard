@@ -21,8 +21,8 @@ function AgentRow({ actor, action }: { actor: ActorKindsRow; action: FormAction 
       {/* Same stored shape as before: a comma-joined list, blank = any kind. */}
       <input type="hidden" name="takes_kinds" value={selected.join(',')} />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[13px] font-medium text-ink">{actor.display_name}</span>
-        <span className="text-[12px] text-ink-faint">{selected.length ? `${selected.length} selected` : 'Takes any kind'}</span>
+        <span className="text-sm font-medium text-ink">{actor.display_name}</span>
+        <span className="text-xs text-ink-faint">{selected.length ? `${selected.length} selected` : 'Takes any kind'}</span>
       </div>
       <fieldset className="mt-2 flex flex-wrap gap-1.5" aria-label={`Task kinds ${actor.display_name} takes`}>
         {options.map((o) => {
@@ -31,7 +31,7 @@ function AgentRow({ actor, action }: { actor: ActorKindsRow; action: FormAction 
             <label
               key={o.value}
               title={o.hint}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] ${
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
                 on ? 'border-accent/40 bg-accent-soft text-accent' : 'border-line bg-canvas text-ink-muted hover:text-ink'
               }`}
             >
@@ -46,7 +46,7 @@ function AgentRow({ actor, action }: { actor: ActorKindsRow; action: FormAction 
           {pending ? 'Saving…' : 'Save'}
         </button>
         {selected.length ? (
-          <button type="button" onClick={() => setSelected([])} className="text-[12px] text-ink-faint underline hover:text-ink">
+          <button type="button" onClick={() => setSelected([])} className="text-xs text-ink-faint underline hover:text-ink">
             Clear (any kind)
           </button>
         ) : null}
@@ -59,10 +59,10 @@ function AgentRow({ actor, action }: { actor: ActorKindsRow; action: FormAction 
 /** Which task kinds each agent picks up: tick the kinds it should take; none ticked = any kind. The action is injected, like PauseControl's. */
 export function AgentsSection({ actors, action }: { actors: ActorKindsRow[]; action: FormAction }) {
   const agents = actors.filter((a) => a.kind === 'agent')
-  if (!agents.length) return <p className="text-[12.5px] text-ink-faint">No agents yet.</p>
+  if (!agents.length) return <p className="text-xs text-ink-faint">No agents yet.</p>
   return (
     <div>
-      <p className="mb-1 text-[12px] leading-snug text-ink-faint">Tick the kinds of task each agent should pick up. Leave all unticked and it takes any kind.</p>
+      <p className="mb-1 text-xs leading-snug text-ink-faint">Tick the kinds of task each agent should pick up. Leave all unticked and it takes any kind.</p>
       {agents.map((a) => (
         <AgentRow key={a.id} actor={a} action={action} />
       ))}

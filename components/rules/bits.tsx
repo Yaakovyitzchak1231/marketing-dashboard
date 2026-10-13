@@ -13,7 +13,7 @@ export const SCOPE_WORDS: Record<string, string> = { default: 'Default', pool: '
 export function Notice({ error, saved }: { error?: string | null; saved?: string | null }) {
   if (!error && !saved) return null
   return (
-    <p role={error ? 'alert' : 'status'} className={`mb-4 rounded-card border px-3 py-2 text-[12.5px] ${error ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}>
+    <p role={error ? 'alert' : 'status'} className={`mb-4 rounded-card border px-3 py-2 text-xs ${error ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}>
       {error ?? saved}
     </p>
   )

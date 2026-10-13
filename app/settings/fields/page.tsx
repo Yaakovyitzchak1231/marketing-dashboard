@@ -38,7 +38,7 @@ export default async function FieldsPage({ searchParams }: { searchParams: Promi
 
       {needsMigration ? (
         <Card className="p-4">
-          <p className="text-[13px] text-ink-muted">Needs migration 0025 — it runs on the next production deploy.</p>
+          <p className="text-sm text-ink-muted">Needs migration 0025 — it runs on the next production deploy.</p>
         </Card>
       ) : (
         <>

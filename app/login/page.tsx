@@ -49,19 +49,19 @@ export default function LoginPage() {
   // 16px below the sm breakpoint: iOS Safari zooms the page when a focused
   // input's font-size is under 16px. Desktop keeps the 14px house size.
   const input =
-    'block w-full rounded-card border border-line bg-surface px-3 py-2.5 text-[16px] sm:text-[14px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60'
+    'block w-full rounded-control border border-line bg-surface px-3 py-2.5 text-base sm:text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60'
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-[380px]">
         <div className="mb-6">
-          <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Cold email dashboard</h1>
-          <p className="mt-1 text-[13px] text-ink-muted">Sign in to see your campaigns, live from Instantly.</p>
+          <h1 className="text-xl font-semibold tracking-[-0.01em] text-ink">Cold email dashboard</h1>
+          <p className="mt-1 text-sm text-ink-muted">Sign in to see your campaigns, live from Instantly.</p>
         </div>
 
         <form className="space-y-4 rounded-card border border-line bg-surface p-5 shadow-card" onSubmit={handleSubmit}>
           <div>
-            <label htmlFor="email" className="mb-1.5 block text-[12px] font-medium text-ink-muted">
+            <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-ink-muted">
               Email
             </label>
             <input
@@ -81,7 +81,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1.5 block text-[12px] font-medium text-ink-muted">
+            <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-ink-muted">
               Password
             </label>
             <input
@@ -101,7 +101,7 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <p id="login-error" role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">
+            <p id="login-error" role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">
               {error}
             </p>
           )}
@@ -109,7 +109,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-card bg-accent px-4 py-2.5 text-[14px] font-medium text-white hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full rounded-control bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>

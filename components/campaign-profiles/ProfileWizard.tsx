@@ -47,7 +47,7 @@ function VerifyBadge({ item, onRecheck }: { item: ProfileItem; onRecheck: () => 
     <span className="inline-flex items-center gap-1">
       <Pill tone={VERIFY_TONE[item.verify_status]} title={item.verify_detail ?? undefined}>{VERIFY_LABEL[item.verify_status]}</Pill>
       {item.verify_status !== 'unchecked' ? (
-        <button type="button" onClick={onRecheck} className="text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink">
+        <button type="button" onClick={onRecheck} className="text-2xs text-ink-faint underline decoration-line underline-offset-2 hover:text-ink">
           Re-check
         </button>
       ) : null}
@@ -220,7 +220,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
             key={s.n}
             type="button"
             onClick={() => setStep(s.n)}
-            className={`rounded-card border px-2.5 py-1 text-[12px] ${step === s.n ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
+            className={`rounded-card border px-2.5 py-1 text-xs ${step === s.n ? 'border-accent bg-accent-soft text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
           >
             {s.n}. {s.label}
           </button>
@@ -318,7 +318,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
                 {suggesting ? 'Thinking…' : 'Suggest with AI'}
               </button>
               {lastSuggest && lastSuggest.configured ? (
-                <p className="text-[12px] text-ink-faint">
+                <p className="text-xs text-ink-faint">
                   Saved {lastSuggest.items_saved} suggestion{lastSuggest.items_saved === 1 ? '' : 's'}
                   {lastSuggest.items_dropped ? `, dropped ${lastSuggest.items_dropped} invalid one${lastSuggest.items_dropped === 1 ? '' : 's'}` : ''}
                   {' · '}checked: {lastSuggest.verified_ok} ok, {lastSuggest.verified_failed} couldn&rsquo;t verify, {lastSuggest.not_applicable} n/a.
@@ -332,15 +332,15 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
               {suggestedByKind.map(({ kind, list }) => (
                 <div key={kind}>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <h3 className="text-[12px] font-medium text-ink-muted">{KIND_LABEL[kind]} ({list.length})</h3>
+                    <h3 className="text-xs font-medium text-ink-muted">{KIND_LABEL[kind]} ({list.length})</h3>
                     <button type="button" className={BUTTON} disabled={pending} onClick={() => setStatus(list.map((i) => i.id), 'approved')}>Approve all</button>
                   </div>
                   <ul className="space-y-1.5">
                     {list.map((it) => (
-                      <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-line px-2.5 py-1.5">
+                      <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-line px-2.5 py-1.5">
                         <div className="min-w-0">
-                          <p className="truncate text-[13px] text-ink">{it.name}{it.value ? <span className="text-ink-faint"> &middot; {it.value}</span> : null}</p>
-                          {it.rationale ? <p className="truncate text-[11.5px] text-ink-faint">{it.rationale}</p> : null}
+                          <p className="truncate text-sm text-ink">{it.name}{it.value ? <span className="text-ink-faint"> &middot; {it.value}</span> : null}</p>
+                          {it.rationale ? <p className="truncate text-xs text-ink-faint">{it.rationale}</p> : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           <VerifyBadge item={it} onRecheck={() => recheck(it.id)} />
@@ -381,10 +381,10 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
           {approvedByKind.length ? (
             approvedByKind.map(({ kind, list }) => (
               <div key={kind}>
-                <h3 className="mb-1.5 text-[12px] font-medium text-ink-muted">{KIND_LABEL[kind]} ({list.length})</h3>
+                <h3 className="mb-1.5 text-xs font-medium text-ink-muted">{KIND_LABEL[kind]} ({list.length})</h3>
                 <ul className="flex flex-wrap gap-1.5">
                   {list.map((it) => (
-                    <li key={it.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-[12px] text-ink">
+                    <li key={it.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-xs text-ink">
                       {it.name}
                       <VerifyBadge item={it} onRecheck={() => recheck(it.id)} />
                       <button type="button" className="text-ink-faint hover:text-bad" title="Archive" onClick={() => setStatus([it.id], 'archived')}>&times;</button>
@@ -410,10 +410,10 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
             <label className={LABEL}>Content rule (how utm_content is built)<input className={INPUT} value={utmContentRule} onChange={(e) => setUtmContentRule(e.target.value)} placeholder="step-{{stepNumber}}-{{variant}}" /></label>
           </div>
           <div>
-            <h3 className="mb-1.5 text-[12px] font-medium text-ink-muted">KPIs</h3>
+            <h3 className="mb-1.5 text-xs font-medium text-ink-muted">KPIs</h3>
             <ul className="mb-2 space-y-1">
               {kpis.map((k, i) => (
-                <li key={`${k.metric}-${i}`} className="flex items-center justify-between rounded-card border border-line px-2.5 py-1 text-[13px]">
+                <li key={`${k.metric}-${i}`} className="flex items-center justify-between rounded-control border border-line px-2.5 py-1 text-sm">
                   <span>{k.metric}: {k.target} / {k.period}</span>
                   <button type="button" className="text-ink-faint hover:text-bad" onClick={() => setKpis((arr) => arr.filter((_, idx) => idx !== i))}>&times;</button>
                 </li>

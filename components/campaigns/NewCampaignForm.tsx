@@ -21,7 +21,7 @@ export function NewCampaignForm({
 }) {
   if (!canEdit) {
     return (
-      <Card className="p-4 text-[13px] text-ink-muted">
+      <Card className="p-4 text-sm text-ink-muted">
         View-only access: viewers can look at campaigns but not create them. Ask an editor or the owner to start one.
       </Card>
     )
@@ -29,7 +29,7 @@ export function NewCampaignForm({
   return (
     <div className="max-w-xl space-y-4">
       {error ? <Notice tone="bad">{error}</Notice> : null}
-      <ol className="flex gap-4 text-[12px] text-ink-faint">
+      <ol className="flex gap-4 text-xs text-ink-faint">
         <li className="text-ink"><span className="tabular-nums">1</span> · Create the campaign</li>
         <li><span className="tabular-nums">2</span> · Set up its profile</li>
       </ol>
@@ -51,7 +51,7 @@ export function NewCampaignForm({
                 {sources.map((c) => <option key={c.id} value={c.id}>{c.is_template ? 'Template: ' : 'Copy of: '}{c.name}</option>)}
               </select>
             </label>
-            <label className="flex items-center gap-2 text-[12px] text-ink-muted"><input type="checkbox" name="with_leads" defaultChecked /> When copying, copy its leads too</label>
+            <label className="flex items-center gap-2 text-xs text-ink-muted"><input type="checkbox" name="with_leads" defaultChecked /> When copying, copy its leads too</label>
             <button className={BUTTON_PRIMARY}>Create and set up profile</button>
           </form>
         </Card>

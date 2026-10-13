@@ -152,7 +152,7 @@ export function SegmentBuilder({ mode, fields, campaigns, aiConfigured, initial 
       <Card className="space-y-2 p-4" data-testid="describe-it-box">
         <SectionHeader title="Describe it" meta="Type who you want in plain English; review the result before saving." />
         {!aiConfigured ? (
-          <p className="text-[12.5px] text-ink-faint">Set an AI key in Settings to use this.</p>
+          <p className="text-xs text-ink-faint">Set an AI key in Settings to use this.</p>
         ) : (
           <div className="flex flex-wrap items-end gap-2">
             <textarea
@@ -166,16 +166,16 @@ export function SegmentBuilder({ mode, fields, campaigns, aiConfigured, initial 
             </button>
           </div>
         )}
-        {aiError ? <p role="alert" className="text-[12px] text-bad">{aiError}</p> : null}
+        {aiError ? <p role="alert" className="text-xs text-bad">{aiError}</p> : null}
       </Card>
 
       <Card className="space-y-3 p-4">
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="text-[12px] text-ink-muted">
+          <label className="text-xs text-ink-muted">
             Name
             <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label className="text-[12px] text-ink-muted">
+          <label className="text-xs text-ink-muted">
             Campaign scope
             <select className={inputCls} value={campaignId ?? ''} onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">All campaigns</option>
@@ -184,11 +184,11 @@ export function SegmentBuilder({ mode, fields, campaigns, aiConfigured, initial 
               ))}
             </select>
           </label>
-          <label className="text-[12px] text-ink-muted sm:col-span-2">
+          <label className="text-xs text-ink-muted sm:col-span-2">
             Description (optional)
             <input className={inputCls} value={description} onChange={(e) => setDescription(e.target.value)} />
           </label>
-          <label className="text-[12px] text-ink-muted">
+          <label className="text-xs text-ink-muted">
             Entity
             <select
               className={inputCls}
@@ -249,7 +249,7 @@ export function SegmentBuilder({ mode, fields, campaigns, aiConfigured, initial 
         <section>
           <SectionHeader title="Sample of matching leads" meta={`Showing up to ${preview.sample.length}.`} />
           <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[480px] text-[12.5px]">
+            <table className="w-full min-w-[480px] text-xs">
               <tbody>
                 {preview.sample.map((row, i) => (
                   <tr key={i} className="border-b border-line last:border-0">
@@ -269,9 +269,9 @@ export function SegmentBuilder({ mode, fields, campaigns, aiConfigured, initial 
           <SectionHeader title="Members" meta="A static list's members, hand-picked." />
           <Card className="divide-y divide-line">
             {(members ?? []).map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-3 py-2 text-[12.5px]">
+              <div key={m.id} className="flex items-center justify-between px-3 py-2 text-xs">
                 <span>#{m.id}{m.source ? ` · ${m.source}` : ''}</span>
-                <button type="button" className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" onClick={() => void handleRemoveMember(m.id)}>
+                <button type="button" className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" onClick={() => void handleRemoveMember(m.id)}>
                   Remove
                 </button>
               </div>

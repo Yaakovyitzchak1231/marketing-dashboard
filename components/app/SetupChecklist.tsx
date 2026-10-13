@@ -50,18 +50,18 @@ export function SetupChecklist({ items, complete }: { items: ChecklistItem[]; co
     <Card className="px-4 py-3.5" data-testid="setup-checklist">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-semibold text-ink">Get set up</p>
-          <p className="text-[12px] text-ink-faint">
+          <p className="text-sm font-semibold text-ink">Get set up</p>
+          <p className="text-xs text-ink-faint">
             {done} of {total} done
           </p>
         </div>
-        <button type="button" onClick={dismiss} className="text-[12px] text-ink-faint underline hover:text-ink" data-testid="setup-checklist-dismiss">
+        <button type="button" onClick={dismiss} className="text-xs text-ink-faint underline hover:text-ink" data-testid="setup-checklist-dismiss">
           Dismiss
         </button>
       </div>
       <ul className="mt-2.5 space-y-1.5">
         {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 text-[13px]" data-testid={`setup-checklist-item-${item.id}`}>
+          <li key={item.id} className="flex items-center gap-2 text-sm" data-testid={`setup-checklist-item-${item.id}`}>
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[item.status]}`} aria-hidden />
             {item.status === 'open' ? (
               <Link href={item.href} className="text-accent hover:underline">

@@ -18,7 +18,7 @@ export function DeliveryChip({ status, error, human }: { status: DeliveryStatus;
         ? { text: 'waiting for mail setup', cls: 'text-warn', title: 'Goes out once MAIL_PROVIDER, MAIL_API_KEY and MAIL_FROM are set in Vercel' }
         : LABEL[status]
   return (
-    <span className={`whitespace-nowrap text-[11px] font-medium ${l.cls}`} title={error ? `${l.title}: ${error}` : l.title}>
+    <span className={`whitespace-nowrap text-2xs font-medium ${l.cls}`} title={error ? `${l.title}: ${error}` : l.title}>
       {l.text}
       {status === 'failed' && error ? <span className="font-normal"> · {error.slice(0, 80)}</span> : null}
     </span>

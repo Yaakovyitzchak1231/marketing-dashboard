@@ -67,18 +67,18 @@ export function SecretField({
   return (
     <div className="border-b border-line-soft py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium text-ink">{label}</span>
+        <span className="text-sm font-medium text-ink">{label}</span>
         {summary ? (
           <Pill tone={status.set ? 'good' : 'neutral'}>{summary.badge}</Pill>
         ) : (
           <Pill tone="neutral">Not set</Pill>
         )}
       </div>
-      {help ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{help}</p> : null}
-      {summary?.line ? <p className="mt-1 text-[11.5px] text-ink-faint" suppressHydrationWarning>{summary.line}</p> : null}
+      {help ? <p className="mt-0.5 text-xs leading-snug text-ink-faint">{help}</p> : null}
+      {summary?.line ? <p className="mt-1 text-xs text-ink-faint" suppressHydrationWarning>{summary.line}</p> : null}
 
       {!settingsKeyReady ? (
-        <p className="mt-2 text-[12px] text-warn">Add SETTINGS_KEY in Vercel to enable saving secrets here (see the deploy note). Until then this field is read-only.</p>
+        <p className="mt-2 text-xs text-warn">Add SETTINGS_KEY in Vercel to enable saving secrets here (see the deploy note). Until then this field is read-only.</p>
       ) : (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {!replacing ? (
@@ -116,10 +116,10 @@ export function SecretField({
       ) : null}
 
       {confirmClear ? (
-        <form action={clearFormAction} className="mt-2 flex flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn-soft px-2.5 py-1.5">
+        <form action={clearFormAction} className="mt-2 flex flex-wrap items-center gap-2 rounded-control border border-warn/30 bg-warn-soft px-2.5 py-1.5">
           <input type="hidden" name="key" value={settingKey} />
           <input type="hidden" name="confirm" value="yes" />
-          <span className="text-[12px] text-warn">Remove this secret? Anything that uses it falls back to env, if set, or stops working.</span>
+          <span className="text-xs text-warn">Remove this secret? Anything that uses it falls back to env, if set, or stops working.</span>
           <button type="submit" disabled={clearPending} className={primaryBtnCls} onClick={() => setConfirmClear(false)}>
             Clear it
           </button>
@@ -130,17 +130,17 @@ export function SecretField({
       ) : null}
 
       {replaceState ? (
-        <p className={`mt-1.5 text-[12px] ${replaceState.ok ? 'text-good' : 'text-bad'}`} role="status">
+        <p className={`mt-1.5 text-xs ${replaceState.ok ? 'text-good' : 'text-bad'}`} role="status">
           {replaceState.message}
         </p>
       ) : null}
       {clearState ? (
-        <p className={`mt-1.5 text-[12px] ${clearState.ok ? 'text-good' : 'text-bad'}`} role="status">
+        <p className={`mt-1.5 text-xs ${clearState.ok ? 'text-good' : 'text-bad'}`} role="status">
           {clearState.message}
         </p>
       ) : null}
       {testState ? (
-        <p className={`mt-1.5 text-[12px] ${testState.ok ? 'text-good' : 'text-bad'}`} role="status">
+        <p className={`mt-1.5 text-xs ${testState.ok ? 'text-good' : 'text-bad'}`} role="status">
           {testState.message}
         </p>
       ) : null}

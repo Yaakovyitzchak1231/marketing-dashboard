@@ -35,17 +35,17 @@ export function SettingTextField({
 }) {
   const [state, formAction, pending] = useActionState<FormResult | null, FormData>(action, null)
   const [draft, setDraft] = useState(value ?? '')
-  const fieldCls = `min-w-0 flex-1 ${inputCls} ${multiline ? 'font-mono text-[12px]' : ''}`
+  const fieldCls = `min-w-0 flex-1 ${inputCls} ${multiline ? 'font-mono text-xs' : ''}`
   const ph = placeholder ?? (source === 'env' ? 'Set via env for now' : 'Not set')
   return (
     <div id={anchorId} className="scroll-mt-20 border-b border-line-soft py-3 last:border-b-0 target:bg-warn-soft">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <label htmlFor={settingKey} className="text-[13px] font-medium text-ink">
+        <label htmlFor={settingKey} className="text-sm font-medium text-ink">
           {label}
         </label>
         {source === 'env' ? <Pill tone="neutral">from env</Pill> : source === 'unset' && !value ? <Pill tone="warn">Not set</Pill> : null}
       </div>
-      {help ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{help}</p> : null}
+      {help ? <p className="mt-0.5 text-xs leading-snug text-ink-faint">{help}</p> : null}
       <form action={formAction} className="mt-2 flex flex-wrap items-start gap-2">
         <input type="hidden" name="key" value={settingKey} />
         {options ? (
@@ -70,7 +70,7 @@ export function SettingTextField({
         </button>
       </form>
       {state ? (
-        <p className={`mt-1.5 text-[12px] ${state.ok ? 'text-ink-muted' : 'text-bad'}`} role="status">
+        <p className={`mt-1.5 text-xs ${state.ok ? 'text-ink-muted' : 'text-bad'}`} role="status">
           {state.message}
         </p>
       ) : null}

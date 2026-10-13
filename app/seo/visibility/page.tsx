@@ -32,7 +32,7 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-7">
       <Flash sp={sp} />
-      <p className="text-[13px] text-ink-muted">Sampled API answers, not consumer-app rankings. <Link className="text-accent underline" href="/seo/citations">Inspect exact citations and queue improvements</Link>. Older runs combine text and source matches; they are labelled as legacy signals.</p>
+      <p className="text-sm text-ink-muted">Sampled API answers, not consumer-app rankings. <Link className="text-accent underline" href="/seo/citations">Inspect exact citations and queue improvements</Link>. Older runs combine text and source matches; they are labelled as legacy signals.</p>
       <section>
         <SectionHeader title="Models" meta={webSearchOn() ? 'search-enabled requests (SEO_WEB_SEARCH=1); tool use varies' : 'search off except Perplexity; SEO_WEB_SEARCH=1 enables other providers'} />
         <div className="grid gap-3 sm:grid-cols-2">
@@ -43,16 +43,16 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
               <Card key={p.id} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-3" data-testid={`seo-provider-${p.id}`}>
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-ink">
+                    <p className="text-sm font-medium text-ink">
                       {p.label} {on ? <Pill tone="good">ready</Pill> : <Pill tone="neutral">key not set</Pill>}
                     </p>
                     {on ? (
-                      <p className="mt-1 text-[12px] text-ink-muted">
+                      <p className="mt-1 text-xs text-ink-muted">
                         Model {providerModel(p)}
                         {r ? ` · last run ${when(r.finished_at ?? r.started_at)}: ${lastRun(r)}` : ' · not run yet'}
                       </p>
                     ) : (
-                      <p className="mt-1 text-[12px] text-ink-muted">
+                      <p className="mt-1 text-xs text-ink-muted">
                         To turn on: add <Env name={p.env} /> in Vercel and redeploy.
                       </p>
                     )}
@@ -77,7 +77,7 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
           <EmptyNote>No runs yet. Set a model key above, then press &ldquo;Run check now&rdquo;.</EmptyNote>
         ) : (
           <Card className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-[12px]">
+            <table className="w-full min-w-[640px] text-xs">
               <thead className="text-left text-ink-faint">
                 <tr>
                   <th className="px-4 py-2 font-medium">Question</th>
@@ -128,7 +128,7 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
           <ul className="divide-y divide-line">
             {prompts.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2" data-testid="seo-prompt">
-                <span className={`text-[13px] ${p.active ? 'text-ink' : 'text-ink-faint line-through'}`}>
+                <span className={`text-sm ${p.active ? 'text-ink' : 'text-ink-faint line-through'}`}>
                   {p.prompt} {p.campaign ? <span className="text-ink-faint">· {p.campaign}</span> : null}
                 </span>
                 <form action={togglePromptAction}>
@@ -157,7 +157,7 @@ export default async function SeoVisibility({ searchParams }: { searchParams: Pr
               <form key={c.id} action={removeCompetitorAction} className="inline-flex">
                 <input type="hidden" name="competitor_id" value={c.id} />
                 <input type="hidden" name="return_to" value="/seo/visibility" />
-                <button className="rounded-card border border-line bg-canvas px-2 py-0.5 text-[12px] text-ink-muted hover:text-bad" title={`Remove ${c.name}`}>
+                <button className="rounded-control border border-line bg-canvas px-2 py-0.5 text-xs text-ink-muted hover:text-bad" title={`Remove ${c.name}`}>
                   {c.name} ×
                 </button>
               </form>

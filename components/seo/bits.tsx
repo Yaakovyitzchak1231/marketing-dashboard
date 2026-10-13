@@ -24,7 +24,7 @@ export function Flash({ sp }: { sp: SP }) {
   return (
     <div
       role={err ? 'alert' : 'status'}
-      className={`mb-4 rounded-card border px-3 py-2 text-[13px] ${err ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}
+      className={`mb-4 rounded-card border px-3 py-2 text-sm ${err ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}
     >
       {err ?? ok}
     </div>
@@ -35,9 +35,9 @@ export function SetupCard({ title, children, testId }: { title: string; children
   return (
     <Card className="px-4 py-4 sm:px-5">
       <div data-testid={testId}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-warn">Setup needed</p>
-        <h3 className="mt-1 text-[15px] font-semibold text-ink">{title}</h3>
-        <div className="mt-2 space-y-2 text-[13px] leading-relaxed text-ink-muted">{children}</div>
+        <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-warn">Setup needed</p>
+        <h3 className="mt-1 text-base font-semibold text-ink">{title}</h3>
+        <div className="mt-2 space-y-2 text-sm leading-relaxed text-ink-muted">{children}</div>
       </div>
     </Card>
   )
@@ -45,7 +45,7 @@ export function SetupCard({ title, children, testId }: { title: string; children
 
 export function Steps({ steps }: { steps: string[] }) {
   return (
-    <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-ink">
+    <ol className="list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-ink">
       {steps.filter(Boolean).map((s, i) => (
         <li key={i}>{s}</li>
       ))}
@@ -54,13 +54,13 @@ export function Steps({ steps }: { steps: string[] }) {
 }
 
 export function Env({ name }: { name: string }) {
-  return <code className="rounded bg-canvas px-1 font-numeric text-[12px] text-ink">{name}</code>
+  return <code className="rounded bg-canvas px-1 font-numeric text-xs text-ink">{name}</code>
 }
 
 export function Diff({ before, after }: { before: string | null; after: string | null }) {
   const lines = lineDiff(prettyMaybeJson(before), prettyMaybeJson(after))
   return (
-    <pre data-testid="seo-diff" className="max-h-[420px] overflow-auto rounded-card border border-line bg-canvas p-2 font-numeric text-[12px] leading-[1.5]">
+    <pre data-testid="seo-diff" className="max-h-[420px] overflow-auto rounded-card border border-line bg-canvas p-2 font-numeric text-xs leading-[1.5]">
       {lines.map((l, i) => (
         <div key={i} className={l.op === 'add' ? 'bg-good-soft text-good' : l.op === 'del' ? 'bg-bad-soft text-bad line-through decoration-bad/40' : 'text-ink-muted'}>
           <span aria-hidden className="mr-2 select-none">{l.op === 'add' ? '+' : l.op === 'del' ? '−' : ' '}</span>

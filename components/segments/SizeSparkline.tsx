@@ -13,7 +13,7 @@ export interface SizePoint {
 
 export function SizeSparkline({ points, metric = 'companies', width = 240, height = 48 }: { points: SizePoint[]; metric?: 'companies' | 'contacts' | 'sendable'; width?: number; height?: number }) {
   if (points.length === 0) {
-    return <div className="flex h-12 items-center text-[12px] text-ink-faint">No snapshots yet -- the daily job hasn&apos;t run on this segment.</div>
+    return <div className="flex h-12 items-center text-xs text-ink-faint">No snapshots yet -- the daily job hasn&apos;t run on this segment.</div>
   }
   const values = points.map((p) => p[metric])
   const max = Math.max(...values, 1)

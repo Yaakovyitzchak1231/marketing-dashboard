@@ -44,7 +44,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
 
       {needsMigration ? (
         <Card className="p-4">
-          <p className="text-[13px] text-ink-muted">Needs migration 0031 — it runs on the next production deploy.</p>
+          <p className="text-sm text-ink-muted">Needs migration 0031 — it runs on the next production deploy.</p>
         </Card>
       ) : (
         <>
@@ -54,7 +54,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
               <EmptyNote>No tags yet.</EmptyNote>
             ) : (
               <Card className="overflow-x-auto p-0">
-                <table className="w-full border-collapse text-[13px]">
+                <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-line">
                       <th className={TH}>Tag</th>
@@ -96,15 +96,15 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
             <Card className="p-4">
               <form action={previewTagChangeAction} className="flex flex-wrap items-end gap-2">
                 <div>
-                  <label className="mb-1 block text-[11px] text-ink-faint">Tag now</label>
+                  <label className="mb-1 block text-2xs text-ink-faint">Tag now</label>
                   <input name="from" required placeholder="hot" className={inputCls} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] text-ink-faint">Change to</label>
+                  <label className="mb-1 block text-2xs text-ink-faint">Change to</label>
                   <input name="to" required placeholder="priority" className={inputCls} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] text-ink-faint">Which leads</label>
+                  <label className="mb-1 block text-2xs text-ink-faint">Which leads</label>
                   <select name="mode" defaultValue="selected" className={inputCls}>
                     <option value="one">One lead (its number)</option>
                     <option value="selected">Selected leads (numbers, comma-separated)</option>
@@ -112,7 +112,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-[11px] text-ink-faint">Lead number(s) or segment</label>
+                  <label className="mb-1 block text-2xs text-ink-faint">Lead number(s) or segment</label>
                   <input name="target" required placeholder="592, 593" list="tag-segments" className={inputCls} />
                   <datalist id="tag-segments">
                     {segments.map((g) => (
@@ -126,7 +126,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
                   Next
                 </button>
               </form>
-              <p className="mt-2 text-[12px] text-ink-faint">For more than one lead you&apos;ll see how many leads will change and confirm first. One entry goes in the history, not one per lead.</p>
+              <p className="mt-2 text-xs text-ink-faint">For more than one lead you&apos;ll see how many leads will change and confirm first. One entry goes in the history, not one per lead.</p>
             </Card>
           </section>
 
@@ -136,11 +136,11 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
               <Card className="p-4">
                 <form action={renameTagAction} className="flex flex-wrap items-end gap-2">
                   <div>
-                    <label className="mb-1 block text-[11px] text-ink-faint">From</label>
+                    <label className="mb-1 block text-2xs text-ink-faint">From</label>
                     <input name="from" required className={inputCls} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] text-ink-faint">To</label>
+                    <label className="mb-1 block text-2xs text-ink-faint">To</label>
                     <input name="to" required className={inputCls} />
                   </div>
                   <button type="submit" className={btnCls}>
@@ -154,11 +154,11 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
               <Card className="p-4">
                 <form action={mergeTagsAction} className="flex flex-wrap items-end gap-2">
                   <div>
-                    <label className="mb-1 block text-[11px] text-ink-faint">Tags (comma-separated)</label>
+                    <label className="mb-1 block text-2xs text-ink-faint">Tags (comma-separated)</label>
                     <input name="tags" required placeholder="hot_lead, warm_lead" className={inputCls} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-[11px] text-ink-faint">Into</label>
+                    <label className="mb-1 block text-2xs text-ink-faint">Into</label>
                     <input name="into" required placeholder="engaged" className={inputCls} />
                   </div>
                   <button type="submit" className={btnCls}>
@@ -175,7 +175,7 @@ export default async function TagsSettingsPage({ searchParams }: { searchParams:
               <EmptyNote>No tag activity yet.</EmptyNote>
             ) : (
               <Card className="overflow-x-auto p-0">
-                <table className="w-full border-collapse text-[13px]">
+                <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-line">
                       <th className={TH}>Week of</th>
@@ -228,18 +228,18 @@ function ConfirmTagChange({ sp }: { sp: SP }) {
     <section className="mb-6" data-testid="tag-confirm">
       <Card className="p-4">
         {n === 0 ? (
-          <p className="text-[13px] text-ink-muted">No leads have that tag, so nothing would change.</p>
+          <p className="text-sm text-ink-muted">No leads have that tag, so nothing would change.</p>
         ) : (
           <form action={action} className="flex flex-wrap items-center gap-3">
             {Object.entries(hidden).map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />
             ))}
             <input type="hidden" name="expected_count" value={String(n)} />
-            <p className="text-[13px] text-ink">{what}</p>
+            <p className="text-sm text-ink">{what}</p>
             <button type="submit" className={primaryBtnCls}>
               Yes, change {leads}
             </button>
-            <Link href="/settings/tags" prefetch={false} className="text-[12.5px] text-ink-faint underline">
+            <Link href="/settings/tags" prefetch={false} className="text-xs text-ink-faint underline">
               Cancel
             </Link>
           </form>

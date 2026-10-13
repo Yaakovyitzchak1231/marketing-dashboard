@@ -67,7 +67,7 @@ function FieldRow({ cond, fields, onChange, onRemove }: {
           <input className={INPUT} value={cond.value2 == null ? '' : String(cond.value2)} onChange={(e) => onChange({ ...cond, value2: e.target.value })} />
         </label>
       ) : null}
-      <button type="button" onClick={onRemove} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
+      <button type="button" onClick={onRemove} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
         Remove
       </button>
     </div>
@@ -109,7 +109,7 @@ function EventRow({ cond, onChange, onRemove }: {
           onChange={(e) => onChange({ ...cond, within_last_days: e.target.value ? Number(e.target.value) : undefined })}
         />
       </label>
-      <button type="button" onClick={onRemove} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
+      <button type="button" onClick={onRemove} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
         Remove
       </button>
     </div>
@@ -132,7 +132,7 @@ function QualityRow({ cond, onChange, onRemove }: {
           <option value="not_suppressed">Not suppressed</option>
         </select>
       </label>
-      <button type="button" onClick={onRemove} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
+      <button type="button" onClick={onRemove} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
         Remove
       </button>
     </div>
@@ -164,7 +164,7 @@ function CampaignRow({ cond, onChange, onRemove }: {
           <input className={INPUT} type="number" value={cond.campaign_id ?? ''} onChange={(e) => onChange({ ...cond, campaign_id: Number(e.target.value) || undefined })} />
         </label>
       ) : null}
-      <button type="button" onClick={onRemove} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
+      <button type="button" onClick={onRemove} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad" aria-label="Remove condition">
         Remove
       </button>
     </div>
@@ -189,9 +189,9 @@ export function ConditionRow({ cond, fields, onChange, onRemove }: {
     case 'campaign_membership': return <CampaignRow cond={cond} onChange={onChange} onRemove={onRemove} />
     default:
       return (
-        <div className="flex items-center gap-2 text-[12.5px] text-ink-muted" data-testid="condition-row-readonly">
+        <div className="flex items-center gap-2 text-xs text-ink-muted" data-testid="condition-row-readonly">
           <span>{cond.kind} condition (edit via the API for now)</span>
-          <button type="button" onClick={onRemove} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad">
+          <button type="button" onClick={onRemove} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad">
             Remove
           </button>
         </div>

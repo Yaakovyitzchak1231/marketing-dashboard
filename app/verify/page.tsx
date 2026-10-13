@@ -36,7 +36,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   if (!canAtLeast(await currentRole(), 'editor')) {
     return (
       <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Verification</h1>
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">Verification</h1>
         <Card className="mt-6">
           <EmptyNote>This screen shows spend and per-lead results, so it needs editor access. Ask an owner if you need it.</EmptyNote>
         </Card>
@@ -79,8 +79,8 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   return (
     <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
       <header className="mb-6">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Verification</h1>
-        <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">Verification</h1>
+        <p className="mt-0.5 text-xs leading-snug text-ink-faint">
           Free check (syntax, mail server, disposable) → MillionVerifier → ZeroBounce only for MillionVerifier’s catch-all and
           unknown answers.
         </p>
@@ -106,7 +106,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
             <Card className="grid grid-cols-3 divide-x divide-y divide-line-soft sm:grid-cols-6 sm:divide-y-0">
               {VERIFICATION_STATUSES.map((s) => (
                 <div key={s} className="px-3 py-3">
-                  <div className="text-[11px] text-ink-faint">{STATUS_LABEL[s]}</div>
+                  <div className="text-2xs text-ink-faint">{STATUS_LABEL[s]}</div>
                   <div className="mt-0.5 text-metric-sm tabular-nums text-ink">{counts ? counts.by_status[s].toLocaleString('en-US') : '—'}</div>
                 </div>
               ))}
@@ -128,9 +128,9 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
               {runs.length === 0 ? (
                 <EmptyNote>No verification runs yet.</EmptyNote>
               ) : (
-                <table className="w-full min-w-[560px] text-[13px]">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead>
-                    <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-faint">
+                    <tr className="border-b border-line text-left text-2xs uppercase tracking-[0.06em] text-ink-faint">
                       <th className="px-3 py-2 font-medium">Run</th>
                       <th className="px-3 py-2 font-medium">Status</th>
                       <th className="px-3 py-2 text-right font-medium">Leads</th>
@@ -179,10 +179,10 @@ function ProviderCard({ name, env, b, perCheck, note }: { name: string; env: str
   return (
     <Card className="p-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-[13px] font-semibold text-ink">{name}</h2>
+        <h2 className="text-sm font-semibold text-ink">{name}</h2>
         {b.key_set ? (b.error ? <Pill tone="bad">key problem</Pill> : <Pill tone="good">key set</Pill>) : <Pill tone="neutral">key not set</Pill>}
       </div>
-      <p className="mt-2 text-[13px] tabular-nums text-ink">
+      <p className="mt-2 text-sm tabular-nums text-ink">
         {b.key_set ? (
           b.credits != null ? (
             <>
@@ -195,7 +195,7 @@ function ProviderCard({ name, env, b, perCheck, note }: { name: string; env: str
           <span className="text-ink-muted">Save the key on <a href="/settings" className="underline">Settings</a> (or set {env} in Vercel) to enable this tier.</span>
         )}
       </p>
-      <p className="mt-1 text-[11px] text-ink-faint">
+      <p className="mt-1 text-2xs text-ink-faint">
         ≈${perCheck} per check{note ? ` · ${note}` : ''}
       </p>
     </Card>

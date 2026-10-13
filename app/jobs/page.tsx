@@ -77,7 +77,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     return (
       <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
         <header className="mb-6">
-          <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Jobs</h1>
+          <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">Jobs</h1>
         </header>
         <Card>
           <EmptyNote>The lead database isn&apos;t connected yet (DATABASE_URL is not set), so there are no jobs to show.</EmptyNote>
@@ -106,8 +106,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   return (
     <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">
       <header className="mb-6">
-        <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">Jobs</h1>
-        <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-ink">Jobs</h1>
+        <p className="mt-0.5 text-xs leading-snug text-ink-faint">
           The background runner on the OVH server: what runs, on what schedule, and how its last run went.
         </p>
         <div className="mt-2">
@@ -126,7 +126,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
 
       {error ? (
         <Card className="mb-4 border-bad/30 bg-bad-soft">
-          <p className="px-4 py-3 text-[13px] text-bad">{error}</p>
+          <p className="px-4 py-3 text-sm text-bad">{error}</p>
         </Card>
       ) : null}
 
@@ -143,18 +143,18 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                   <div key={j.name} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
                     <div className="min-w-[160px] flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-medium text-ink">{j.name}</span>
+                        <span className="text-sm font-medium text-ink">{j.name}</span>
                         <Pill tone="neutral">{j.kind}</Pill>
                         {j.campaign_id ? <Pill tone="accent">{campaignName.get(j.campaign_id) ?? `campaign ${j.campaign_id}`}</Pill> : null}
                       </div>
-                      {j.description ? <p className="mt-0.5 text-[12px] text-ink-faint">{j.description}</p> : null}
-                      <p className="mt-0.5 text-[11px] text-ink-faint">{describeCron(j.schedule_cron, j.timezone)}</p>
+                      {j.description ? <p className="mt-0.5 text-xs text-ink-faint">{j.description}</p> : null}
+                      <p className="mt-0.5 text-2xs text-ink-faint">{describeCron(j.schedule_cron, j.timezone)}</p>
                     </div>
-                    <div className="w-[140px] shrink-0 text-[12px] text-ink-muted">
+                    <div className="w-[140px] shrink-0 text-xs text-ink-muted">
                       <div>next {j.enabled ? rel(j.next_run_at) : '—'}</div>
                       <div className="text-ink-faint">{j.enabled ? abs(j.next_run_at) : 'disabled'}</div>
                     </div>
-                    <div className="w-[160px] shrink-0 text-[12px]">
+                    <div className="w-[160px] shrink-0 text-xs">
                       {lastRun ? (
                         <>
                           <Pill tone={STATUS_TONE[lastRun.status] ?? 'neutral'}>{lastRun.status}</Pill>
@@ -168,13 +168,13 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                       <form action={toggleJobAction}>
                         <input type="hidden" name="name" value={j.name} />
                         <input type="hidden" name="enabled" value={j.enabled ? 'false' : 'true'} />
-                        <button type="submit" className="rounded-full border border-line px-2.5 py-1 text-[12px] text-ink-muted hover:text-ink">
+                        <button type="submit" className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-muted hover:text-ink">
                           {j.enabled ? 'Disable' : 'Enable'}
                         </button>
                       </form>
                       <form action={runJobNowAction}>
                         <input type="hidden" name="name" value={j.name} />
-                        <button type="submit" className="rounded-full border border-line px-2.5 py-1 text-[12px] text-ink-muted hover:text-ink">
+                        <button type="submit" className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-muted hover:text-ink">
                           Run now
                         </button>
                       </form>
@@ -191,29 +191,29 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         <SectionHeader id="jobs-new" title="Add a job" />
         <Card className="px-4 py-4">
           <form action={saveJobAction} className="grid gap-3 sm:grid-cols-2">
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Name
-              <input name="name" required placeholder="nightly-heartbeat" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="name" required placeholder="nightly-heartbeat" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Kind (handler)
-              <input name="kind" required placeholder="heartbeat" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="kind" required placeholder="heartbeat" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted sm:col-span-2">
+            <label className="text-xs text-ink-muted sm:col-span-2">
               Description
-              <input name="description" placeholder="what this job does" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="description" placeholder="what this job does" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Schedule (cron, blank = on demand only)
-              <input name="schedule_cron" placeholder="0 9 * * *" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="schedule_cron" placeholder="0 9 * * *" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Timezone
-              <input name="timezone" placeholder="America/New_York" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="timezone" placeholder="America/New_York" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Campaign (optional)
-              <select name="campaign_id" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]">
+              <select name="campaign_id" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm">
                 <option value="">Workspace-wide</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -222,20 +222,20 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                 ))}
               </select>
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Timeout (seconds)
-              <input name="timeout_s" type="number" placeholder="600" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-[13px]" />
+              <input name="timeout_s" type="number" placeholder="600" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 text-sm" />
             </label>
-            <label className="text-[12px] text-ink-muted sm:col-span-2">
+            <label className="text-xs text-ink-muted sm:col-span-2">
               Payload (JSON, e.g. {'{"url":"https://..."}'})
-              <textarea name="payload" rows={2} placeholder="{}" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 font-mono text-[12px]" />
+              <textarea name="payload" rows={2} placeholder="{}" className="mt-1 w-full rounded-input border border-line px-2.5 py-1.5 font-mono text-xs" />
             </label>
-            <label className="flex items-center gap-2 text-[12px] text-ink-muted">
+            <label className="flex items-center gap-2 text-xs text-ink-muted">
               <input type="checkbox" name="enabled" defaultChecked />
               Enabled
             </label>
             <div className="sm:col-span-2">
-              <button type="submit" className="rounded-full bg-ink px-3.5 py-1.5 text-[12px] font-medium text-canvas">
+              <button type="submit" className="rounded-full bg-ink px-3.5 py-1.5 text-xs font-medium text-canvas">
                 Save job
               </button>
             </div>
@@ -251,7 +251,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           ) : (
             <div className="divide-y divide-line-soft">
               {failingRuns.map((r) => (
-                <div key={r.id} className="px-4 py-2.5 text-[12px]">
+                <div key={r.id} className="px-4 py-2.5 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-ink">{r.job_name}</span>
                     <Pill tone={STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Pill>

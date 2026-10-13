@@ -36,7 +36,7 @@ function LineRow({ l, sub }: { l: CostLine; sub?: string }) {
       <td className={TD}>
         <div className="font-medium">{l.label}</div>
         {sub || l.partial || l.includesShared ? (
-          <div className="text-[11px] text-ink-faint">
+          <div className="text-2xs text-ink-faint">
             {[sub, l.partial ? 'some campaigns did not report every count' : null, l.includesShared ? 'includes a share of shared costs' : null].filter(Boolean).join(' · ')}
           </div>
         ) : null}
@@ -132,7 +132,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
             </table>
           )}
         </Card>
-        <p className="mt-2 text-[12px] text-ink-faint">
+        <p className="mt-2 text-xs text-ink-faint">
           Shared costs (no campaign picked) are split across campaigns by emails sent in the period.
           {report.unallocatedShared > 0 ? ` ${fmtUsd(report.unallocatedShared)} of shared cost isn’t split because nothing was sent.` : ''}
           {report.directCostUnknownCampaign > 0 ? ` ${fmtUsd(report.directCostUnknownCampaign)} is tied to campaigns not in this list.` : ''}
@@ -179,7 +179,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                     <td className={TD}>{c.month.slice(0, 7)}</td>
                     <td className={TD}>
                       <div>{c.label}</div>
-                      <div className="text-[11px] text-ink-faint">{CATEGORY_LABEL[c.category]}{c.notes ? ` · ${c.notes}` : ''}</div>
+                      <div className="text-2xs text-ink-faint">{CATEGORY_LABEL[c.category]}{c.notes ? ` · ${c.notes}` : ''}</div>
                     </td>
                     <td className={TD}>{c.campaign_id ? (inp.data.campaigns.find((x) => x.id === c.campaign_id)?.name ?? c.campaign_id) : <span className="text-ink-faint">Shared</span>}</td>
                     <td className={TDN}>{fmtUsd(c.amount_usd)}</td>
@@ -187,7 +187,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                       <form action={deleteCostAction}>
                         <input type="hidden" name="id" value={c.id} />
                         <input type="hidden" name="return_to" value={ret} />
-                        <button className="text-[12px] text-ink-faint hover:text-bad" type="submit">Remove</button>
+                        <button className="text-xs text-ink-faint hover:text-bad" type="submit">Remove</button>
                       </form>
                     </td>
                   </tr>
@@ -217,7 +217,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
           </form>
         ) : null}
         {verifySpent !== null ? (
-          <p className="mt-2 text-[12px] text-ink-faint">
+          <p className="mt-2 text-xs text-ink-faint">
             Paid verification recorded by verification runs in this period: {fmtUsd(verifySpent)}. It isn’t added automatically; add it as a Verification cost if you want it counted.
           </p>
         ) : null}
@@ -236,9 +236,9 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                   <input type="hidden" name="campaign_id" value={c.id} />
                   <input type="hidden" name="campaign_name" value={c.name} />
                   <input type="hidden" name="return_to" value={`${ret}#campaign-setup`} />
-                  <div className="min-w-0 text-[13px]">
+                  <div className="min-w-0 text-sm">
                     <div className="truncate font-medium text-ink">{c.name}</div>
-                    <div className="text-[11px] text-ink-faint">{c.status}{m ? '' : ' · not set yet'}</div>
+                    <div className="text-2xs text-ink-faint">{c.status}{m ? '' : ' · not set yet'}</div>
                   </div>
                   <select name="segment" defaultValue={m?.segment ?? ''} className={inputCls} aria-label={`Segment for ${c.name}`}>
                     <option value="">Segment…{!m && segmentHintFromName(c.name) ? ` (${SEGMENT_LABEL[segmentHintFromName(c.name)!]}?)` : ''}</option>

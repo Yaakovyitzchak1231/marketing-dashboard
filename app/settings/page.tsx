@@ -157,10 +157,10 @@ export default async function SettingsPage() {
     <PageFrame title="Settings" meta="API keys, mail, Google sheets, and workspace defaults. Secret values never come back to this screen — only their last 4 characters and when they were set.">
       {!keyReady ? (
         <Card className="mb-6 border-warn/40 p-4">
-          <p className="text-[13px] font-semibold text-warn">Secrets are read-only until SETTINGS_KEY is set</p>
-          <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">
-            Add <code className="rounded bg-canvas px-1 font-numeric text-[12px]">SETTINGS_KEY</code> in Vercel (Settings → Environment Variables) — 32 random bytes, e.g.{' '}
-            <code className="rounded bg-canvas px-1 font-numeric text-[12px]">openssl rand -base64 32</code> — then redeploy. Non-secret settings below still work now.
+          <p className="text-sm font-semibold text-warn">Secrets are read-only until SETTINGS_KEY is set</p>
+          <p className="mt-1 text-xs leading-snug text-ink-muted">
+            Add <code className="rounded bg-canvas px-1 font-numeric text-xs">SETTINGS_KEY</code> in Vercel (Settings → Environment Variables) — 32 random bytes, e.g.{' '}
+            <code className="rounded bg-canvas px-1 font-numeric text-xs">openssl rand -base64 32</code> — then redeploy. Non-secret settings below still work now.
           </p>
         </Card>
       ) : null}
@@ -170,7 +170,7 @@ export default async function SettingsPage() {
 
       <section className="mb-6">
         <SectionHeader title="More settings" />
-        <Card className="flex flex-wrap gap-4 p-4 text-[13px]">
+        <Card className="flex flex-wrap gap-4 p-4 text-sm">
           <Link href="/settings/scoring" className="text-accent hover:underline">Scoring — Engagement &amp; Fit models</Link>
           <Link href="/settings/tags" className="text-accent hover:underline">Data → Tags — manage, rename, merge</Link>
           <Link href="/settings/pools" className="text-accent hover:underline">Pools — industries a campaign can target</Link>
@@ -186,7 +186,7 @@ export default async function SettingsPage() {
         return (
           <section key={group} className="mb-6">
             <SectionHeader title={group} />
-            {SETTING_GROUP_HELP[group] ? <p className="-mt-1 mb-2 max-w-3xl text-[12.5px] leading-snug text-ink-muted">{SETTING_GROUP_HELP[group]}</p> : null}
+            {SETTING_GROUP_HELP[group] ? <p className="-mt-1 mb-2 max-w-3xl text-xs leading-snug text-ink-muted">{SETTING_GROUP_HELP[group]}</p> : null}
             {group === 'Email sending' ? <MailInUse keySet={mailInUse.keySet} keySource={mailInUse.keySource} provider={mailInUse.provider} providerSource={mailInUse.providerSource} from={mailInUse.from} fromSource={mailInUse.fromSource} keyLast4={mailInUse.keyLast4} keySeenAt={mailInUse.keySeenAt} timeZone={timeZone} /> : null}
             <Card className="p-4">
               {nonSecret.map((spec) =>
@@ -286,20 +286,20 @@ export default async function SettingsPage() {
       <section className="mb-6">
         <SectionHeader title="Data" meta="Custom fields, import, data tools, retention, and removing a person's data on request" />
         <Card className="p-4">
-          <Link href="/settings/fields" className="text-[13px] font-medium text-accent hover:underline">
+          <Link href="/settings/fields" className="text-sm font-medium text-accent hover:underline">
             Fields →
           </Link>
-          <p className="mt-1 text-[12px] text-ink-faint">Define your own fields on a company or a contact.</p>
+          <p className="mt-1 text-xs text-ink-faint">Define your own fields on a company or a contact.</p>
           <div className="mt-4 border-t border-hairline pt-4">
             {retentionNeedsMigration ? (
-              <p className="text-[13px] text-ink-muted">Needs migration 0027 — it runs on the next production deploy.</p>
+              <p className="text-sm text-ink-muted">Needs migration 0027 — it runs on the next production deploy.</p>
             ) : (
               <>
                 {retentionPolicies.map((p) => (
                   <RetentionPolicyRow key={p.event_category} category={p.event_category} keepDays={p.keep_days} description={p.description} />
                 ))}
                 <RunSweepButton />
-                <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+                <p className="mt-2 text-xs leading-relaxed text-ink-faint">
                   Leave a field blank to keep that kind of event forever. To remove one person&apos;s info entirely, use &quot;Forget this person&quot; on their lead page.
                 </p>
               </>
@@ -310,12 +310,12 @@ export default async function SettingsPage() {
 
       <section className="mb-6">
         <SectionHeader title="Team" meta="Who can sign in to this dashboard, and what they can do" />
-        <p className="mb-2 text-[12.5px] text-ink-faint">
+        <p className="mb-2 text-xs text-ink-faint">
           <Link href="/settings/users" prefetch={false} className="underline hover:text-ink">Open Users &amp; roles</Link>
         </p>
         <Card className="p-4">
           {needsTeamMigration ? (
-            <p className="text-[13px] text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
+            <p className="text-sm text-ink-muted">Needs migration 0029 — it runs on the next production deploy.</p>
           ) : (
             <TeamSection members={teamMembers} isOwner={role === 'owner'} addAction={addTeamMemberAction} roleAction={changeTeamMemberRoleAction} removeAction={removeTeamMemberAction} />
           )}
@@ -329,7 +329,7 @@ export default async function SettingsPage() {
         </Card>
       </section>
 
-      <p className="text-[12px] leading-relaxed text-ink-faint">
+      <p className="text-xs leading-relaxed text-ink-faint">
         A value saved here is read before its environment variable by Instantly, email delivery, and verification. Other integrations still read their environment variable directly until they are wired up too.
       </p>
     </PageFrame>

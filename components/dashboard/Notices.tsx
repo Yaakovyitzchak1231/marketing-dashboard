@@ -28,7 +28,7 @@ export function ErrorsNotice({ errors }: { errors: SourceError[] }) {
   const [dismissed, setDismissed] = useState(false)
   if (errors.length === 0 || dismissed) return null
   return (
-    <div role="status" className="flex items-start gap-3 rounded-card border border-warn/30 bg-warn-soft px-4 py-3 text-[13px]" data-testid="errors-notice">
+    <div role="status" className="flex items-start gap-3 rounded-card border border-warn/30 bg-warn-soft px-4 py-3 text-sm" data-testid="errors-notice">
       <div className="min-w-0 flex-1">
         <p className="font-medium text-warn">
           Some numbers could not be loaded from Instantly, so parts of this page are incomplete.
@@ -44,7 +44,7 @@ export function ErrorsNotice({ errors }: { errors: SourceError[] }) {
       <button
         type="button"
         onClick={() => setDismissed(true)}
-        className="shrink-0 rounded px-1.5 text-[18px] leading-none text-ink-faint hover:text-ink"
+        className="shrink-0 rounded px-1.5 text-lg leading-none text-ink-faint hover:text-ink"
         aria-label="Dismiss"
       >
         ×

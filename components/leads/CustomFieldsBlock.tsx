@@ -18,8 +18,8 @@ export function CustomFieldsBlock({
 }) {
   if (!defs.length) return null
   return (
-    <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2 border-t border-line-soft pt-2 text-[13px] sm:grid-cols-2">
-      <dt className="sm:col-span-2 text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</dt>
+    <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-2 border-t border-line-soft pt-2 text-sm sm:grid-cols-2">
+      <dt className="sm:col-span-2 text-2xs font-medium uppercase tracking-wide text-ink-faint">{label}</dt>
       {defs.map((def) => {
         const raw = values?.[def.key]
         const value = raw === null || raw === undefined ? null : Array.isArray(raw) ? raw.join(', ') : String(raw)

@@ -28,9 +28,9 @@ export function SegmentStats({ data, entity }: { data: SegmentStatsData; entity:
     <div className="flex flex-col gap-4">
       <Card className="p-4">
         <div className="mb-2 flex items-baseline justify-between">
-          <h3 className="text-[13px] font-semibold text-ink-muted">Size over time</h3>
+          <h3 className="text-sm font-semibold text-ink-muted">Size over time</h3>
           {latest ? (
-            <span className="text-[12px] text-ink-faint">
+            <span className="text-xs text-ink-faint">
               {latest[metric]} today{delta != null ? ` (${delta >= 0 ? '+' : ''}${delta} vs last snapshot)` : ''}
             </span>
           ) : null}
@@ -40,22 +40,22 @@ export function SegmentStats({ data, entity }: { data: SegmentStatsData; entity:
 
       <Card className="grid grid-cols-3 divide-x divide-line p-4 text-center">
         <div>
-          <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">Reply rate</div>
-          <div className="mt-1 text-[15px] font-semibold text-ink"><Val value={data.metrics.reply_rate}>{formatPct(data.metrics.reply_rate)}</Val></div>
+          <div className="text-2xs uppercase tracking-[0.04em] text-ink-faint">Reply rate</div>
+          <div className="mt-1 text-base font-semibold text-ink"><Val value={data.metrics.reply_rate}>{formatPct(data.metrics.reply_rate)}</Val></div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">Meetings</div>
-          <div className="mt-1 text-[15px] font-semibold text-ink"><Val value={data.metrics.meetings}>{data.metrics.meetings}</Val></div>
+          <div className="text-2xs uppercase tracking-[0.04em] text-ink-faint">Meetings</div>
+          <div className="mt-1 text-base font-semibold text-ink"><Val value={data.metrics.meetings}>{data.metrics.meetings}</Val></div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-[0.04em] text-ink-faint">Avg score</div>
-          <div className="mt-1 text-[15px] font-semibold text-ink">
+          <div className="text-2xs uppercase tracking-[0.04em] text-ink-faint">Avg score</div>
+          <div className="mt-1 text-base font-semibold text-ink">
             {data.metrics.avg_score_field ? <Val value={data.metrics.avg_score}>{data.metrics.avg_score?.toFixed(1)}</Val> : <Pill tone="neutral">not set up</Pill>}
           </div>
         </div>
       </Card>
       {data.metrics.sample_capped ? (
-        <p className="text-[12px] text-ink-faint">Metrics are based on the first {data.metrics.sample_size.toLocaleString()} matching leads (this segment is larger).</p>
+        <p className="text-xs text-ink-faint">Metrics are based on the first {data.metrics.sample_size.toLocaleString()} matching leads (this segment is larger).</p>
       ) : null}
     </div>
   )

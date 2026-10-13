@@ -16,7 +16,7 @@ export function ReachBadge({ counts, loading, error }: { counts: SegmentCounts |
       <Pill tone="accent">{n(counts.companies)} compan{counts.companies === 1 ? 'y' : 'ies'}</Pill>
       <Pill tone="neutral">{n(counts.contacts)} contact{counts.contacts === 1 ? '' : 's'}</Pill>
       <Pill tone="good">{n(counts.verified_sendable)} verified-sendable</Pill>
-      {loading ? <span className="text-[11px] text-ink-faint">updating…</span> : null}
+      {loading ? <span className="text-2xs text-ink-faint">updating…</span> : null}
     </div>
   )
 }

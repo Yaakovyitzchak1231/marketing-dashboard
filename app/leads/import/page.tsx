@@ -33,7 +33,7 @@ export default async function ImportPage() {
         <SectionHeader title="CSV import" />
         <Card className="p-4">
           {fieldsNeedMigration ? (
-            <p className="mb-3 text-[12.5px] text-ink-muted">Needs migration 0025 — custom-field column mapping will show once it runs on the next production deploy.</p>
+            <p className="mb-3 text-xs text-ink-muted">Needs migration 0025 — custom-field column mapping will show once it runs on the next production deploy.</p>
           ) : null}
           <ImportWizard
             parseCsv={parseCsvAction}

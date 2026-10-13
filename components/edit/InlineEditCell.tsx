@@ -108,9 +108,9 @@ export function InlineEditCell({
         className={`group inline-flex min-h-[1.25rem] items-center gap-1 rounded-[3px] px-1 py-0.5 text-left ${viewer ? 'cursor-not-allowed' : 'hover:bg-canvas/70'} ${state === 'saving' ? 'opacity-60' : ''} ${className}`}
       >
         <span className={shown ? '' : 'text-unavailable'}>{shown ?? placeholder}</span>
-        {state === 'saving' ? <span className="text-[10px] text-ink-faint">saving…</span> : null}
+        {state === 'saving' ? <span className="text-2xs text-ink-faint">saving…</span> : null}
         {state === 'error' ? (
-          <span role="alert" className="text-[10px] text-bad">
+          <span role="alert" className="text-2xs text-bad">
             {error ?? 'not saved'}
           </span>
         ) : null}
@@ -118,7 +118,7 @@ export function InlineEditCell({
     )
   }
 
-  const inputClass = 'rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-[13px] text-ink'
+  const inputClass = 'rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-sm text-ink'
   if (options) {
     return (
       <select

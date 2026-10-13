@@ -32,12 +32,12 @@ export default async function CostsPage() {
     <main className="mx-auto w-full max-w-shell px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h1 className="text-[15px] font-medium tracking-[-0.01em] text-ink">Costs</h1>
-          <p className="mt-0.5 text-[11px] text-ink-faint">
+          <h1 className="text-base font-medium tracking-[-0.01em] text-ink">Costs</h1>
+          <p className="mt-0.5 text-2xs text-ink-faint">
             Every dollar spent, linked to the idea it served.
           </p>
         </div>
-        <Link href="/ideas" className="text-[12px] text-ink-muted underline-offset-4 hover:underline">
+        <Link href="/ideas" className="text-xs text-ink-muted underline-offset-4 hover:underline">
           Back to ideas
         </Link>
       </header>

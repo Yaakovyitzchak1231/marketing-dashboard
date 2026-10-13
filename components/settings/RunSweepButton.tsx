@@ -18,13 +18,13 @@ export function RunSweepButton() {
   const [includeTimeline, setIncludeTimeline] = useState(false)
   const [result, setResult] = useState<string | null>(null)
 
-  const btn = 'rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12px] font-medium text-ink-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50'
+  const btn = 'rounded-control border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50'
 
   if ((state === 'review' || state === 'running') && preview) {
     const nothing = preview.total_touches === 0 && (!includeTimeline || preview.total_timeline_events === 0)
     const impact = preview.timeline_impact
     return (
-      <div className="mt-2 rounded-card border border-line bg-surface p-3 text-[12px] text-ink-muted" data-testid="sweep-review">
+      <div className="mt-2 rounded-card border border-line bg-surface p-3 text-xs text-ink-muted" data-testid="sweep-review">
         <p className="font-medium text-ink">This sweep will delete:</p>
         {preview.categories.length === 0 ? (
           <p className="mt-1">Nothing. No event type has a retention window set.</p>
@@ -110,7 +110,7 @@ export function RunSweepButton() {
       >
         {state === 'loading' ? 'Checking…' : 'Review sweep'}
       </button>
-      {result ? <span className={`text-[12px] ${state === 'error' ? 'text-bad' : 'text-ink-faint'}`}>{result}</span> : null}
+      {result ? <span className={`text-xs ${state === 'error' ? 'text-bad' : 'text-ink-faint'}`}>{result}</span> : null}
     </div>
   )
 }

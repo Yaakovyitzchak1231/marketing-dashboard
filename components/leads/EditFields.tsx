@@ -87,7 +87,7 @@ export function EditFields({
       <button
         type="button"
         onClick={() => (viewer ? announceViewOnly() : setOpen(true))}
-        className={`text-[12px] text-accent ${viewer ? VIEW_ONLY_DIM : 'hover:underline'}`}
+        className={`text-xs text-accent ${viewer ? VIEW_ONLY_DIM : 'hover:underline'}`}
         aria-label={`Edit ${title}`}
         {...(viewer ? VIEW_ONLY_PROPS : {})}
       >
@@ -96,14 +96,14 @@ export function EditFields({
     )
   }
 
-  const input = 'w-full rounded-[3px] border border-line bg-surface px-2 py-1 text-[13px] text-ink'
+  const input = 'w-full rounded-[3px] border border-line bg-surface px-2 py-1 text-sm text-ink'
   return (
     <form onSubmit={submit} data-write className="w-full basis-full rounded-card border border-line-soft bg-canvas p-3" aria-label={`Edit ${title}`}>
       <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
         {fields.map((f) => {
           const id = `${endpoint}-${f.name}`.replace(/[^a-z0-9-]/gi, '-')
           return (
-            <label key={f.name} htmlFor={id} className="flex flex-col gap-1 text-[12px] text-ink-muted">
+            <label key={f.name} htmlFor={id} className="flex flex-col gap-1 text-xs text-ink-muted">
               {f.label}
               {f.type === 'select' ? (
                 <select id={id} value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} className={input}>
@@ -130,11 +130,11 @@ export function EditFields({
         <button type="submit" className={BUTTON_PRIMARY} disabled={busy}>
           {busy ? 'Saving…' : 'Save'}
         </button>
-        <button type="button" onClick={close} className="text-[12px] text-ink-faint hover:text-ink" disabled={busy}>
+        <button type="button" onClick={close} className="text-xs text-ink-faint hover:text-ink" disabled={busy}>
           Cancel
         </button>
         {error ? (
-          <span role="alert" className="text-[12px] text-bad">
+          <span role="alert" className="text-xs text-bad">
             {error}
           </span>
         ) : null}

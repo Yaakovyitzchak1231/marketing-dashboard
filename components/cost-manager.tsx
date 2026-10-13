@@ -109,28 +109,28 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
   return (
     <div className="space-y-8">
       {error && (
-        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-[12px] text-ink-muted">{error}</div>
+        <div role="alert" className="border-l-2 border-warn px-3 py-2 text-xs text-ink-muted">{error}</div>
       )}
 
       <section className="rounded-card border border-line bg-surface px-5 py-4">
-        <h2 className="text-[12px] font-medium text-ink">Record spend</h2>
+        <h2 className="text-xs font-medium text-ink">Record spend</h2>
         <form onSubmit={create} className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5 sm:items-end">
           <label>
-            <span className="mb-1 block text-[11px] text-ink-muted">Amount (USD)</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Amount (USD)</span>
             <input
               value={amount}
               onChange={e => setAmount(e.target.value)}
               inputMode="decimal"
               placeholder={COPY.costManager.amountPlaceholder}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] tabular-nums text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm tabular-nums text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <label>
-            <span className="mb-1 block text-[11px] text-ink-muted">Category</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Category</span>
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             >
               {CATEGORIES.map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -138,11 +138,11 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
             </select>
           </label>
           <label className="col-span-2 sm:col-span-1">
-            <span className="mb-1 block text-[11px] text-ink-muted">Idea</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Idea</span>
             <select
               value={ideaId}
               onChange={e => setIdeaId(e.target.value)}
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             >
               <option value="">Unlinked</option>
               {ideas.map(i => (
@@ -151,18 +151,18 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
             </select>
           </label>
           <label className="col-span-2 sm:col-span-1">
-            <span className="mb-1 block text-[11px] text-ink-muted">Notes</span>
+            <span className="mb-1 block text-2xs text-ink-muted">Notes</span>
             <input
               value={notes}
               onChange={e => setNotes(e.target.value)}
               placeholder="What was this for?"
-              className="w-full rounded border border-line bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink outline-none focus:border-ink-muted focus-visible:ring-2 focus-visible:ring-ink-muted"
             />
           </label>
           <button
             type="submit"
             disabled={saving}
-            className="col-span-2 rounded bg-ink px-4 py-2 text-[13px] text-white disabled:opacity-40 sm:col-span-1"
+            className="col-span-2 rounded bg-ink px-4 py-2 text-sm text-white disabled:opacity-40 sm:col-span-1"
           >
             {saving ? 'Saving…' : 'Record'}
           </button>
@@ -171,15 +171,15 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
 
       <section>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-muted">
+          <h2 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             History
           </h2>
-          <div className="flex items-center gap-4 text-[13px] text-ink">
+          <div className="flex items-center gap-4 text-sm text-ink">
             {costs.length > 0 && (
               <button
                 type="button"
                 onClick={handleExportCosts}
-                className="text-[11px] text-ink-muted hover:text-ink underline underline-offset-2"
+                className="text-2xs text-ink-muted hover:text-ink underline underline-offset-2"
               >
                 Export visible CSV
               </button>
@@ -190,12 +190,12 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
           </div>
         </div>
         {costs.length === 0 ? (
-          <p className="text-[13px] text-ink-faint">No costs recorded yet.</p>
+          <p className="text-sm text-ink-faint">No costs recorded yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-card border border-line bg-surface">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-[0.06em] text-ink-muted">
+                <tr className="border-b border-line text-left text-2xs uppercase tracking-[0.06em] text-ink-muted">
                   <th className="px-4 py-2 font-medium">Date</th>
                   <th className="px-4 py-2 font-medium">Category</th>
                   <th className="px-4 py-2 font-medium">Idea</th>
@@ -222,7 +222,7 @@ export function CostManager({ initialCosts, ideas }: { initialCosts: Cost[]; ide
                       <button
                         onClick={() => remove(c.id)}
                         aria-label={`Delete cost of $${Number(c.amount_usd).toLocaleString(undefined, { maximumFractionDigits: CURRENCY_PRECISION })} for ${c.category}`}
-                        className="text-[12px] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+                        className="text-xs text-ink-faint underline-offset-4 hover:text-ink hover:underline"
                       >
                         Delete
                       </button>

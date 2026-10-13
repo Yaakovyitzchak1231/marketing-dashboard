@@ -33,9 +33,9 @@ export function DataSourcesSection({ sources }: { sources: SourceHealth[] }) {
       <Card>
         {sources.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[12.5px]">
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-line text-[11px] uppercase tracking-[0.04em] text-ink-faint">
+                <tr className="border-b border-line text-2xs uppercase tracking-[0.04em] text-ink-faint">
                   <th className="px-3 py-2 font-medium">Source</th>
                   <th className="px-3 py-2 font-medium">Last event</th>
                   <th className="px-3 py-2 font-medium">24h volume</th>

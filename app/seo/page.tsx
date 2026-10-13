@@ -56,8 +56,8 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
                   <div data-testid="seo-site-card">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[14px] font-semibold text-ink">{s.name}</h3>
-                        <p className="truncate text-[12px] text-ink-faint">
+                        <h3 className="truncate text-sm font-semibold text-ink">{s.name}</h3>
+                        <p className="truncate text-xs text-ink-faint">
                           {s.base_url.replace(/^https?:\/\//, '')} · {[s.platform, s.host].filter(Boolean).join(' on ') || 'platform not set'}
                         </p>
                       </div>
@@ -78,16 +78,16 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
                               ['Blocked / error', a.unknown, 'text-ink-muted'],
                             ] as const
                           ).map(([label, v, cls]) => (
-                            <div key={label} className="rounded-card border border-line bg-canvas px-1 py-2">
-                              <dd className={`font-numeric text-[18px] font-semibold ${cls}`}>{v ?? '—'}</dd>
-                              <dt className="text-[11px] text-ink-faint">{label}</dt>
+                            <div key={label} className="rounded-control border border-line bg-canvas px-1 py-2">
+                              <dd className={`font-numeric text-lg font-semibold ${cls}`}>{v ?? '—'}</dd>
+                              <dt className="text-2xs text-ink-faint">{label}</dt>
                             </div>
                           ))}
                         </dl>
                         {top.length ? (
                           <ul className="mt-3 space-y-1.5">
                             {top.map((c, i) => (
-                              <li key={i} className="flex gap-2 text-[12px] leading-snug text-ink">
+                              <li key={i} className="flex gap-2 text-xs leading-snug text-ink">
                                 <CheckPill status={c.status} />
                                 <span>
                                   {c.label}
@@ -97,7 +97,7 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
                             ))}
                           </ul>
                         ) : null}
-                        <p className="mt-3 text-[12px] text-ink-faint">
+                        <p className="mt-3 text-xs text-ink-faint">
                           Audited {when(a.finished_at)} ·{' '}
                           <Link className="text-accent underline" href={`/seo/audit?site=${s.id}`}>details</Link> ·{' '}
                           <Link className="text-accent underline" href={`/seo/todos?site=${s.id}`}>
@@ -106,7 +106,7 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
                         </p>
                       </>
                     ) : (
-                      <p className="mt-3 text-[13px] text-ink-muted">Not audited yet.</p>
+                      <p className="mt-3 text-sm text-ink-muted">Not audited yet.</p>
                     )}
                   </div>
                 </Card>
@@ -124,13 +124,13 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
             const on = !!providerKey(p)
             return (
               <Card key={p.id} className="px-4 py-3">
-                <p className="text-[12px] font-medium text-ink">{p.label}</p>
+                <p className="text-xs font-medium text-ink">{p.label}</p>
                 {r ? (
-                  <p className="mt-1 text-[13px] text-ink">TapDash: {visibilitySummary(r, results.filter((x) => x.run_id === r.id))}</p>
+                  <p className="mt-1 text-sm text-ink">TapDash: {visibilitySummary(r, results.filter((x) => x.run_id === r.id))}</p>
                 ) : (
-                  <p className="mt-1 text-[12px] text-ink-faint">{on ? 'Ready, not run yet' : 'Key not set'}</p>
+                  <p className="mt-1 text-xs text-ink-faint">{on ? 'Ready, not run yet' : 'Key not set'}</p>
                 )}
-                <p className="mt-1 text-[11px] text-ink-faint">{r ? when(r.finished_at ?? r.started_at) : on ? <Pill tone="accent">ready</Pill> : null}</p>
+                <p className="mt-1 text-2xs text-ink-faint">{r ? when(r.finished_at ?? r.started_at) : on ? <Pill tone="accent">ready</Pill> : null}</p>
               </Card>
             )
           })}
@@ -146,7 +146,7 @@ export default async function SeoOverview({ searchParams }: { searchParams: Prom
             <ul className="divide-y divide-line">
               {fixes.slice(0, 6).map((f) => (
                 <li key={f.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <Link href={`/seo/todos/${f.id}`} className="min-w-0 truncate text-[13px] text-ink hover:text-accent">
+                  <Link href={`/seo/todos/${f.id}`} className="min-w-0 truncate text-sm text-ink hover:text-accent">
                     {f.payload.fix.title} <span className="text-ink-faint">· {f.site_name}</span>
                   </Link>
                   <CheckPill status={f.payload.fix.severity === 'fail' ? 'fail' : f.payload.fix.severity === 'unknown' ? 'unknown' : 'warn'} />

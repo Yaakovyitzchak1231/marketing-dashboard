@@ -2,7 +2,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import React from 'react'
-import { AppNav, NAV_ITEMS, isActive } from '@/components/nav/AppNav'
 import { LeadsTable } from '@/components/leads/LeadsTable'
 import { KanbanBoard, CampaignGroups, RegionGroups, ViewTabs, Pagination, FilterBar } from '@/components/leads/LeadViews'
 import { PageShell, DbNotConnected } from '@/components/app/PageShell'
@@ -30,76 +29,7 @@ function row(id: number, over: Partial<LeadListRow> = {}): LeadListRow {
 }
 const q = (s = '') => parseLeadQuery(Object.fromEntries(new URLSearchParams(s)))
 
-describe('AppNav', () => {
-  it('lists every screen and marks the active one (sub-pages included)', () => {
-    pathname.value = '/leads/12'
-    render(<AppNav />)
-    const nav = screen.getByRole('navigation', { name: 'Screens' })
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(NAV_ITEMS.map((i) => i.label))
-    expect(within(nav).getByRole('link', { name: 'Leads' })).toHaveAttribute('aria-current', 'page')
-    expect(within(nav).getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current')
-    expect(isActive('/', '/')).toBe(true)
-    expect(isActive('/leads', '/')).toBe(false)
-  })
-
-  it('opens More with the screens that do not fit inline, and closes on Escape', () => {
-    pathname.value = '/settings'
-    render(<AppNav />)
-    const nav = screen.getByRole('navigation', { name: 'Screens' })
-    const more = within(nav).getByRole('button', { name: /More/ })
-    expect(more).toHaveAttribute('aria-expanded', 'false')
-    // A plain list of links, not an ARIA menu, so no aria-haspopup.
-    expect(more).not.toHaveAttribute('aria-haspopup')
-    expect(more).toHaveTextContent('Settings')
-    fireEvent.click(more)
-    expect(more).toHaveAttribute('aria-expanded', 'true')
-    const panel = screen.getByRole('list', { name: 'More screens' })
-    const labels = within(panel).getAllByRole('link').map((a) => a.textContent)
-    for (const l of ['Verification', 'Suppressions', 'Settings', 'Tools', 'Activity', 'Reports', 'Jobs']) expect(labels).toContain(l)
-    expect(labels).not.toContain('Overview')
-    expect(within(panel).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('list', { name: 'More screens' })).toBeNull()
-    expect(more).toHaveAttribute('aria-expanded', 'false')
-  })
-
-  it('closes More on an outside click', () => {
-    pathname.value = '/'
-    render(<AppNav />)
-    fireEvent.click(screen.getByRole('button', { name: /More/ }))
-    expect(screen.getByRole('list', { name: 'More screens' })).toBeInTheDocument()
-    fireEvent.mouseDown(document.body)
-    expect(screen.queryByRole('list', { name: 'More screens' })).toBeNull()
-  })
-
-  it('phone Menu lists every screen, marks the active one, and closes on Escape or a tap', () => {
-    pathname.value = '/jobs'
-    render(<AppNav />)
-    const btn = screen.getByRole('button', { name: 'Menu' })
-    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
-    fireEvent.click(btn)
-    const menu = screen.getByRole('navigation', { name: 'All screens' })
-    const labels = within(menu).getAllByRole('link').map((a) => a.textContent)
-    expect([...labels].sort()).toEqual(NAV_ITEMS.map((i) => i.label).sort())
-    expect(within(menu).getByRole('link', { name: 'Jobs' })).toHaveAttribute('aria-current', 'page')
-    // Focus moves into the drawer (the current screen) and the page behind it stops scrolling.
-    expect(within(menu).getByRole('link', { name: 'Jobs' })).toHaveFocus()
-    expect(document.documentElement.style.overflow).toBe('hidden')
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
-    expect(document.documentElement.style.overflow).toBe('')
-    expect(screen.getByRole('button', { name: 'Menu' })).toHaveFocus()
-    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'All screens' })).getByRole('link', { name: 'Leads' }))
-    expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
-  })
-
-  it('stays off the login page', () => {
-    pathname.value = '/login'
-    const { container } = render(<AppNav />)
-    expect(container).toBeEmptyDOMElement()
-  })
-})
+// The navigation (formerly AppNav's top bar) is covered by tests/app-shell.test.tsx.
 
 describe('PageShell', () => {
   it('renders a title, meta and the honest not-connected state', () => {

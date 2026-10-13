@@ -24,7 +24,7 @@ export function StartFromTemplate({ presets, campaigns }: { presets: SegmentPres
 
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <label className="text-[12px] text-ink-muted">
+      <label className="text-xs text-ink-muted">
         Template
         <select className={inputCls} value={key} onChange={(e) => setKey(e.target.value)}>
           {['Starter', 'RFM'].map((group) => (
@@ -36,7 +36,7 @@ export function StartFromTemplate({ presets, campaigns }: { presets: SegmentPres
           ))}
         </select>
       </label>
-      <label className="text-[12px] text-ink-muted">
+      <label className="text-xs text-ink-muted">
         Campaign scope
         <select className={inputCls} value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
           <option value="">All campaigns</option>
@@ -48,7 +48,7 @@ export function StartFromTemplate({ presets, campaigns }: { presets: SegmentPres
       <button type="button" className={btnCls} disabled={pending || !key} onClick={create}>
         {pending ? 'Creating…' : 'Create from template'}
       </button>
-      {error ? <p role="alert" className="text-[12px] text-bad">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-bad">{error}</p> : null}
     </div>
   )
 }

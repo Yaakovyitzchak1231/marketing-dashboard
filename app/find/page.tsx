@@ -63,35 +63,35 @@ function JobRow({ job, now }: { job: FindJob; now: Date }) {
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="text-[14px] font-semibold text-ink">
+        <p className="text-sm font-semibold text-ink">
           #{job.id} {job.title}
         </p>
         <TaskStatus status={job.status} />
-        <span className="ml-auto text-[11.5px] text-ink-faint">
+        <span className="ml-auto text-xs text-ink-faint">
           started <Ago at={job.created_at} now={now} />
           {job.claimed_by ? <> · runner {job.claimed_by}</> : job.status === 'queued' ? <> · waiting for {job.assigned_to ?? 'a runner'}</> : null}
         </span>
       </div>
-      <p className="mt-1 text-[12.5px] text-ink-muted">
+      <p className="mt-1 text-xs text-ink-muted">
         {job.run ? STAGE_WORDS[job.run.stage ?? ''] ?? job.run.stage : job.status === 'queued' ? 'Not started yet' : '—'}
         {live && job.run?.heartbeat_at ? <> · last update <Ago at={job.run.heartbeat_at} now={now} /></> : null}
         {eta ? <span title={`Measured from this run: ${eta.basis}`}> · {fmtEta(eta.seconds)}</span> : null}
         {' · '}
         {describeGeography(job.params)}
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11.5px] sm:grid-cols-4 lg:grid-cols-7">
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
         {steps.map(([k, v, extra]) => (
           <div key={k}>
             <dt className="text-ink-faint">{k}</dt>
-            <dd className="mt-0.5 text-[15px] font-medium tabular-nums text-ink">
+            <dd className="mt-0.5 text-base font-medium tabular-nums text-ink">
               {job.run ? <Num v={v} /> : <span className="text-unavailable">—</span>}
-              {extra && job.run ? <span className="ml-1 text-[11px] font-normal text-ink-faint">{extra}</span> : null}
+              {extra && job.run ? <span className="ml-1 text-2xs font-normal text-ink-faint">{extra}</span> : null}
             </dd>
           </div>
         ))}
       </dl>
       {dropList.length ? (
-        <details className="mt-3 text-[12px] text-ink-muted">
+        <details className="mt-3 text-xs text-ink-muted">
           <summary className="cursor-pointer text-ink-faint">Why businesses were left out</summary>
           <ul className="mt-1.5 grid max-w-2xl gap-x-10 gap-y-0.5 sm:grid-cols-2">
             {dropList.map(([reason, count]) => (
@@ -104,15 +104,15 @@ function JobRow({ job, now }: { job: FindJob; now: Date }) {
         </details>
       ) : null}
       {job.run?.notes?.length ? (
-        <ul className="mt-3 space-y-1 text-[12px] text-warn">
+        <ul className="mt-3 space-y-1 text-xs text-warn">
           {job.run.notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
       ) : null}
-      {job.error || job.run?.error ? <p className="mt-2 text-[12px] text-bad">{job.run?.error ?? job.error}</p> : null}
-      {job.report && job.status === 'done' ? <p className="mt-2 text-[12.5px] text-ink">{job.report}</p> : null}
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-[12.5px]">
+      {job.error || job.run?.error ? <p className="mt-2 text-xs text-bad">{job.run?.error ?? job.error}</p> : null}
+      {job.report && job.status === 'done' ? <p className="mt-2 text-xs text-ink">{job.report}</p> : null}
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
         {n(c.built) ? (
           <Link href={`/leads?job=${job.id}`} className="font-medium text-accent hover:underline">
             See the {n(c.built)!.toLocaleString('en-US')} leads from this job
@@ -166,7 +166,7 @@ export default async function FindPage({ searchParams }: { searchParams: Promise
           </Card>
         )}
       </section>
-      <p className="max-w-3xl text-[12px] leading-relaxed text-ink-faint">
+      <p className="max-w-3xl text-xs leading-relaxed text-ink-faint">
         Jobs run on Tab&apos;s runner (a server, not this website), so they keep going for hours and pick up where they stopped after a restart. Finding businesses reads
         Google Maps search results directly, which Google&apos;s terms don&apos;t allow; a CSV or open map data file can be used instead from the runner. Owner search needs a
         search provider on the runner (a self-hosted SearXNG is free). No paid checks run here; verification is its own screen.

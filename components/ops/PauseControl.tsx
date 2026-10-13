@@ -38,7 +38,7 @@ export function PauseControl({
   return (
     <form
       action={paused ? resumeAction : pauseAction}
-      className="flex flex-wrap items-center gap-2 rounded-card border border-warn/30 bg-warn-soft px-2.5 py-1.5"
+      className="flex flex-wrap items-center gap-2 rounded-control border border-warn/30 bg-warn-soft px-2.5 py-1.5"
       role="group"
       aria-label={`Confirm: ${label}`}
     >
@@ -46,14 +46,14 @@ export function PauseControl({
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       <input type="hidden" name="confirm" value="yes" />
-      <span className="w-full text-[12px] text-warn">{paused ? resumeText : pauseText}</span>
+      <span className="w-full text-xs text-warn">{paused ? resumeText : pauseText}</span>
       {paused ? null : (
         <input
           name="reason"
           maxLength={500}
           aria-label="Reason"
           placeholder="Reason (optional, shown to the agent)"
-          className="min-w-0 flex-1 rounded-card border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
+          className="min-w-0 flex-1 rounded-control border border-line bg-surface px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted"
         />
       )}
       <button type="submit" className={BUTTON_PRIMARY}>

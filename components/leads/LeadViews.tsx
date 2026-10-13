@@ -21,7 +21,7 @@ export function ViewTabs({ q }: { q: LeadQuery }) {
                 href={leadsHref(q, { view: v })}
                 prefetch={false}
                 aria-current={active ? 'page' : undefined}
-                className={`block whitespace-nowrap rounded-[3px] px-2.5 py-1.5 text-[12px] font-medium ${
+                className={`block whitespace-nowrap rounded-[3px] px-2.5 py-1.5 text-xs font-medium ${
                   active ? 'bg-accent text-white' : 'text-ink-muted hover:bg-canvas hover:text-ink'
                 }`}
               >
@@ -35,7 +35,7 @@ export function ViewTabs({ q }: { q: LeadQuery }) {
   )
 }
 
-const SELECT = 'w-full rounded-card border border-line bg-surface px-2 py-1.5 text-[12px] text-ink sm:w-auto sm:max-w-[200px]'
+const SELECT = 'w-full rounded-control border border-line bg-surface px-2 py-1.5 text-xs text-ink sm:w-auto sm:max-w-[200px]'
 
 /** Plain GET form: works without JavaScript, every filter lives in the URL. */
 export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuery; states: string[]; campaigns: string[]; segments?: { id: string; label: string }[] }) {
@@ -56,7 +56,7 @@ export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuer
             name="q"
             defaultValue={f.q ?? ''}
             placeholder="Search name, site, email, city"
-            className="w-full rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint"
+            className="w-full rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint"
           />
         </label>
         <button type="submit" className={BUTTON}>
@@ -64,7 +64,7 @@ export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuer
         </button>
       </div>
       <details className="group mt-2" open={narrowing > 0}>
-        <summary className="cursor-pointer select-none list-none text-[12px] font-medium text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer select-none list-none text-xs font-medium text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
           <span className="group-open:hidden">Filters{narrowing ? ` (${narrowing})` : ''} ▸</span>
           <span className="hidden group-open:inline">Filters{narrowing ? ` (${narrowing})` : ''} ▾</span>
         </summary>
@@ -93,14 +93,14 @@ export function FilterBar({ q, states, campaigns, segments = [] }: { q: LeadQuer
           <button type="submit" className={BUTTON}>
             Apply filters
           </button>
-          <Link href={leadsHref({ ...q, filters: {} }, { sort: 'updated', dir: 'desc' })} prefetch={false} className="text-[12px] text-ink-faint hover:text-ink">
+          <Link href={leadsHref({ ...q, filters: {} }, { sort: 'updated', dir: 'desc' })} prefetch={false} className="text-xs text-ink-faint hover:text-ink">
             Clear all
           </Link>
         </div>
       </details>
       {f.job !== undefined ? (
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-[12px] text-ink-muted">
+          <span className="text-xs text-ink-muted">
             From Find-leads job #{f.job} ·{' '}
             <Link className="text-accent" href={leadsHref(q, { filters: { job: undefined } })} prefetch={false}>
               show all
@@ -133,7 +133,7 @@ export function Pagination({ q, page }: { q: LeadQuery; page: LeadPage }) {
   const from = (page.page - 1) * page.pageSize + 1
   const to = Math.min(page.total, page.page * page.pageSize)
   return (
-    <div className="mt-3 flex items-center justify-between gap-3 text-[12px] text-ink-muted">
+    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-ink-muted">
       <span className="tabular-nums" data-testid="page-range">
         {fmt(from)}–{fmt(to)} of {fmt(page.total)}
       </span>
@@ -163,20 +163,20 @@ export function KanbanBoard({ q, columns }: { q: LeadQuery; columns: KanbanColum
         {columns.map((col) => (
           <section key={col.stage} aria-label={col.label} className="flex w-[260px] shrink-0 flex-col rounded-card border border-line bg-canvas/70">
             <header className="flex items-baseline justify-between border-b border-line px-3 py-2">
-              <Link href={leadsHref(q, { view: 'table', filters: { stage: col.stage } })} prefetch={false} className="text-[12px] font-semibold text-ink hover:text-accent">
+              <Link href={leadsHref(q, { view: 'table', filters: { stage: col.stage } })} prefetch={false} className="text-xs font-semibold text-ink hover:text-accent">
                 {col.label}
               </Link>
-              <span className="text-[12px] tabular-nums text-ink-faint">{fmt(col.count)}</span>
+              <span className="text-xs tabular-nums text-ink-faint">{fmt(col.count)}</span>
             </header>
             <ul className="flex flex-col gap-2 p-2">
-              {col.cards.length === 0 ? <li className="px-1 py-3 text-center text-[12px] text-ink-faint">Nothing here</li> : null}
+              {col.cards.length === 0 ? <li className="px-1 py-3 text-center text-xs text-ink-faint">Nothing here</li> : null}
               {col.cards.map((c) => (
-                <li key={c.id} className="rounded-card border border-line bg-surface px-2.5 py-2 shadow-card">
-                  <Link href={`/leads/${c.id}`} prefetch={false} className="block truncate text-[13px] font-medium text-ink hover:text-accent">
+                <li key={c.id} className="rounded-control border border-line bg-surface px-2.5 py-2 shadow-card">
+                  <Link href={`/leads/${c.id}`} prefetch={false} className="block truncate text-sm font-medium text-ink hover:text-accent">
                     {c.name}
                   </Link>
-                  <div className="truncate text-[11px] text-ink-faint">{place(c.city, c.state) ?? 'No place yet'}</div>
-                  <div className="mt-1 truncate text-[12px] text-ink-muted">{c.primary_email ?? <span className="text-unavailable">No email yet</span>}</div>
+                  <div className="truncate text-2xs text-ink-faint">{place(c.city, c.state) ?? 'No place yet'}</div>
+                  <div className="mt-1 truncate text-xs text-ink-muted">{c.primary_email ?? <span className="text-unavailable">No email yet</span>}</div>
                   <div className="mt-1.5 flex items-center justify-between gap-2">
                     <StageSelect companyId={c.id} stage={c.stage} name={c.name} />
                     {c.primary_verification ? <VerificationPill status={c.primary_verification} /> : null}
@@ -188,7 +188,7 @@ export function KanbanBoard({ q, columns }: { q: LeadQuery; columns: KanbanColum
                   <Link
                     href={leadsHref(q, { view: 'table', filters: { stage: col.stage } })}
                     prefetch={false}
-                    className="block px-1 py-1 text-center text-[12px] text-accent"
+                    className="block px-1 py-1 text-center text-xs text-accent"
                   >
                     All {fmt(col.count)} in {col.label}
                   </Link>
@@ -206,7 +206,7 @@ const STAGE_ORDER = STAGES
 
 function StageBar({ byStage, total }: { byStage: Partial<Record<Stage, number>>; total: number }) {
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-ink-muted">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
       {STAGE_ORDER.filter((s) => byStage[s]).map((s) => (
         <span key={s} className="tabular-nums">
           {STAGE_LABELS[s]} <span className="text-ink">{fmt(byStage[s]!)}</span>
@@ -224,11 +224,11 @@ export function CampaignGroups({ q, groups }: { q: LeadQuery; groups: LeadGroup[
       {groups.map((g) => (
         <Card key={g.key ?? NONE} className="px-4 py-3">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="min-w-0 truncate text-[14px] font-semibold text-ink">{g.key ?? 'No campaign yet'}</h3>
+            <h3 className="min-w-0 truncate text-sm font-semibold text-ink">{g.key ?? 'No campaign yet'}</h3>
             <Link
               href={leadsHref(q, { view: 'table', filters: { campaign: g.key ?? NONE } })}
               prefetch={false}
-              className="shrink-0 text-[12px] tabular-nums text-accent"
+              className="shrink-0 text-xs tabular-nums text-accent"
             >
               {fmt(g.total)} lead{g.total === 1 ? '' : 's'}
             </Link>
@@ -239,7 +239,7 @@ export function CampaignGroups({ q, groups }: { q: LeadQuery; groups: LeadGroup[
           {g.sample.length ? (
             <ul className="mt-2.5 divide-y divide-line-soft border-t border-line-soft">
               {g.sample.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+                <li key={r.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
                   <Link href={`/leads/${r.id}`} prefetch={false} className="min-w-0 truncate text-ink hover:text-accent">
                     {r.name}
                   </Link>
@@ -259,8 +259,8 @@ export function RegionGroups({ q, groups }: { q: LeadQuery; groups: LeadGroup[] 
   const visible = STAGES.filter((s) => groups.some((g) => g.byStage[s]))
   return (
     <Card className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-[13px]" data-testid="region-table">
-        <thead className="border-b border-line bg-canvas/60 text-[11px] uppercase tracking-[0.05em] text-ink-faint">
+      <table className="w-full min-w-[520px] text-sm" data-testid="region-table">
+        <thead className="border-b border-line bg-canvas/60 text-2xs uppercase tracking-[0.05em] text-ink-faint">
           <tr>
             <th className="sticky left-0 bg-canvas px-3 py-2 text-left font-medium">State</th>
             <th className="px-3 py-2 text-right font-medium">Leads</th>

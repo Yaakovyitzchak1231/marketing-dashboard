@@ -20,11 +20,11 @@ export function LiveBell() {
       prefetch={false}
       data-live-bell=""
       aria-label={unread ? `${unread} unread` : 'Inbox'}
-      className="relative shrink-0 rounded-md px-2 py-1.5 text-[13px] text-ink-muted hover:text-ink"
+      className="relative shrink-0 rounded-control px-2 py-1.5 text-sm text-ink-muted hover:text-ink"
     >
       Inbox
       {unread ? (
-        <span className="ml-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[11px] font-semibold tabular-nums text-accent-soft">
+        <span className="ml-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-2xs font-semibold tabular-nums text-accent-soft">
           {unread > 99 ? '99+' : unread}
         </span>
       ) : null}

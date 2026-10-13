@@ -183,22 +183,22 @@ export function VerifyFlow({
       {phase === 'idle' || phase === 'previewing' ? (
         <Card className="p-4">
           {ids.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink">
               <span>
                 <span className="tabular-nums font-medium">{count(ids.length)}</span> leads selected on the Leads screen
               </span>
-              <button type="button" className="text-[12px] text-accent hover:underline" onClick={() => setIds([])}>
+              <button type="button" className="text-xs text-accent hover:underline" onClick={() => setIds([])}>
                 Use a filter instead
               </button>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               {FIELDS.map((f) => (
-                <label key={f.key} className="block text-[12px] text-ink-muted">
+                <label key={f.key} className="block text-xs text-ink-muted">
                   {f.label}
                   {f.options ? (
                     <select
-                      className="mt-1 block w-full rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] text-ink"
+                      className="mt-1 block w-full rounded-control border border-line bg-surface px-2 py-1.5 text-sm text-ink"
                       value={filter[f.key] ?? ''}
                       onChange={(e) => setFilter({ ...filter, [f.key]: e.target.value || undefined })}
                     >
@@ -210,7 +210,7 @@ export function VerifyFlow({
                     </select>
                   ) : (
                     <input
-                      className="mt-1 block w-full rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] text-ink placeholder:text-ink-faint"
+                      className="mt-1 block w-full rounded-control border border-line bg-surface px-2 py-1.5 text-sm text-ink placeholder:text-ink-faint"
                       placeholder={f.placeholder}
                       value={filter[f.key] ?? ''}
                       onChange={(e) => setFilter({ ...filter, [f.key]: e.target.value || undefined })}
@@ -222,19 +222,19 @@ export function VerifyFlow({
           )}
           <div className="mt-4 flex flex-wrap items-end gap-4">
             {ids.length === 0 ? (
-              <label className="block text-[12px] text-ink-muted">
+              <label className="block text-xs text-ink-muted">
                 At most
                 <input
                   type="number"
                   min={1}
                   max={1000}
-                  className="mt-1 block w-24 rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] tabular-nums text-ink"
+                  className="mt-1 block w-24 rounded-control border border-line bg-surface px-2 py-1.5 text-sm tabular-nums text-ink"
                   value={limit}
                   onChange={(e) => setLimit(Math.min(1000, Math.max(1, Number(e.target.value) || 1)))}
                 />
               </label>
             ) : null}
-            <label className="flex items-center gap-2 pb-1.5 text-[12px] text-ink-muted">
+            <label className="flex items-center gap-2 pb-1.5 text-xs text-ink-muted">
               <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
               Re-check leads verified in the last 30 days
             </label>
@@ -242,7 +242,7 @@ export function VerifyFlow({
               type="button"
               onClick={preview}
               disabled={busy}
-              className="ml-auto rounded-card border border-accent bg-accent px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-60"
+              className="ml-auto rounded-control border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
             >
               {phase === 'previewing' ? 'Running free check…' : 'Run free check'}
             </button>
@@ -253,12 +253,12 @@ export function VerifyFlow({
       {run && phase !== 'idle' && phase !== 'previewing' ? (
         <Card className="p-4" >
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[14px] font-semibold text-ink">Run #{run.id}</h3>
+            <h3 className="text-sm font-semibold text-ink">Run #{run.id}</h3>
             <RunStatusPill status={run.status} paused={phase === 'paused'} />
           </div>
 
           {est && pre ? (
-            <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2" data-testid="cost-preview">
+            <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2" data-testid="cost-preview">
               <Row label="Checked free" value={count(pre.checked)} />
               <Row label="Failed the free check" value={count(pre.invalid)} hint="bad syntax, no mail server, disposable" />
               <Row label="Go to MillionVerifier" value={`${count(est.mv_checks)} ≈ ${money(est.mv_cost_usd)}`} />
@@ -287,16 +287,16 @@ export function VerifyFlow({
               ) : null}
             </dl>
           ) : null}
-          {est ? <p className="mt-2 text-[11px] leading-snug text-ink-faint">{est.math}. List prices, not your bill.</p> : null}
+          {est ? <p className="mt-2 text-2xs leading-snug text-ink-faint">{est.math}. List prices, not your bill.</p> : null}
           {run.summary?.warnings?.map((w) => (
-            <p key={w} className="mt-2 text-[12px] text-warn">
+            <p key={w} className="mt-2 text-xs text-warn">
               {w}
             </p>
           ))}
 
           {run.status !== 'preview' ? (
             <div className="mt-4">
-              <div className="flex justify-between text-[12px] tabular-nums text-ink-muted">
+              <div className="flex justify-between text-xs tabular-nums text-ink-muted">
                 <span>
                   {count(run.processed)} of {count(run.contact_count)} done
                 </span>
@@ -311,16 +311,16 @@ export function VerifyFlow({
             </div>
           ) : null}
 
-          {note ? <p className="mt-3 text-[12px] text-warn">{note}</p> : null}
+          {note ? <p className="mt-3 text-xs text-warn">{note}</p> : null}
 
           <div className="mt-4 flex flex-wrap items-end gap-3">
             {phase === 'preview' || phase === 'paused' || phase === 'approving' ? (
               <>
-                <label className="block text-[12px] text-ink-muted" title="Estimate + 20% headroom by default. The run pauses before it could go past this.">
+                <label className="block text-xs text-ink-muted" title="Estimate + 20% headroom by default. The run pauses before it could go past this.">
                   Spend at most ($)
                   <input
                     inputMode="decimal"
-                    className="mt-1 block w-28 rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] tabular-nums text-ink"
+                    className="mt-1 block w-28 rounded-control border border-line bg-surface px-2 py-1.5 text-sm tabular-nums text-ink"
                     value={ceiling}
                     onChange={(e) => {
                       setCeiling(e.target.value)
@@ -332,7 +332,7 @@ export function VerifyFlow({
                   type="button"
                   onClick={() => void approve()}
                   disabled={busy || run.contact_count === 0 || parseCeiling(ceiling) == null}
-                  className="rounded-card border border-accent bg-accent px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-60"
+                  className="rounded-control border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
                 >
                   {phase === 'paused'
                     ? `Continue (max ${money(parseCeiling(ceiling))})`
@@ -340,19 +340,19 @@ export function VerifyFlow({
                 </button>
               </>
             ) : null}
-            {phase === 'running' ? <span className="text-[12px] text-ink-muted">Checking… keep this page open.</span> : null}
+            {phase === 'running' ? <span className="text-xs text-ink-muted">Checking… keep this page open.</span> : null}
             {phase !== 'finished' ? (
-              <button type="button" onClick={cancel} className="rounded-card border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-muted hover:text-ink">
+              <button type="button" onClick={cancel} className="rounded-control border border-line bg-surface px-3 py-1.5 text-sm text-ink-muted hover:text-ink">
                 Cancel run
               </button>
             ) : (
-              <button type="button" onClick={reset} className="rounded-card border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-muted hover:text-ink">
+              <button type="button" onClick={reset} className="rounded-control border border-line bg-surface px-3 py-1.5 text-sm text-ink-muted hover:text-ink">
                 Check more leads
               </button>
             )}
           </div>
           {askHighSpend && highCeiling != null ? (
-            <div role="alert" data-testid="high-spend-confirm" className="mt-3 rounded-card border border-warn p-3 text-[13px] text-ink">
+            <div role="alert" data-testid="high-spend-confirm" className="mt-3 rounded-card border border-warn p-3 text-sm text-ink">
               <p>
                 This lets the run spend up to <span className="tabular-nums font-medium">{money(highCeiling)}</span>
                 {est ? (
@@ -367,14 +367,14 @@ export function VerifyFlow({
                 <button
                   type="button"
                   onClick={() => void approve(true)}
-                  className="rounded-card border border-accent bg-accent px-3 py-1.5 text-[13px] font-medium text-white"
+                  className="rounded-control border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white"
                 >
                   Yes, allow up to {money(highCeiling)}
                 </button>
                 <button
                   type="button"
                   onClick={() => setAskHighSpend(false)}
-                  className="rounded-card border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-muted hover:text-ink"
+                  className="rounded-control border border-line bg-surface px-3 py-1.5 text-sm text-ink-muted hover:text-ink"
                 >
                   Change the ceiling
                 </button>
@@ -382,13 +382,13 @@ export function VerifyFlow({
             </div>
           ) : null}
           {!keys.millionverifier && phase === 'preview' ? (
-            <p className="mt-2 text-[11px] text-ink-faint">With no MillionVerifier key, approving applies the free-check results only ($0).</p>
+            <p className="mt-2 text-2xs text-ink-faint">With no MillionVerifier key, approving applies the free-check results only ($0).</p>
           ) : null}
         </Card>
       ) : null}
 
       {error ? (
-        <p role="alert" className="text-[12px] text-bad">
+        <p role="alert" className="text-xs text-bad">
           {error}
         </p>
       ) : null}
@@ -408,7 +408,7 @@ function Row({ label, value, hint, strong }: { label: string; value: string; hin
     <div className="flex items-baseline justify-between gap-3 border-b border-line-soft py-1">
       <dt className="text-ink-muted">
         {label}
-        {hint ? <span className="block text-[11px] text-ink-faint">{hint}</span> : null}
+        {hint ? <span className="block text-2xs text-ink-faint">{hint}</span> : null}
       </dt>
       <dd className={`tabular-nums ${strong ? 'font-semibold text-ink' : 'text-ink'}`}>{value}</dd>
     </div>
@@ -419,7 +419,7 @@ function VerdictLine({ verdicts }: { verdicts: Record<string, number> }) {
   const order = ['valid', 'invalid', 'catch_all', 'unknown', 'risky']
   const parts = order.filter((k) => verdicts[k]).map((k) => `${verdicts[k].toLocaleString('en-US')} ${k.replace('_', '-')}`)
   if (!parts.length) return null
-  return <p className="mt-2 text-[12px] tabular-nums text-ink-muted">{parts.join(' · ')}</p>
+  return <p className="mt-2 text-xs tabular-nums text-ink-muted">{parts.join(' · ')}</p>
 }
 
 export function RunStatusPill({ status, paused }: { status: string; paused?: boolean }) {

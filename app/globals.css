@@ -3,32 +3,80 @@
 @tailwind utilities;
 
 /**
- * The page ground.
+ * Theme tokens. Values are space-separated RGB channels so Tailwind opacity
+ * modifiers work (`bg-accent/10`). tailwind.config.ts maps the semantic names
+ * (canvas, surface, ink, accent, ...) onto these variables; nothing else in
+ * the app defines a colour.
  *
- * The tokens live in tailwind.config.ts; this file only establishes the
- * document defaults. Keeping the palette in one place is what stops the
- * dashboard drifting into a template look -- there is no second place to
- * define a colour.
+ * Light: warm off-white ground, hairline borders, one muted ink-blue accent.
+ * Dark: warm charcoal, same structure, accent lifted for contrast.
  */
+:root {
+  --c-canvas: 248 247 244;
+  --c-surface: 255 255 255;
+  --c-surface-2: 243 241 237;
+  --c-line: 226 223 216;
+  --c-line-soft: 238 236 231;
+  --c-ink: 28 26 23;
+  --c-ink-muted: 88 83 76;
+  --c-ink-faint: 128 122 113;
+  --c-accent: 44 90 138;
+  --c-accent-strong: 31 70 112;
+  --c-accent-soft: 236 241 247;
+  --c-on-accent: 255 255 255;
+  --c-unavailable: 160 154 146;
+  --c-warn: 138 90 32;
+  --c-warn-soft: 251 244 234;
+  --c-good: 47 107 74;
+  --c-good-soft: 236 245 239;
+  --c-bad: 162 59 44;
+  --c-bad-soft: 251 239 236;
+  --c-shadow: 28 26 23;
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  --c-canvas: 22 21 19;
+  --c-surface: 31 30 27;
+  --c-surface-2: 27 26 23;
+  --c-line: 56 53 48;
+  --c-line-soft: 44 42 38;
+  --c-ink: 238 235 229;
+  --c-ink-muted: 186 180 170;
+  --c-ink-faint: 142 136 126;
+  --c-accent: 122 166 214;
+  --c-accent-strong: 160 194 232;
+  --c-accent-soft: 34 45 58;
+  --c-on-accent: 16 22 30;
+  --c-unavailable: 120 115 107;
+  --c-warn: 222 172 104;
+  --c-warn-soft: 52 40 24;
+  --c-good: 120 196 150;
+  --c-good-soft: 26 46 34;
+  --c-bad: 236 132 116;
+  --c-bad-soft: 56 30 26;
+  --c-shadow: 0 0 0;
+  color-scheme: dark;
+}
+
 html {
-  background-color: theme('colors.canvas');
+  background-color: rgb(var(--c-canvas));
   -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background-color: theme('colors.canvas');
-  color: theme('colors.ink');
+  background-color: rgb(var(--c-canvas));
+  color: rgb(var(--c-ink));
   font-family: theme('fontFamily.sans');
-  /* Tabular figures are the default, not a per-component decision: a column
-     of numbers that does not align digit-for-digit is the fastest way to look
-     careless. */
+  font-size: 0.875rem;
+  line-height: 1.45;
+  /* Tabular figures are the default: a column of numbers that does not align
+     digit-for-digit is the fastest way to look careless. */
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Respect the OS setting. A dashboard that animates regardless is a dashboard
-   that can make someone ill, and the only animation here is a fade. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -39,22 +87,158 @@ body {
   }
 }
 
-/* The focus ring is the one place a second colour is acceptable: it has to
-   survive on the canvas and on the accent, and it must be visible on a phone
-   where nobody is using a mouse. */
 :focus-visible {
-  outline: 2px solid theme('colors.accent');
+  outline: 2px solid rgb(var(--c-accent));
   outline-offset: 2px;
 }
 
-/* Figures: tabular, lining digits wherever the numeric face is used. */
 .font-numeric {
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: -0.005em;
 }
 
-/* Print (the weekly one-pager's "Save as PDF"): white page, no nav or buttons,
-   cards keep their hairlines and don't split across pages. */
+/* Native form controls follow the theme. */
+input,
+select,
+textarea {
+  color: inherit;
+}
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: rgb(var(--c-accent));
+}
+
+/* Touch screens: every interactive control is at least 44px tall. Applied to
+   coarse pointers only so desktop density is unchanged. */
+@media (pointer: coarse) {
+  main button:not([data-compact]),
+  main [role='button']:not([data-compact]),
+  main select,
+  main input[type='text'],
+  main input[type='search'],
+  main input[type='email'],
+  main input[type='number'],
+  main input[type='url'],
+  main input[type='date'],
+  main input[type='time'],
+  main input[type='password'] {
+    min-height: 2.75rem;
+  }
+  main input[type='checkbox'],
+  main input[type='radio'] {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
+/* ------------------------------------------------------------------------
+ * Tables collapse to labelled cards under 640px.
+ *
+ * Every <table> inside <main> gets this unless it opts out with
+ * data-no-cards. components/ui/TableCards.tsx copies each column header into
+ * its cells' data-label once on the client, so tables written before this
+ * system collapse too without being rewritten.
+ * ---------------------------------------------------------------------- */
+@media (max-width: 639px) {
+  main table:not([data-no-cards]) {
+    display: block;
+    width: 100%;
+    border: 0;
+  }
+  main table:not([data-no-cards]) thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  main table:not([data-no-cards]) tbody,
+  main table:not([data-no-cards]) tfoot {
+    display: block;
+  }
+  main table:not([data-no-cards]) tr {
+    display: block;
+    padding: 0.75rem 0.875rem;
+    border-bottom: 1px solid rgb(var(--c-line-soft));
+  }
+  main table:not([data-no-cards]) tr:last-child {
+    border-bottom: 0;
+  }
+  main table:not([data-no-cards]) td,
+  main table:not([data-no-cards]) th[scope='row'] {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.2rem 0 !important;
+    text-align: right !important;
+    white-space: normal !important;
+    max-width: none !important;
+    border: 0 !important;
+    min-width: 0;
+  }
+  main table:not([data-no-cards]) td > *,
+  main table:not([data-no-cards]) th[scope='row'] > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  main table:not([data-no-cards]) td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    max-width: 45%;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgb(var(--c-ink-faint));
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  /* The first cell of a row is its title: full width, left aligned, no label. */
+  main table:not([data-no-cards]) td:first-child,
+  main table:not([data-no-cards]) th[scope='row']:first-child {
+    display: block;
+    text-align: left !important;
+    font-weight: 500;
+    padding-bottom: 0.35rem !important;
+  }
+  main table:not([data-no-cards]) td:first-child::before {
+    content: none;
+  }
+  main table:not([data-no-cards]) td[data-label='']::before {
+    content: none;
+  }
+  /* A checkbox-only first column sits inline with the title cell. */
+  main table:not([data-no-cards]) td[data-cell='select'] {
+    display: inline-flex;
+    float: left;
+    margin-right: 0.75rem;
+  }
+}
+
+/* Thin, quiet scrollbars for the rail, sheets and horizontal chip rows. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-line)) transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Bottom nav on phones: content keeps clear of it (and the home indicator). */
+.pb-bottom-nav {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  .pb-bottom-nav {
+    padding-bottom: 4rem;
+  }
+}
+
+/* Print (the weekly one-pager's "Save as PDF"): white page, no chrome. */
 @media print {
   @page {
     margin: 14mm;
@@ -62,6 +246,7 @@ body {
   html,
   body {
     background: #fff !important;
+    color: #1c1a17 !important;
   }
   main {
     max-width: none !important;
@@ -72,5 +257,8 @@ body {
   }
   section {
     break-inside: avoid;
+  }
+  [data-shell-chrome] {
+    display: none !important;
   }
 }

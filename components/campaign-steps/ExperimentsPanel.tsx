@@ -119,7 +119,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
   return (
     <section aria-labelledby="exp-h" className="mt-6">
       <SectionHeader id="exp-h" title="A/B experiments" meta="Split a step's traffic across variants; the winner can be picked automatically once the numbers are significant" />
-      {error ? <p role="alert" className="mb-2 text-[12px] text-bad">{error}</p> : null}
+      {error ? <p role="alert" className="mb-2 text-xs text-bad">{error}</p> : null}
       {!list ? <EmptyNote>Loading experiments…</EmptyNote> : null}
       {list && !list.length ? <EmptyNote>No experiments yet. Create one below to A/B test a step.</EmptyNote> : null}
       <div className="space-y-3">
@@ -140,13 +140,13 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                   {e.status === 'running' ? <button type="button" className={BUTTON} disabled={busy} onClick={() => evaluate(e.id)}>Evaluate now</button> : null}
                 </span>
               </div>
-              <p className="mt-1 text-[12px] text-ink-muted">
+              <p className="mt-1 text-xs text-ink-muted">
                 {e.config.variants.map((v) => `${v.key} (${formatPercent(v.weight / total, 0)})`).join(' · ')}
                 {' '}· auto-winner {e.config.auto_winner ? 'on' : 'off'} · min {e.config.min_sends_per_variant} sends/variant
               </p>
               {d ? (
                 <div className="mt-3 border-t border-line pt-2">
-                  <table className="w-full text-[12px]">
+                  <table className="w-full text-xs">
                     <thead><tr className="text-left text-ink-muted"><th>Variant</th><th>Sends</th><th>Positive replies</th><th>Reply rate</th></tr></thead>
                     <tbody>
                       {d.outcomes.map((o) => (
@@ -158,7 +158,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                       ))}
                     </tbody>
                   </table>
-                  <p className="mt-1 text-[12px] text-ink-muted">{formatCount(d.assignments)} leads assigned{d.decided_at ? ` · decided ${new Date(d.decided_at).toLocaleString()}` : ''}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{formatCount(d.assignments)} leads assigned{d.decided_at ? ` · decided ${new Date(d.decided_at).toLocaleString()}` : ''}</p>
                   {e.status === 'running' ? (
                     <div className="mt-2 flex flex-wrap items-end gap-2">
                       <label className={LABEL}>Variant
@@ -194,7 +194,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
         })}
       </div>
       <Card className="mt-3 p-3">
-        <h3 className="mb-2 text-[13px] font-semibold">New experiment</h3>
+        <h3 className="mb-2 text-sm font-semibold">New experiment</h3>
         <div className="flex flex-wrap items-end gap-2">
           <label className={LABEL}>Step
             <select className={INPUT} value={step} onChange={(e) => setStep(Number(e.target.value))}>
@@ -205,7 +205,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
             placeholder="e.g. Subject line test" onChange={(e) => setName(e.target.value)} /></label>
           <label className={LABEL}>Variants (key:weight, comma-separated; keys use letters, digits, _ or -)<input className={INPUT} value={variants}
             onChange={(e) => setVariants(e.target.value)} placeholder="A:50, B:50" /></label>
-          <label className="flex items-center gap-2 text-[12px] text-ink-muted">
+          <label className="flex items-center gap-2 text-xs text-ink-muted">
             <input type="checkbox" checked={autoWinner} onChange={(e) => setAutoWinner(e.target.checked)} /> Auto-pick winner
           </label>
           <button type="button" className={BUTTON_PRIMARY} disabled={busy || !name.trim()} onClick={create}>Create</button>

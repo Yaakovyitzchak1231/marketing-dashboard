@@ -49,10 +49,10 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
     <section aria-labelledby="preview-h">
       <SectionHeader id="preview-h" title="Preview for a lead" meta="Each step filled exactly as this lead would get it." />
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-xs text-ink-muted">
           Lead
           <select
-            className="block min-w-[260px] rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink"
+            className="block min-w-[260px] rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink"
             value={lead}
             onChange={(e) => void load(e.target.value)}
           >
@@ -65,10 +65,10 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
             ))}
           </select>
         </label>
-        <label className="text-[12px] text-ink-muted">
+        <label className="text-xs text-ink-muted">
           or lead id
           <input
-            className="block w-28 rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink"
+            className="block w-28 rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink"
             inputMode="numeric"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -84,16 +84,16 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
           </button>
         ) : null}
       </div>
-      {busy ? <p className="text-[12px] text-ink-faint">Loading…</p> : null}
+      {busy ? <p className="text-xs text-ink-faint">Loading…</p> : null}
       {error ? (
-        <p role="alert" className="text-[12px] text-bad">
+        <p role="alert" className="text-xs text-bad">
           {error}
         </p>
       ) : null}
       {p ? (
         <div className="space-y-3" data-testid="lead-preview">
           <Card className="space-y-2 p-3">
-            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-semibold text-ink">{p.lead.company_name}</span>
               <span className="text-ink-faint">{p.lead.email ?? 'no email'}</span>
               <Pill tone={OUTLOOK[p.outlook].tone}>{OUTLOOK[p.outlook].text}</Pill>
@@ -110,13 +110,13 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
               ) : null}
             </div>
             {p.outlook_why.length ? (
-              <ul className="list-disc pl-5 text-[12px] text-ink-muted">
+              <ul className="list-disc pl-5 text-xs text-ink-muted">
                 {p.outlook_why.map((w) => (
                   <li key={w}>{w}</li>
                 ))}
               </ul>
             ) : null}
-            <table className="w-full text-left text-[12px]">
+            <table className="w-full text-left text-xs">
               <thead className="text-ink-faint">
                 <tr>
                   <th className="py-1 pr-3 font-medium">Field</th>
@@ -138,11 +138,11 @@ export function LeadPreviewPanel({ campaignId, leads }: { campaignId: number; le
           {!p.steps.length ? <EmptyNote>No steps to preview yet.</EmptyNote> : null}
           {p.steps.map((s) => (
             <Card key={s.step.id} className="p-3">
-              <p className="text-[12px] text-ink-faint">
+              <p className="text-xs text-ink-faint">
                 Step {s.step.step_number} · variant {s.step.variant}
               </p>
-              <p className="mt-1 text-[13px] font-medium text-ink">{s.subject.text || '(no subject)'}</p>
-              <p className="mt-1 whitespace-pre-wrap text-[13px] text-ink-muted">{s.body.text}</p>
+              <p className="mt-1 text-sm font-medium text-ink">{s.subject.text || '(no subject)'}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-ink-muted">{s.body.text}</p>
               {s.warnings.length ? (
                 <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Warnings">
                   {s.warnings.map((w) => (

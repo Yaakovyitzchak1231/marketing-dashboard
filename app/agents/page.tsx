@@ -38,16 +38,16 @@ export default async function AgentsPage() {
           <div className="min-w-0 flex-1">
             {all ? (
               <>
-                <p className="text-[13.5px] font-semibold text-warn">All agents are paused</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-muted">
+                <p className="text-sm font-semibold text-warn">All agents are paused</p>
+                <p className="mt-0.5 text-xs text-ink-muted">
                   By {all.by_name} <Ago at={all.paused_at} now={now} />
                   {all.reason ? ` · “${all.reason}”` : ''}. Every agent request to the ops API is refused; tasks and claims stay as they are.
                 </p>
               </>
             ) : (
               <>
-                <p className="text-[13.5px] font-semibold text-ink">Stop every agent</p>
-                <p className="mt-0.5 text-[12.5px] text-ink-muted">
+                <p className="text-sm font-semibold text-ink">Stop every agent</p>
+                <p className="mt-0.5 text-xs text-ink-muted">
                   {pausedCount ? `${pausedCount} of ${agents.length} agents paused right now. ` : ''}
                   Pause all refuses every agent&apos;s ops requests until you resume, including agents added later.
                 </p>
@@ -76,15 +76,15 @@ export default async function AgentsPage() {
                   <Link href={`/agents/${a.id}`} className="block">
                     <div className="flex items-center gap-2">
                       <Presence lastSeen={a.last_seen_at} now={now} />
-                      <p className="text-[14px] font-semibold text-ink">{a.display_name}</p>
+                      <p className="text-sm font-semibold text-ink">{a.display_name}</p>
                       {a.paused_at ? <Pill tone="warn">Paused</Pill> : null}
                       {isAgent && a.can_send ? <Pill tone="accent">May send</Pill> : null}
-                      <span className="ml-auto text-[11.5px] text-ink-faint">
+                      <span className="ml-auto text-xs text-ink-faint">
                         seen <Ago at={a.last_seen_at} now={now} />
                       </span>
                     </div>
-                    <p className="mt-1.5 min-h-[18px] text-[12.5px] leading-snug text-ink-muted">{a.status_note ?? (a.active_tasks ? '' : 'Nothing in hand')}</p>
-                    <dl className="mt-3 grid grid-cols-4 gap-2 text-[11.5px]">
+                    <p className="mt-1.5 min-h-[18px] text-xs leading-snug text-ink-muted">{a.status_note ?? (a.active_tasks ? '' : 'Nothing in hand')}</p>
+                    <dl className="mt-3 grid grid-cols-4 gap-2 text-xs">
                       {[
                         ['On it', a.active_tasks],
                         ['Waiting', a.queued_for],
@@ -93,17 +93,17 @@ export default async function AgentsPage() {
                       ].map(([k, v]) => (
                         <div key={k as string}>
                           <dt className="text-ink-faint">{k}</dt>
-                          <dd className="mt-0.5 text-[14px] font-medium tabular-nums text-ink">{v}</dd>
+                          <dd className="mt-0.5 text-sm font-medium tabular-nums text-ink">{v}</dd>
                         </div>
                       ))}
                     </dl>
-                    {a.unread ? <p className="mt-2 text-[11.5px] text-accent">{a.unread} unread</p> : null}
-                    {isAgent && !a.channels ? <p className="mt-1 text-[11.5px] text-warn">Not connected: it only hears about new work when it checks in. Open to add a channel.</p> : null}
+                    {a.unread ? <p className="mt-2 text-xs text-accent">{a.unread} unread</p> : null}
+                    {isAgent && !a.channels ? <p className="mt-1 text-xs text-warn">Not connected: it only hears about new work when it checks in. Open to add a channel.</p> : null}
                   </Link>
                   {isAgent ? (
                     <div className="mt-3 border-t border-line-soft pt-3">
                       {a.paused_at ? (
-                        <p className="mb-2 text-[12px] leading-snug text-warn">
+                        <p className="mb-2 text-xs leading-snug text-warn">
                           Paused by {a.paused_by_name ?? 'a person'} <Ago at={a.paused_at} now={now} />
                           {a.pause_reason ? ` · “${a.pause_reason}”` : ''}
                         </p>
@@ -131,14 +131,14 @@ export default async function AgentsPage() {
           <SectionHeader title="Disabled agents" meta={<span className="tabular-nums">{disabled.length}</span>} />
           <Card className="divide-y divide-line-soft">
             {disabled.map((a) => (
-              <Link key={a.id} href={`/agents/${a.id}`} className="flex items-center gap-2 px-4 py-2.5 text-[13px] hover:text-accent">
+              <Link key={a.id} href={`/agents/${a.id}`} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:text-accent">
                 <span className="font-medium text-ink">{a.display_name}</span>
                 <Pill tone="bad">Disabled</Pill>
-                <span className="ml-auto text-[11.5px] text-ink-faint">seen <Ago at={a.last_seen_at} now={now} /></span>
+                <span className="ml-auto text-xs text-ink-faint">seen <Ago at={a.last_seen_at} now={now} /></span>
               </Link>
             ))}
           </Card>
-          <p className="mt-2 text-[11.5px] text-ink-faint">Their requests are refused. An owner re-enables one on its page.</p>
+          <p className="mt-2 text-xs text-ink-faint">Their requests are refused. An owner re-enables one on its page.</p>
         </section>
       ) : null}
       <section className="mb-6">
@@ -149,10 +149,10 @@ export default async function AgentsPage() {
             <input name="id" required maxLength={63} pattern="[a-z0-9][a-z0-9_.\-]*" className={inputCls} placeholder="Short id, e.g. claude-code (used in @mentions)" />
             <input name="harness" maxLength={40} className={inputCls} placeholder="What runs it (optional), e.g. claude-code, hermes, n8n" />
           </OnceForm>
-          <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">Then, on its page: create its API key and choose how it hears about new work (webhook, wake-up ping, email, MCP…). docs/AGENTS_API.md has the details for whoever sets the agent up.</p>
+          <p className="mt-2 text-xs leading-snug text-ink-faint">Then, on its page: create its API key and choose how it hears about new work (webhook, wake-up ping, email, MCP…). docs/AGENTS_API.md has the details for whoever sets the agent up.</p>
         </Card>
       </section>
-      <p className="text-[12px] leading-relaxed text-ink-faint">
+      <p className="text-xs leading-relaxed text-ink-faint">
         An agent shows as active when it has called the ops API in the last 10 minutes. A paused agent keeps its keys, tasks, claims and memory; its requests get “agent paused by …” until you resume it. Pauses, resumes, new agents, keys and channels are in the activity log.
       </p>
     </PageFrame>

@@ -41,7 +41,7 @@ export async function LeadListsCard({ db, companyId }: { db: Queryable; companyI
             {lists.length ? (
               <ul className="flex flex-wrap gap-1.5">
                 {lists.map((l) => (
-                  <li key={l.id} className="flex min-w-0 max-w-full items-center gap-1 rounded-full border border-line bg-canvas/60 py-0.5 pl-2.5 pr-1 text-[12px] text-ink">
+                  <li key={l.id} className="flex min-w-0 max-w-full items-center gap-1 rounded-full border border-line bg-canvas/60 py-0.5 pl-2.5 pr-1 text-xs text-ink">
                     <span className="min-w-0 [overflow-wrap:anywhere]">{l.name}</span>
                     <form action={removeFromListAction}>
                       <input type="hidden" name="list_id" value={l.id} />
@@ -55,13 +55,13 @@ export async function LeadListsCard({ db, companyId }: { db: Queryable; companyI
                 ))}
               </ul>
             ) : (
-              <p className="text-[12px] text-ink-faint">Not in any list yet.</p>
+              <p className="text-xs text-ink-faint">Not in any list yet.</p>
             )}
             <form action={addToListAction} className="flex flex-wrap items-center gap-1.5 border-t border-line-soft pt-2">
               <input type="hidden" name="company_id" value={companyId} />
               <input type="hidden" name="return_to" value={returnTo} />
               {otherLists.length ? (
-                <select name="list_id" className="rounded-card border border-line bg-surface px-2 py-1 text-[12px] text-ink" defaultValue="">
+                <select name="list_id" className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink" defaultValue="">
                   <option value="">Pick a list…</option>
                   {otherLists.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -70,8 +70,8 @@ export async function LeadListsCard({ db, companyId }: { db: Queryable; companyI
                   ))}
                 </select>
               ) : null}
-              <span className="text-[11px] text-ink-faint">or</span>
-              <input name="new_list_name" placeholder="New list name" className="min-w-0 flex-1 rounded-card border border-line bg-surface px-2 py-1 text-[12px] text-ink" />
+              <span className="text-2xs text-ink-faint">or</span>
+              <input name="new_list_name" placeholder="New list name" className="min-w-0 flex-1 rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink" />
               <button type="submit" className={BUTTON}>
                 Add
               </button>

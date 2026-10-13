@@ -62,12 +62,12 @@ export async function ConnectPanel({
         <Card className="divide-y divide-line-soft">
           {channels.length ? (
             channels.map((c) => (
-              <div key={c.id} className="px-3 py-2 text-[12px] leading-snug">
+              <div key={c.id} className="px-3 py-2 text-xs leading-snug">
                 <p className="flex items-baseline gap-2">
                   <span className={`font-medium ${c.enabled ? 'text-ink' : 'text-ink-faint line-through'}`}>{c.label || c.kind}</span>
                   <span className="min-w-0 flex-1 truncate text-ink-faint">{describe(c)}</span>
                 </p>
-                <p className="mt-0.5 text-[11.5px] text-ink-faint">
+                <p className="mt-0.5 text-xs text-ink-faint">
                   {c.last_error && (!c.last_ok_at || (c.last_error_at && new Date(c.last_error_at) > new Date(c.last_ok_at))) ? (
                     <span className="text-bad">last try failed <Ago at={c.last_error_at} now={now} />: {c.last_error.slice(0, 120)}</span>
                   ) : c.last_ok_at ? (
@@ -76,7 +76,7 @@ export async function ConnectPanel({
                     'not used yet'
                   )}
                 </p>
-                <div className="mt-1 flex gap-3 text-[11.5px]">
+                <div className="mt-1 flex gap-3 text-xs">
                   <form action={toggleChannelAction}>
                     <input type="hidden" name="actor_id" value={actor.id} />
                     <input type="hidden" name="channel_id" value={c.id} />
@@ -100,7 +100,7 @@ export async function ConnectPanel({
             </EmptyNote>
           )}
           <details className="p-3">
-            <summary className="cursor-pointer text-[12px] font-medium text-accent">Add a channel</summary>
+            <summary className="cursor-pointer text-xs font-medium text-accent">Add a channel</summary>
             <OnceForm action={addChannelAction} submitLabel="Add channel" className="mt-2" buttonClassName={`${btnCls} w-full`}>
               <input type="hidden" name="actor_id" value={actor.id} />
               <select name="kind" className={inputCls} defaultValue={isAgent ? 'webhook' : 'relay'}>
@@ -128,7 +128,7 @@ export async function ConnectPanel({
       {!isAgent ? (
         <section>
           <SectionHeader title="Quiet hours" />
-          <Card className="flex items-center gap-3 p-3 text-[12px]">
+          <Card className="flex items-center gap-3 p-3 text-xs">
             <p className="min-w-0 flex-1 text-ink-muted">
               Shabbos (Baltimore, candle lighting to nightfall): phone pings {actor.quiet_shabbos ? 'wait until after Shabbos' : 'go out any time'}. The dashboard keeps working either way.
             </p>
@@ -145,7 +145,7 @@ export async function ConnectPanel({
           <SectionHeader title="API keys" meta={<span className="tabular-nums">{keys.filter((k) => !k.revoked_at).length} live</span>} />
           <Card className="divide-y divide-line-soft">
             {keys.map((k) => (
-              <div key={k.id} className={`flex items-center gap-2 px-3 py-2 text-[12px] ${k.revoked_at ? 'text-ink-faint' : 'text-ink'}`}>
+              <div key={k.id} className={`flex items-center gap-2 px-3 py-2 text-xs ${k.revoked_at ? 'text-ink-faint' : 'text-ink'}`}>
                 <span className="font-mono">{maskedTail(k.hint)}</span>
                 <span className="min-w-0 flex-1 truncate text-ink-faint">
                   {k.label ? `${k.label} · ` : ''}

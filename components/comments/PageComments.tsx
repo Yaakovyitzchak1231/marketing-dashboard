@@ -5,6 +5,7 @@ import {
   discardCommentDraftAction, replyCommentAction, resolveCommentAction, saveCommentDraftAction, sendCommentsAction,
 } from '@/app/actions/page-comments'
 import { useRole, VIEWER_REFUSAL } from '@/components/auth/useRole'
+import { usePreferences } from '@/components/shell/preferences'
 
 /**
  * The list is a GET (app/api/page-comments/route.ts), not a server action: server actions are
@@ -30,10 +31,21 @@ const ACTIONS: CommentActions = {
   resolve: resolveCommentAction,
 }
 
-/** The comment layer on every page, wired to the server. Viewers get it read-only. */
+/**
+ * The comment layer, wired to the server. It is part of Review mode: off by
+ * default, turned on from the account menu or the command palette, so pins
+ * and the floating comment bar never sit on top of everyday work. Viewers get
+ * it read-only.
+ */
 export function PageComments() {
+  const { reviewMode, setReviewMode } = usePreferences()
+  if (!reviewMode) return null
+  return <PageCommentsLayer onExit={() => setReviewMode(false)} />
+}
+
+function PageCommentsLayer({ onExit }: { onExit: () => void }) {
   const role = useRole()
   // Wait for the role (one shared GET) so a viewer's layer never starts a write it can't make.
   if (role === undefined) return null
-  return <CommentLayer actions={ACTIONS} readOnly={role === 'viewer'} />
+  return <CommentLayer actions={ACTIONS} readOnly={role === 'viewer'} onExit={onExit} />
 }

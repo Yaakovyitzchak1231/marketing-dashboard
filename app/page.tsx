@@ -61,7 +61,7 @@ export default async function OverviewPage() {
         {o.readiness && o.readiness.topReasons.length ? (
           <section aria-labelledby="parked-h">
             <SectionHeader id="parked-h" title="Why leads are parked" meta={<Link href="/rules" className="text-accent">Lead rules</Link>} />
-            <Card className="px-4 py-3 text-[13px]">
+            <Card className="px-4 py-3 text-sm">
               <ul className="space-y-0.5">
                 {o.readiness.topReasons.map((r) => (
                   <li key={r.rule} className="text-ink-muted">
@@ -69,7 +69,7 @@ export default async function OverviewPage() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-[11px] text-ink-faint">
+              <p className="mt-1 text-2xs text-ink-faint">
                 Under each lead&apos;s pool rules · {fmt(o.readiness.scored)} of {fmt(o.readiness.companies)} leads scored
                 {o.readiness.stale ? ` · ${fmt(o.readiness.stale)} waiting to refresh` : ''}
               </p>
@@ -90,7 +90,7 @@ export default async function OverviewPage() {
                     const fraction = o.byStage[s] / maxStage
                     return (
                     <li key={s}>
-                      <Link href={`/leads?stage=${s}`} prefetch={false} className="grid grid-cols-[110px_minmax(0,1fr)_56px] items-center gap-3 px-4 py-2 text-[13px] hover:bg-canvas/70">
+                      <Link href={`/leads?stage=${s}`} prefetch={false} className="grid grid-cols-[110px_minmax(0,1fr)_56px] items-center gap-3 px-4 py-2 text-sm hover:bg-canvas/70">
                         <span className="text-ink-muted">{STAGE_LABELS[s]}</span>
                         <span className="h-1.5 rounded-full bg-line-soft">
                           <span className="block h-1.5 rounded-full bg-accent/70" style={{ width: `${fraction * 100}%` }} />
@@ -108,7 +108,7 @@ export default async function OverviewPage() {
           <div className="flex flex-col gap-7 sm:gap-8">
             <section aria-labelledby="team-h">
               <SectionHeader id="team-h" title="Team at work" meta={<Link href="/team" className="text-accent">Team board</Link>} />
-              <Card className="px-4 py-3 text-[13px]">
+              <Card className="px-4 py-3 text-sm">
                 <p className="text-ink">
                   <b className="font-semibold tabular-nums">{fmt(o.tasksActive)}</b> task{o.tasksActive === 1 ? '' : 's'} in progress ·{' '}
                   <b className="font-semibold tabular-nums">{fmt(o.tasksQueued)}</b> waiting
@@ -118,7 +118,7 @@ export default async function OverviewPage() {
                     </>
                   ) : null}
                 </p>
-                <p className="mt-1 text-[12px] text-ink-faint">
+                <p className="mt-1 text-xs text-ink-faint">
                   {o.agentsWorking.length
                     ? `Working now: ${o.agentsWorking.map((a) => `${a.display_name} (${a.tasks})`).join(', ')}`
                     : 'No one has a task checked out right now.'}
@@ -132,9 +132,9 @@ export default async function OverviewPage() {
                 {o.recent.length ? (
                   <ul className="divide-y divide-line-soft" data-testid="recent-activity">
                     {o.recent.map((e) => (
-                      <li key={e.id} className="px-4 py-2.5 text-[13px]">
+                      <li key={e.id} className="px-4 py-2.5 text-sm">
                         <p className="break-words text-ink">{e.summary}</p>
-                        <p className="text-[11px] tabular-nums text-ink-faint">
+                        <p className="text-2xs tabular-nums text-ink-faint">
                           {dateTime(e.at)}
                           {e.actor_name ? ` · ${e.actor_name}` : ''}
                         </p>
@@ -156,9 +156,9 @@ export default async function OverviewPage() {
 function Tile({ label, value, href, note, tone }: { label: string; value: number; href: string; note: ReactNode; tone?: 'accent' }) {
   return (
     <Link href={href} prefetch={false} className="group flex flex-col bg-surface px-4 py-3 hover:bg-canvas/60">
-      <span className="text-[12px] text-ink-muted group-hover:text-ink">{label}</span>
+      <span className="text-xs text-ink-muted group-hover:text-ink">{label}</span>
       <span className={`mt-1 text-metric font-semibold tabular-nums ${tone === 'accent' ? 'text-accent' : 'text-ink'}`}>{fmt(value)}</span>
-      <span className="mt-0.5 text-[11px] leading-snug text-ink-faint">{note}</span>
+      <span className="mt-0.5 text-2xs leading-snug text-ink-faint">{note}</span>
     </Link>
   )
 }

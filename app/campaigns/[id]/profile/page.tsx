@@ -43,11 +43,11 @@ export default async function CampaignProfilePage({ params, searchParams }: { pa
     >
       <CampaignTabs campaignId={id} active="profile" />
       {isNew ? (
-        <p className="mb-3 rounded-md border border-line bg-surface px-3 py-2 text-[12.5px] text-ink-muted">
+        <p className="mb-3 rounded-control border border-line bg-surface px-3 py-2 text-xs text-ink-muted">
           Campaign created. Step 2: set up its profile below. You can leave and come back; nothing here is required to save the campaign.
         </p>
       ) : null}
-      <p className="mb-4 text-[12.5px] text-ink-faint">
+      <p className="mb-4 text-xs text-ink-faint">
         Every monitor, trend chart, lead source and signal this campaign uses reads its setup from here &mdash; nothing is
         hard-coded to one industry. Type the industry below, optionally let AI suggest a starting set, then approve
         what&rsquo;s right.

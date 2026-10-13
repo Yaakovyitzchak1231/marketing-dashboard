@@ -38,14 +38,14 @@ export default async function IdeasPage() {
     <main className="mx-auto w-full max-w-shell px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h1 className="text-[15px] font-medium tracking-[-0.01em] text-ink">
+          <h1 className="text-base font-medium tracking-[-0.01em] text-ink">
             Ideas
           </h1>
-          <p className="mt-0.5 text-[11px] text-ink-faint">
+          <p className="mt-0.5 text-2xs text-ink-faint">
             What we are trying, what it costs, and what it returns.
           </p>
         </div>
-        <Link href="/" className="text-[12px] text-ink-muted underline-offset-4 hover:underline">
+        <Link href="/" className="text-xs text-ink-muted underline-offset-4 hover:underline">
           Back to dashboard
         </Link>
       </header>

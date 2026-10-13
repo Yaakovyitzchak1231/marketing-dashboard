@@ -97,7 +97,7 @@ export function ViewOnlyGuard() {
       role="status"
       className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4 sm:bottom-6 print:hidden"
     >
-      <p className="max-w-[420px] rounded-card border border-line bg-surface px-4 py-2.5 text-[13px] text-ink shadow-card">
+      <p className="max-w-[420px] rounded-control border border-line bg-surface px-4 py-2.5 text-sm text-ink shadow-card">
         {toast}
       </p>
     </div>

@@ -26,7 +26,7 @@ export function SeoNav() {
                 href={t.href}
                 prefetch={false}
                 aria-current={active ? 'page' : undefined}
-                className={`block whitespace-nowrap rounded-card border px-2.5 py-1 text-[12px] ${
+                className={`block whitespace-nowrap rounded-card border px-2.5 py-1 text-xs ${
                   active ? 'border-ink bg-ink text-white' : 'border-line bg-surface text-ink-muted hover:text-ink'
                 }`}
               >

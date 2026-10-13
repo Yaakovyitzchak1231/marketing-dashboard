@@ -140,12 +140,12 @@ export default async function CampaignPage({ params, searchParams }: { params: P
               {counts ? (
                 TIERS.map((t) => (
                   <Link key={t} href={qs({ tier: filter.tier === t ? null : t, page: null })} className={`bg-surface px-4 py-3 hover:bg-canvas ${filter.tier === t ? 'ring-1 ring-inset ring-accent' : ''}`}>
-                    <p className="text-[11.5px] text-ink-faint">{t === 'not_scored' ? 'Not scored yet' : TIER_WORDS[t]}</p>
-                    <p className="text-[18px] font-semibold tabular-nums text-ink">{fmt(counts[t])}</p>
+                    <p className="text-xs text-ink-faint">{t === 'not_scored' ? 'Not scored yet' : TIER_WORDS[t]}</p>
+                    <p className="text-lg font-semibold tabular-nums text-ink">{fmt(counts[t])}</p>
                   </Link>
                 ))
               ) : (
-                <p className="col-span-full bg-surface px-4 py-3 text-[13px] text-ink-muted">
+                <p className="col-span-full bg-surface px-4 py-3 text-sm text-ink-muted">
                   Each lead will show Ready (personalized or generic) or Parked with the reason once the rules update is merged. Until then nothing is scored, and nothing here is a guess.
                 </p>
               )}
@@ -156,7 +156,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 <button className={BUTTON}>Give this campaign its own rules (copy of {counts.ruleSet.name})</button>
               </form>
             ) : null}
-            <p className="mt-2 text-[11.5px] text-ink-faint">Only Ready leads can ever be uploaded, and only through Add to Instantly with your OK. Held leads (role-based-hold, needs-check) are never rejected or deleted here.</p>
+            <p className="mt-2 text-xs text-ink-faint">Only Ready leads can ever be uploaded, and only through Add to Instantly with your OK. Held leads (role-based-hold, needs-check) are never rejected or deleted here.</p>
           </section>
 
           <section aria-labelledby="leads-h">
@@ -176,8 +176,8 @@ export default async function CampaignPage({ params, searchParams }: { params: P
             <Card>
               {list.rows.length ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-[13px]">
-                    <thead className="border-b border-line text-[11.5px] uppercase tracking-[0.05em] text-ink-faint">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="border-b border-line text-xs uppercase tracking-[0.05em] text-ink-faint">
                       <tr>
                         <th className="w-8 px-3 py-2" />
                         <th className="px-2 py-2 font-medium">Lead</th>
@@ -197,29 +197,29 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                             <td className="px-3 py-2.5"><input type="checkbox" name="company_id" value={r.company_id} form="remove-form" aria-label={`Select ${r.name}`} /></td>
                             <td className="px-2 py-2.5">
                               <Link href={`/leads/${r.company_id}`} className="font-medium text-ink hover:text-accent">{r.name}</Link>
-                              <p className="text-[11.5px] text-ink-faint">{[place(r.city, r.state), r.website_domain].filter(Boolean).join(' · ')}{r.tags.length ? ` · ${r.tags.join(', ')}` : ''}</p>
+                              <p className="text-xs text-ink-faint">{[place(r.city, r.state), r.website_domain].filter(Boolean).join(' · ')}{r.tags.length ? ` · ${r.tags.join(', ')}` : ''}</p>
                             </td>
                             <td className="px-3 py-2.5">
                               {ct ? (
                                 <>
                                   <span className="text-ink">{ct.email ?? '—'}</span>
-                                  <p className="text-[11.5px] text-ink-faint">{ct.status} · {ct.verification_status}{r.contact_id ? ' · pinned' : ''}</p>
+                                  <p className="text-xs text-ink-faint">{ct.status} · {ct.verification_status}{r.contact_id ? ' · pinned' : ''}</p>
                                 </>
                               ) : <span className="text-ink-faint">No email</span>}
                             </td>
                             <td className="px-3 py-2.5">
                               <TierPill tier={r.verdict?.tier ?? null} suppressedReason={r.suppressed?.reason ?? null} />
-                              {r.verdict?.batch === 'role-inbox' ? <p className="mt-1 text-[11px] text-ink-faint">role-inbox batch</p> : null}
-                              {r.verdict?.stale ? <p className="mt-1 text-[11px] text-ink-faint">changed since scored</p> : null}
+                              {r.verdict?.batch === 'role-inbox' ? <p className="mt-1 text-2xs text-ink-faint">role-inbox batch</p> : null}
+                              {r.verdict?.stale ? <p className="mt-1 text-2xs text-ink-faint">changed since scored</p> : null}
                             </td>
-                            <td className="max-w-[260px] px-3 py-2.5 text-[12px] text-ink-muted">
+                            <td className="max-w-[260px] px-3 py-2.5 text-xs text-ink-muted">
                               {r.verdict?.reasons.length ? (
                                 <ul className="space-y-0.5">{r.verdict.reasons.map((x) => <li key={x.rule}>{x.label}{x.detail ? <span className="text-ink-faint"> — {x.detail}</span> : null}</li>)}</ul>
                               ) : r.verdict?.missing.length ? (
                                 <span>Generic: no {r.verdict.missing.join(', ')}</span>
                               ) : r.verdict ? <span className="text-ink-faint">—</span> : null}
                             </td>
-                            <td className="px-3 py-2.5 text-[12px] text-ink-muted">{nOver ? `${nOver} set` : <span className="text-ink-faint">none</span>}{r.note ? <p className="line-clamp-1 text-[11.5px] text-ink-faint">{r.note}</p> : null}</td>
+                            <td className="px-3 py-2.5 text-xs text-ink-muted">{nOver ? `${nOver} set` : <span className="text-ink-faint">none</span>}{r.note ? <p className="line-clamp-1 text-xs text-ink-faint">{r.note}</p> : null}</td>
                             <td className="px-3 py-2.5 text-right"><Link className={BUTTON} href={qs({ lead: String(r.company_id) }) + '#edit'}>Edit</Link></td>
                           </tr>
                         )
@@ -234,7 +234,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <form id="remove-form" action={removeLeadsAction} className="flex items-center gap-2">
                 <input type="hidden" name="campaign_id" value={id} />
-                <label className="flex items-center gap-1 text-[12px] text-ink-muted"><input type="checkbox" name="confirm" value="yes" /> confirm</label>
+                <label className="flex items-center gap-1 text-xs text-ink-muted"><input type="checkbox" name="confirm" value="yes" /> confirm</label>
                 <button className={BUTTON}>Remove selected from this campaign</button>
               </form>
               {list.pages > 1 ? (
@@ -254,15 +254,15 @@ export default async function CampaignPage({ params, searchParams }: { params: P
             <section aria-labelledby="edit-h" id="edit">
               <SectionHeader id="edit-h" title={`Edit: ${editing.name}`} meta={<Link className="hover:text-ink" href={qs({ lead: null })}>close</Link>} />
               <Card className="p-3">
-                {one(sp.saved) ? <p className="mb-2 text-[12px] text-good">Saved.</p> : null}
+                {one(sp.saved) ? <p className="mb-2 text-xs text-good">Saved.</p> : null}
                 <form action={updateCampaignLeadAction} className="space-y-3">
                   <input type="hidden" name="campaign_id" value={id} />
                   <input type="hidden" name="company_id" value={editing.company_id} />
                   <label className={LABEL}>Personalization overrides (one per line: field = value)
-                    <textarea name="overrides_text" rows={5} defaultValue={overridesToLines(editing.overrides)} className={`${INPUT} font-mono text-[12px]`} placeholder={'firstName = Dana\nstoreDetail = family-owned since 1952'} />
+                    <textarea name="overrides_text" rows={5} defaultValue={overridesToLines(editing.overrides)} className={`${INPUT} font-mono text-xs`} placeholder={'firstName = Dana\nstoreDetail = family-owned since 1952'} />
                   </label>
                   {editing.verdict && Object.keys(editing.verdict.merge).length ? (
-                    <p className="text-[11.5px] text-ink-faint">From the rules now: {Object.entries(editing.verdict.merge).map(([k, v]) => `${k} = ${v}`).join(' · ')}</p>
+                    <p className="text-xs text-ink-faint">From the rules now: {Object.entries(editing.verdict.merge).map(([k, v]) => `${k} = ${v}`).join(' · ')}</p>
                   ) : null}
                   <label className={LABEL}>Send to
                     <select name="contact_id" defaultValue={editing.contact_id ?? ''} className={INPUT}>
@@ -273,7 +273,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                   <label className={LABEL}>Tags (on the lead, comma-separated)<input name="tags" defaultValue={editing.tags.join(', ')} className={INPUT} /></label>
                   <label className={LABEL}>Note<textarea name="note" rows={2} defaultValue={editing.note ?? ''} maxLength={2000} className={INPUT} /></label>
                   {editing.verdict?.reasons.length ? (
-                    <div className="text-[12px] text-ink-muted">
+                    <div className="text-xs text-ink-muted">
                       <p className="font-medium text-ink">Why it’s parked</p>
                       <ul className="mt-1 list-disc pl-4">{editing.verdict.reasons.map((x) => <li key={x.rule}>{x.label}{x.detail ? ` — ${x.detail}` : ''}{x.standing ? ' (fixed rule)' : ''}</li>)}</ul>
                     </div>
@@ -319,7 +319,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                 </div>
                 <label className={LABEL}>Search<input name="q" defaultValue={pick?.q ?? ''} className={INPUT} placeholder="name, site, city, email" /></label>
                 {preview ? (
-                  <p className="text-[12px] text-ink">
+                  <p className="text-xs text-ink">
                     {fmt(preview.matching)} lead{preview.matching === 1 ? '' : 's'} match; {fmt(preview.already)} already in this campaign, so {fmt(preview.matching - preview.already)} would be added.
                     <input type="hidden" name="confirm" value="yes" />
                   </p>
@@ -352,7 +352,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                         {segments.map((seg) => <option key={seg.id} value={seg.id}>{seg.name}</option>)}
                       </select>
                     </label>
-                    <label className="flex items-center gap-1 text-[12px] text-ink-muted">
+                    <label className="flex items-center gap-1 text-xs text-ink-muted">
                       <input type="checkbox" name="keep_syncing" /> keep syncing (re-running this later adds any new matches; already-added leads are untouched)
                     </label>
                     {segments.length > 1 ? (
@@ -360,7 +360,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                         <legend>Exclude segments (never added, even if they also match)</legend>
                         <div className="mt-1 max-h-28 space-y-1 overflow-y-auto rounded border border-line-soft p-2">
                           {segments.map((seg) => (
-                            <label key={seg.id} className="flex items-center gap-1 text-[12px] text-ink-muted">
+                            <label key={seg.id} className="flex items-center gap-1 text-xs text-ink-muted">
                               <input type="checkbox" name="exclude_segment_id" value={seg.id} /> {seg.name}
                             </label>
                           ))}
@@ -425,7 +425,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                     options={[{ value: '', label: 'The pool’s rules' }, ...ruleSets.map((r) => ({ value: String(r.id), label: `${r.name} (${r.scope})` }))]}
                   />
                 ) : (
-                  <span className="block text-[12px] text-ink-muted">The pool’s rules (rules update not merged yet)</span>
+                  <span className="block text-xs text-ink-muted">The pool’s rules (rules update not merged yet)</span>
                 )}
               </label>
               <label className={LABEL}>
@@ -439,7 +439,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
                   options={[{ value: 'false', label: 'No' }, { value: 'true', label: 'Yes' }]}
                 />
               </label>
-              <p className="text-[11px] text-ink-faint">Click a value to change it; it saves on its own, one field at a time, and each change is in History above. Pool and rules can only be changed by a person.</p>
+              <p className="text-2xs text-ink-faint">Click a value to change it; it saves on its own, one field at a time, and each change is in History above. Pool and rules can only be changed by a person.</p>
             </Card>
           </section>
 
@@ -447,11 +447,11 @@ export default async function CampaignPage({ params, searchParams }: { params: P
             <SectionHeader id="archive-h" title="Archive" />
             <form action={archiveCampaignAction} className="mt-3 flex items-center gap-2">
               <input type="hidden" name="campaign_id" value={id} />
-              <label className="flex items-center gap-1 text-[12px] text-ink-muted"><input type="checkbox" name="confirm" value="yes" required /> sure</label>
+              <label className="flex items-center gap-1 text-xs text-ink-muted"><input type="checkbox" name="confirm" value="yes" required /> sure</label>
               <button className={BUTTON}>Archive campaign</button>
               <Pill tone="neutral">{campaign.status}</Pill>
             </form>
-            <p className="mt-2 text-[11.5px] text-ink-faint">Every change here is in Activity with who made it and old → new. Nothing on this page sends to Instantly.</p>
+            <p className="mt-2 text-xs text-ink-faint">Every change here is in Activity with who made it and old → new. Nothing on this page sends to Instantly.</p>
           </section>
         </aside>
       </div>

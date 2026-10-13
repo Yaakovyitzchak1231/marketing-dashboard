@@ -1,31 +1,41 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
-import { AppNav } from '@/components/nav/AppNav'
+import { AppShell } from '@/components/shell/AppShell'
+import { THEME_BOOT_SCRIPT } from '@/components/shell/preferences'
 import { PageComments } from '@/components/comments/PageComments'
 import { ViewOnlyGuard } from '@/components/auth/ViewOnlyGuard'
 
 /**
- * Document metadata. Deliberately plain -- no OpenGraph image, no theme-color
- * splash, no manifest. This is an internal tool, and dressing it up as a
- * product is the first step toward it looking like a template.
+ * Document metadata. Deliberately plain -- no OpenGraph image, no splash, no
+ * manifest. This is an internal tool.
  */
 export const metadata: Metadata = {
-  title: 'Marketing dashboard',
+  title: { default: 'TapDash', template: '%s · TapDash' },
   description: 'Leads, verification, campaigns and replies in one place.',
 }
 
-// No `viewport` export. The default initial scale is exactly what this page
-// wants, and setting it by hand is a number in the render path that has to be
-// argued about every time the theme changes. Omitting it is the honest choice:
-// the browser already does the right thing.
+/** viewport-fit=cover so the phone bottom bar can sit above the home indicator. */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f8f7f4' },
+    { media: '(prefers-color-scheme: dark)', color: '#161513' },
+  ],
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body>
-        <AppNav />
-        {children}
-        <PageComments />
+        <AppShell>
+          {children}
+          <PageComments />
+        </AppShell>
         <ViewOnlyGuard />
       </body>
     </html>

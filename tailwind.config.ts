@@ -17,39 +17,42 @@ import type { Config } from 'tailwindcss'
  * a selected range, an active tab, a link. It is never a background wash and
  * never a gradient.
  */
+/** A colour token backed by a CSS variable in app/globals.css. */
+const v = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`
+
 const config: Config = {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        // Warm off-white surfaces. Not #fff -- pure white reads as clinical
-        // and makes hairline borders disappear.
-        canvas: '#faf9f7', // page background
-        surface: '#ffffff', // cards, table header
-        // Hairlines. Two weights: `line` for structure, `line-soft` for
-        // interior division that should not compete with it.
-        line: '#e3e0da',
-        'line-soft': '#efede8',
-        // Ink ramp. `ink` is body text, `ink-muted` is secondary,
-        // `ink-faint` is for genuinely de-emphasised text.
-        ink: '#1c1a17',
-        'ink-muted': '#5f5a52',
-        'ink-faint': '#8a847a',
+        // Every colour is a CSS variable from app/globals.css (space-separated
+        // RGB channels), so light/dark themes swap in one place and opacity
+        // modifiers (`bg-accent/10`) keep working. Do not add hex values here.
+        canvas: v('canvas'), // page background
+        surface: v('surface'), // cards, table header
+        'surface-2': v('surface-2'), // rail, sunken panels, disabled fields
+        paper: v('surface-2'),
+        // Hairlines. `line` for structure, `line-soft` for interior division.
+        line: v('line'),
+        'line-soft': v('line-soft'),
+        hairline: v('line-soft'),
+        // Ink ramp: body, secondary, de-emphasised.
+        ink: v('ink'),
+        'ink-muted': v('ink-muted'),
+        'ink-faint': v('ink-faint'),
         // THE accent. One colour, used sparingly.
-        accent: '#2f5d8c',
-        'accent-soft': '#eef2f7',
-        // Unavailable / not-reported state. A warm grey, never a red:
-        // a missing metric is not an error, it is an absence of data.
-        unavailable: '#a8a29a',
-        // Caution. Used only for a genuinely degraded value.
-        warn: '#8a5a20',
-        'warn-soft': '#fbf4ea',
-        // Status tones for pills and severity bars only -- muted, never a fill
-        // behind a whole section. Good = working / healthy; bad = fix now.
-        good: '#2f6b4a',
-        'good-soft': '#eef5f0',
-        bad: '#a23b2c',
-        'bad-soft': '#fbefec',
+        accent: v('accent'),
+        'accent-strong': v('accent-strong'),
+        'accent-soft': v('accent-soft'),
+        'on-accent': v('on-accent'),
+        // Unavailable / not-reported: a warm grey, never a red.
+        unavailable: v('unavailable'),
+        warn: v('warn'),
+        'warn-soft': v('warn-soft'),
+        good: v('good'),
+        'good-soft': v('good-soft'),
+        bad: v('bad'),
+        'bad-soft': v('bad-soft'),
       },
       fontFamily: {
         // System stack -- no webfont, no FOUT, no layout shift.
@@ -79,15 +82,36 @@ const config: Config = {
       },
       fontSize: {
         // A restrained scale. No 7xl hero numbers.
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
         metric: ['1.75rem', { lineHeight: '2.1rem', letterSpacing: '-0.02em' }],
         'metric-sm': ['1.25rem', { lineHeight: '1.6rem', letterSpacing: '-0.01em' }],
       },
       borderRadius: {
-        card: '4px',
+        card: '12px',
+        control: '8px',
+        input: '8px',
+        sheet: '16px',
       },
       boxShadow: {
         // Hairline-first: cards are defined by their border, not a drop shadow.
-        card: '0 1px 2px rgba(28, 26, 23, 0.04)',
+        card: '0 1px 2px rgb(var(--c-shadow) / 0.04)',
+        raised: '0 1px 2px rgb(var(--c-shadow) / 0.06), 0 4px 12px rgb(var(--c-shadow) / 0.08)',
+        overlay: '0 2px 6px rgb(var(--c-shadow) / 0.08), 0 16px 40px rgb(var(--c-shadow) / 0.18)',
+      },
+      spacing: {
+        // Desktop side rail width (the main column is padded by the same amount).
+        rail: '15rem',
+        // Minimum touch target.
+        tap: '2.75rem',
+      },
+      zIndex: {
+        // Stacking order, low to high. The comment layer's pill sits at 50, so
+        // sheets and the phone drawer (55) cover it; the view-only toast is 60.
+        rail: '30',
+        bar: '40',
+        sheet: '55',
+        palette: '65',
+        toast: '70',
       },
       maxWidth: {
         shell: '1200px',
@@ -103,9 +127,24 @@ const config: Config = {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'slide-in-up': {
+          from: { transform: 'translateY(100%)' },
+          to: { transform: 'translateY(0)' },
+        },
+        shimmer: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.55' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 240ms ease-out',
+        'slide-in-right': 'slide-in-right 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+        'slide-in-up': 'slide-in-up 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+        shimmer: 'shimmer 1.6s ease-in-out infinite',
       },
     },
   },

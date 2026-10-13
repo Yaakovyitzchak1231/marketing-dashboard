@@ -67,14 +67,14 @@ export function EventTypesSection({
                 Register
               </button>
             </form>
-            <p className="mt-2 text-[12px] text-ink-faint">Key: lowercase letters, digits, &apos;_&apos; or &apos;.&apos;, starting with a letter. The key can&apos;t be changed later.</p>
+            <p className="mt-2 text-xs text-ink-faint">Key: lowercase letters, digits, &apos;_&apos; or &apos;.&apos;, starting with a letter. The key can&apos;t be changed later.</p>
           </Card>
         </section>
       ) : null}
 
       <section className="mb-6">
         <SectionHeader title="Event types" meta={`${types.length} registered`} />
-        <p className="mb-2 text-[12.5px] text-ink-muted">
+        <p className="mb-2 text-xs text-ink-muted">
           An inactive type is refused by track_event and track_events until it is activated again. Built-in types come from Instantly and the
           status history, so they can&apos;t be relabelled or deactivated. Stored events counts the rows in lp.lead_events.
         </p>
@@ -82,7 +82,7 @@ export function EventTypesSection({
           <EmptyNote>No event types registered.</EmptyNote>
         ) : (
           <Card className="overflow-x-auto p-0">
-            <table className="w-full border-collapse text-[13px]" data-testid="event-types-table">
+            <table className="w-full border-collapse text-sm" data-testid="event-types-table">
               <thead>
                 <tr className="border-b border-line">
                   <th className={TH}>Key</th>
@@ -100,23 +100,23 @@ export function EventTypesSection({
                   const builtIn = isBuiltInEventType(t)
                   return (
                     <tr key={t.key} className="border-b border-line/60" data-testid={`event-type-${t.key}`}>
-                      <td className={`${TD} font-mono text-[12px]`}>{t.key}</td>
+                      <td className={`${TD} font-mono text-xs`}>{t.key}</td>
                       <td className={TD}>{t.label}</td>
                       <td className={TD}>{t.category}</td>
                       <td className={TD}>
                         {t.source}
-                        {builtIn ? <span className="ml-1.5 text-[11px] text-ink-faint">built-in</span> : null}
+                        {builtIn ? <span className="ml-1.5 text-2xs text-ink-faint">built-in</span> : null}
                       </td>
                       <td className={TD}>{t.active ? <Pill tone="good">Active</Pill> : <Pill tone="neutral">Inactive</Pill>}</td>
                       <td className={TDN}>{t.stored_count}</td>
                       <td className={`${TD} tabular-nums text-ink-muted`}>
                         {fmtDate(t.created_at)}
-                        {t.created_by ? <span className="block text-[11.5px]">{t.created_by_name ?? t.created_by}</span> : null}
+                        {t.created_by ? <span className="block text-xs">{t.created_by_name ?? t.created_by}</span> : null}
                       </td>
                       {canEdit ? (
                         <td className={TD}>
                           {builtIn ? (
-                            <span className="text-[12px] text-ink-faint">Fixed</span>
+                            <span className="text-xs text-ink-faint">Fixed</span>
                           ) : (
                             <div className="flex flex-wrap items-center gap-1.5">
                               <form action={updateAction} className="flex flex-wrap items-center gap-1.5">

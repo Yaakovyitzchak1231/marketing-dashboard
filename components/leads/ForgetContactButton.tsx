@@ -16,25 +16,25 @@ export function ForgetContactButton({ contactId, email }: { contactId: number; e
   const expected = email ? email.trim().toLowerCase() : 'forget'
 
   if (state === 'done') {
-    return <span className="text-[11px] text-ink-faint">Forgotten</span>
+    return <span className="text-2xs text-ink-faint">Forgotten</span>
   }
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-[11px] text-ink-faint underline decoration-dotted hover:text-bad">
+      <button type="button" onClick={() => setOpen(true)} className="text-2xs text-ink-faint underline decoration-dotted hover:text-bad">
         Forget this person
       </button>
     )
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5 rounded-[4px] border border-bad/30 bg-bad-soft px-2 py-1">
-      <span className="text-[11px] text-ink">
+      <span className="text-2xs text-ink">
         Type <strong>{expected}</strong> to permanently remove this contact&apos;s info:
       </span>
       <input
         value={typed}
         onChange={(e) => setTyped(e.target.value)}
         placeholder={expected}
-        className="w-40 rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-[11px]"
+        className="w-40 rounded-[3px] border border-line bg-surface px-1.5 py-0.5 text-2xs"
         autoFocus
       />
       <button
@@ -51,14 +51,14 @@ export function ForgetContactButton({ contactId, email }: { contactId: number; e
           }
           setState('done')
         }}
-        className="rounded-[3px] bg-bad px-2 py-0.5 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-[3px] bg-bad px-2 py-0.5 text-2xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
       >
         {state === 'saving' ? 'Removing…' : 'Forget'}
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-ink-faint hover:text-ink">
+      <button type="button" onClick={() => setOpen(false)} className="text-2xs text-ink-faint hover:text-ink">
         Cancel
       </button>
-      {error ? <span role="alert" className="w-full text-[11px] text-bad">{error}</span> : null}
+      {error ? <span role="alert" className="w-full text-2xs text-bad">{error}</span> : null}
     </span>
   )
 }

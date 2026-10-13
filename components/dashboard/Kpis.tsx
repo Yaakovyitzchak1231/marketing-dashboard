@@ -14,11 +14,11 @@ interface Kpi {
 
 function DeltaBadge({ delta, hasPrevious }: { delta: Delta | null; hasPrevious: boolean }) {
   if (!hasPrevious) return null
-  if (!delta) return <span className="text-[11px] text-ink-faint">no prior data</span>
+  if (!delta) return <span className="text-2xs text-ink-faint">no prior data</span>
   const tone = delta.tone === 'good' ? 'text-good' : delta.tone === 'bad' ? 'text-bad' : 'text-ink-faint'
   const arrow = delta.direction === 'up' ? '↑' : delta.direction === 'down' ? '↓' : ''
   return (
-    <span className={`font-numeric text-[11px] font-medium ${tone}`}>
+    <span className={`font-numeric text-2xs font-medium ${tone}`}>
       {arrow}
       {delta.direction === 'flat' ? delta.text : delta.text.replace(/^[+-]/, '')}
       <span className="ml-1 font-sans font-normal text-ink-faint">vs prior</span>
@@ -70,11 +70,11 @@ export function Kpis({
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card md:grid-cols-3 xl:grid-cols-6">
         {kpis.map((k) => (
           <div key={k.key} className="bg-surface px-4 py-3.5" data-testid={`kpi-${k.key}`} title={k.help}>
-            <div className="text-[12px] text-ink-muted">{k.label}</div>
+            <div className="text-xs text-ink-muted">{k.label}</div>
             <div className="mt-1 font-numeric text-metric text-ink">
               <Val value={k.value}>{k.display}</Val>
             </div>
-            <div className="mt-1 flex min-h-[16px] flex-wrap items-baseline gap-x-2 text-[11px] text-ink-faint">
+            <div className="mt-1 flex min-h-[16px] flex-wrap items-baseline gap-x-2 text-2xs text-ink-faint">
               {k.sub ? <span>{k.sub}</span> : null}
               <DeltaBadge delta={k.delta} hasPrevious={p !== null} />
             </div>
@@ -114,7 +114,7 @@ export function SecondaryStats({
     },
   ]
   return (
-    <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 px-1 text-[12px]">
+    <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 px-1 text-xs">
       {items.map((i) => (
         <div key={i.label} className="flex items-baseline gap-1.5" title={i.title}>
           <dt className="text-ink-faint">{i.label}</dt>

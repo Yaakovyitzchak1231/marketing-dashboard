@@ -17,14 +17,14 @@ function InsightItem({ insight }: { insight: Insight }) {
       <span aria-hidden className={`absolute left-0 top-4 bottom-4 w-[3px] rounded-r ${s.bar}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className={`text-[11px] font-semibold uppercase tracking-[0.06em] ${s.text}`}>{s.label}</span>
+          <span className={`text-2xs font-semibold uppercase tracking-[0.06em] ${s.text}`}>{s.label}</span>
           {insight.entity ? (
-            <span className="truncate text-[12px] text-ink-faint">{insight.entity.name}</span>
+            <span className="truncate text-xs text-ink-faint">{insight.entity.name}</span>
           ) : null}
         </div>
-        <p className="mt-1 text-[15px] font-semibold leading-snug text-ink">{insight.title}</p>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{insight.detail}</p>
-        <p className="mt-2 text-[13px] leading-relaxed text-ink">
+        <p className="mt-1 text-base font-semibold leading-snug text-ink">{insight.title}</p>
+        <p className="mt-1 text-sm leading-relaxed text-ink-muted">{insight.detail}</p>
+        <p className="mt-2 text-sm leading-relaxed text-ink">
           <span className="font-semibold">Next: </span>
           {insight.action}
         </p>
@@ -32,7 +32,7 @@ function InsightItem({ insight }: { insight: Insight }) {
       {insight.metric ? (
         <div className="hidden shrink-0 text-right sm:block">
           <div className="font-numeric text-metric-sm text-ink">{insight.metric.value}</div>
-          <div className="mt-0.5 max-w-[140px] text-[11px] leading-tight text-ink-faint">{insight.metric.label}</div>
+          <div className="mt-0.5 max-w-[140px] text-2xs leading-tight text-ink-faint">{insight.metric.label}</div>
         </div>
       ) : null}
     </li>
@@ -68,7 +68,7 @@ export function Insights({ insights }: { insights: Insight[] }) {
             </ul>
             {rest.length ? (
               <details className="group border-t border-line-soft">
-                <summary className="cursor-pointer list-none px-4 py-3 text-[13px] font-medium text-accent hover:underline sm:px-5">
+                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-accent hover:underline sm:px-5">
                   <span className="group-open:hidden">Show {rest.length} more</span>
                   <span className="hidden group-open:inline">Show fewer</span>
                 </summary>

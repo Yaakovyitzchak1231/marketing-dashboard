@@ -20,12 +20,12 @@ function dimsLabel(dims: Record<string, unknown>): string | null {
 
 export function HealthRow({ integration, now }: { integration: Integration; now: Date }) {
   if (!integration.health_checked_at) {
-    return <p className="text-[12px] text-ink-faint">Not checked yet — runner not deployed</p>
+    return <p className="text-xs text-ink-faint">Not checked yet — runner not deployed</p>
   }
   const tone = HEALTH_TONE[integration.health_status ?? 'unknown'] ?? 'neutral'
   const word = HEALTH_WORD[integration.health_status ?? 'unknown'] ?? 'Unknown'
   return (
-    <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-ink-faint">
+    <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
       <Pill tone={tone} title={integration.health_detail ?? undefined}>{word}</Pill>
       <span>
         checked <Ago at={integration.health_checked_at} now={now} />
@@ -37,7 +37,7 @@ export function HealthRow({ integration, now }: { integration: Integration; now:
 export function MetricRow({ metric }: { metric: LatestMetric }) {
   const dims = dimsLabel(metric.dims)
   return (
-    <li className="flex items-baseline justify-between gap-3 py-1 text-[12.5px]">
+    <li className="flex items-baseline justify-between gap-3 py-1 text-xs">
       <span className="min-w-0 truncate text-ink-muted">
         {metricLabel(metric.metric)}
         {dims ? <span className="text-ink-faint"> · {dims}</span> : null}
@@ -62,21 +62,21 @@ export function ToolCard({
     <Card className="flex flex-col gap-2.5 p-4">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-[13.5px] font-semibold text-ink">{integration.name}</h3>
+          <h3 className="text-sm font-semibold text-ink">{integration.name}</h3>
           {integration.url ? (
             <Link
               href={integration.url}
               target="_blank"
               rel="noreferrer"
-              className="shrink-0 text-[12px] font-medium text-accent hover:underline"
+              className="shrink-0 text-xs font-medium text-accent hover:underline"
             >
               Open
             </Link>
           ) : null}
         </div>
-        {integration.description ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{integration.description}</p> : null}
+        {integration.description ? <p className="mt-0.5 text-xs leading-snug text-ink-faint">{integration.description}</p> : null}
         {integration.reachable_from === 'tailnet' ? (
-          <p className="mt-1 text-[11px] text-ink-faint">Tailnet only — opens only on your Tailscale devices</p>
+          <p className="mt-1 text-2xs text-ink-faint">Tailnet only — opens only on your Tailscale devices</p>
         ) : null}
       </div>
       <HealthRow integration={integration} now={now} />
@@ -95,14 +95,14 @@ export function LinkCard({ integration }: { integration: Integration }) {
   return (
     <Card className="flex flex-col gap-1.5 p-4">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[13.5px] font-semibold text-ink">{integration.name}</h3>
+        <h3 className="text-sm font-semibold text-ink">{integration.name}</h3>
         {integration.url ? (
-          <Link href={integration.url} target="_blank" rel="noreferrer" className="shrink-0 text-[12px] font-medium text-accent hover:underline">
+          <Link href={integration.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-medium text-accent hover:underline">
             Open
           </Link>
         ) : null}
       </div>
-      {integration.description ? <p className="text-[12px] leading-snug text-ink-faint">{integration.description}</p> : null}
+      {integration.description ? <p className="text-xs leading-snug text-ink-faint">{integration.description}</p> : null}
     </Card>
   )
 }

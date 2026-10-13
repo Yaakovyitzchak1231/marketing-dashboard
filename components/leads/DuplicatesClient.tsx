@@ -10,7 +10,7 @@ const RULE_LABEL: Record<string, string> = { domain: 'same website', phone: 'sam
 function Row({ label, a, b, onPick, picked }: { label: string; a: string | null; b: string | null; onPick: (v: 'keep' | 'merge') => void; picked: 'keep' | 'merge' }) {
   if (a === b) return null // nothing to pick when both sides already agree (or are both empty)
   return (
-    <div className="grid grid-cols-[100px_1fr_1fr] items-center gap-2 border-b border-line-soft py-1.5 text-[12px]">
+    <div className="grid grid-cols-[100px_1fr_1fr] items-center gap-2 border-b border-line-soft py-1.5 text-xs">
       <span className="text-ink-faint">{label}</span>
       <button type="button" onClick={() => onPick('keep')} className={`truncate rounded-[3px] px-1.5 py-1 text-left ${picked === 'keep' ? 'bg-accent-soft text-accent' : 'hover:bg-canvas'}`}>
         {a || <span className="text-unavailable">—</span>}
@@ -53,13 +53,13 @@ function PairCard({ entity, cand, onMerged }: { entity: MergeEntity; cand: Merge
             <Pill key={r} tone="neutral">{RULE_LABEL[r] ?? r}</Pill>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+        <div className="flex items-center gap-2 text-2xs text-ink-faint">
           Keep:
           <button type="button" onClick={() => setKeepSide('a')} className={`rounded-full border px-2 py-0.5 ${keepSide === 'a' ? 'border-accent text-accent' : 'border-line'}`}>#{cand.a.id}</button>
           <button type="button" onClick={() => setKeepSide('b')} className={`rounded-full border px-2 py-0.5 ${keepSide === 'b' ? 'border-accent text-accent' : 'border-line'}`}>#{cand.b.id}</button>
         </div>
       </div>
-      <div className="grid grid-cols-[100px_1fr_1fr] gap-2 border-b border-line pb-1 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+      <div className="grid grid-cols-[100px_1fr_1fr] gap-2 border-b border-line pb-1 text-2xs font-medium uppercase tracking-wide text-ink-faint">
         <span />
         <span>Keep (#{keep.id})</span>
         <span>Merge away (#{loser.id})</span>
@@ -80,10 +80,10 @@ function PairCard({ entity, cand, onMerged }: { entity: MergeEntity; cand: Merge
         )
       })}
       <div className="mt-3 flex items-center gap-2">
-        <button type="button" disabled={pending} onClick={doMerge} className="rounded-card border border-accent bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" disabled={pending} onClick={doMerge} className="rounded-control border border-accent bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50">
           {pending ? 'Merging…' : `Merge #${loser.id} into #${keep.id}`}
         </button>
-        {error ? <span role="alert" className="text-[12px] text-bad">{error}</span> : null}
+        {error ? <span role="alert" className="text-xs text-bad">{error}</span> : null}
       </div>
     </Card>
   )
@@ -91,7 +91,7 @@ function PairCard({ entity, cand, onMerged }: { entity: MergeEntity; cand: Merge
 
 export function DuplicatesClient({ entity, initial }: { entity: MergeEntity; initial: MergeCandidate[] }) {
   const [candidates, setCandidates] = useState(initial)
-  if (!candidates.length) return <p className="px-1 py-8 text-center text-[13px] text-ink-faint">No likely duplicates found right now.</p>
+  if (!candidates.length) return <p className="px-1 py-8 text-center text-sm text-ink-faint">No likely duplicates found right now.</p>
   return (
     <div className="flex flex-col gap-3">
       {candidates.map((c) => (

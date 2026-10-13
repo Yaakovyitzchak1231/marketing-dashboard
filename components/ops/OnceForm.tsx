@@ -31,12 +31,12 @@ export function OnceForm({
         </button>
       </form>
       {state ? (
-        <div className={`mt-2 rounded-md border p-2 text-[12px] leading-snug ${state.ok ? 'border-line bg-surface' : 'border-bad/40 text-bad'}`} role="status">
+        <div className={`mt-2 rounded-md border p-2 text-xs leading-snug ${state.ok ? 'border-line bg-surface' : 'border-bad/40 text-bad'}`} role="status">
           {state.secret ? (
             <>
               <p className="font-medium text-ink">{state.secretLabel ?? 'Secret'} (shown once)</p>
               <div className="mt-1 flex items-center gap-2">
-                <code className="min-w-0 flex-1 break-all rounded bg-canvas px-1.5 py-1 font-mono text-[11.5px] text-ink">{state.secret}</code>
+                <code className="min-w-0 flex-1 break-all rounded bg-canvas px-1.5 py-1 font-mono text-xs text-ink">{state.secret}</code>
                 <button
                   type="button"
                   className="shrink-0 text-accent"

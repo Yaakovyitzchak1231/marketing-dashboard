@@ -45,7 +45,7 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
     return s ? `/team?${s}` : '/team'
   }
   const chip = (active: boolean) =>
-    `rounded-full border px-2.5 py-1 text-[12px] ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
+    `rounded-full border px-2.5 py-1 text-xs ${active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
 
   return (
     <PageFrame
@@ -78,7 +78,7 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
               <section key={c.key} aria-labelledby={`col-${c.key}`} className="min-w-0">
                 <SectionHeader id={`col-${c.key}`} title={c.title} meta={<span className="tabular-nums">{list.length}</span>} />
                 <div className="space-y-2">
-                  {list.length ? list.map((t) => <TaskCard key={t.id} t={t} now={now} />) : <p className="rounded-card border border-dashed border-line px-3 py-6 text-center text-[12px] text-ink-faint">Nothing here</p>}
+                  {list.length ? list.map((t) => <TaskCard key={t.id} t={t} now={now} />) : <p className="rounded-card border border-dashed border-line px-3 py-6 text-center text-xs text-ink-faint">Nothing here</p>}
                 </div>
               </section>
             )
@@ -89,16 +89,16 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
           <SectionHeader title="New task" />
           <Card className="p-3">
             <form action={createTaskAction} className="space-y-2.5">
-              <label className="block text-[12px] text-ink-muted">
+              <label className="block text-xs text-ink-muted">
                 What needs doing
                 <input name="title" required maxLength={300} className={`${inputCls} mt-1`} placeholder="e.g. Research 50 Maryland jewelers" />
               </label>
-              <label className="block text-[12px] text-ink-muted">
+              <label className="block text-xs text-ink-muted">
                 Details (use @tab, @hermes to loop someone in)
                 <textarea name="body" rows={3} className={`${inputCls} mt-1`} />
               </label>
               <div className="grid grid-cols-2 gap-2">
-                <label className="block text-[12px] text-ink-muted">
+                <label className="block text-xs text-ink-muted">
                   Who
                   <select name="assigned_to" className={`${inputCls} mt-1`} defaultValue="tab">
                     <option value="">Anyone</option>
@@ -109,7 +109,7 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
                     ))}
                   </select>
                 </label>
-                <label className="block text-[12px] text-ink-muted">
+                <label className="block text-xs text-ink-muted">
                   Project
                   <select name="project_id" className={`${inputCls} mt-1`} defaultValue={projectId ?? ''}>
                     <option value="">None</option>
@@ -121,7 +121,7 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
                   </select>
                 </label>
               </div>
-              <label className="block text-[12px] text-ink-muted">
+              <label className="block text-xs text-ink-muted">
                 Priority
                 <select name="priority" className={`${inputCls} mt-1`} defaultValue="0">
                   <option value="0">Normal</option>
@@ -134,7 +134,7 @@ export default async function TeamPage({ searchParams }: { searchParams: SP }) {
               </button>
             </form>
           </Card>
-          <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
             Agents pick up tasks through the ops API the same way you do here. A task assigned to someone waits for them; an unassigned one goes to whoever claims it first.
           </p>
           {!tasks.length ? <EmptyNote>No tasks yet.</EmptyNote> : null}

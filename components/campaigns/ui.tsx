@@ -1,11 +1,12 @@
+import { controlClass } from '@/components/ui/classes'
 import type { ReactNode } from 'react'
 import { Pill, type PillTone } from '@/components/dashboard/primitives'
 import type { Tier } from '@/lib/campaigns/evaluator'
 import { TIER_WORDS } from '@/lib/campaigns/evaluator'
 import { REASON_WORDS, type SuppressionReason } from '@/lib/suppressions/store'
 
-export const INPUT = 'rounded-card border border-line bg-surface px-2 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
-export const LABEL = 'flex flex-col gap-1 text-[12px] text-ink-muted'
+export const INPUT = controlClass
+export const LABEL = 'flex flex-col gap-1.5 text-xs font-medium text-ink'
 
 const TIER_TONE: Record<Tier, PillTone> = { ready_personalized: 'good', ready_generic: 'accent', parked: 'warn' }
 
@@ -20,7 +21,7 @@ export function Notice({ tone, children }: { tone: 'good' | 'bad'; children: Rea
   return (
     <p
       role={tone === 'bad' ? 'alert' : 'status'}
-      className={`mb-4 rounded-card border px-3 py-2 text-[13px] ${tone === 'bad' ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}
+      className={`mb-4 rounded-card border px-3 py-2 text-sm ${tone === 'bad' ? 'border-bad/30 bg-bad-soft text-bad' : 'border-good/30 bg-good-soft text-good'}`}
     >
       {children}
     </p>

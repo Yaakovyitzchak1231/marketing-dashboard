@@ -17,7 +17,7 @@ export function Dashboard({ data, sample = false }: { data: DashboardData; sampl
   return (
     <div className="min-h-screen">
       {sample ? (
-        <div className="bg-ink px-4 py-1.5 text-center text-[12px] font-semibold uppercase tracking-[0.08em] text-canvas" data-testid="sample-banner">
+        <div className="bg-ink px-4 py-1.5 text-center text-xs font-semibold uppercase tracking-[0.08em] text-canvas" data-testid="sample-banner">
           Sample data · local preview only · not your Instantly numbers
         </div>
       ) : null}
@@ -43,8 +43,8 @@ function Body({ data }: { data: DashboardData }) {
       {data.errors.length ? <ErrorsNotice errors={data.errors} /> : null}
       {nothing && data.errors.length === 0 ? (
         <Card className="px-5 py-10 text-center" >
-          <p className="text-[15px] font-medium text-ink" data-testid="empty-range">No campaign activity in {rangeLabel(data.range.key).toLowerCase()}.</p>
-          <p className="mt-1 text-[13px] text-ink-muted">Try a longer range, or check that your campaigns are running in Instantly.</p>
+          <p className="text-base font-medium text-ink" data-testid="empty-range">No campaign activity in {rangeLabel(data.range.key).toLowerCase()}.</p>
+          <p className="mt-1 text-sm text-ink-muted">Try a longer range, or check that your campaigns are running in Instantly.</p>
         </Card>
       ) : (
         <>
@@ -73,7 +73,7 @@ function Body({ data }: { data: DashboardData }) {
 
 export function Footnote({ range, previous }: { range: DateRange; previous: DashboardData['previous'] }) {
   return (
-    <footer className="border-t border-line pt-4 text-[11px] leading-relaxed text-ink-faint">
+    <footer className="border-t border-line pt-4 text-2xs leading-relaxed text-ink-faint">
       Reply rate = leads who replied ÷ leads contacted (auto-replies excluded). Positive rate = leads marked interested in Instantly ÷ leads contacted.
       Bounce rate = bounced ÷ emails sent. Days are counted in {range.timezone}.
       {previous ? ' Changes compare with the same number of days just before this range.' : ''}

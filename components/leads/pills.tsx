@@ -79,7 +79,7 @@ export function TagPill({ tag, colour }: { tag: string; colour: string | null })
   if (!colour) return <Pill tone="neutral">{tag}</Pill>
   return (
     <span
-      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-[1px] text-[11px] font-medium leading-[18px]"
+      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-[1px] text-2xs font-medium leading-[18px]"
       style={{ borderColor: `${colour}4d`, backgroundColor: `${colour}1a`, color: colour }}
     >
       {tag}
