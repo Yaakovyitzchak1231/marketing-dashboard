@@ -75,17 +75,6 @@ export interface VerifyEnv {
   resolver?: DnsResolver
 }
 
-/** Keys and prices from the environment. Keys never leave the server. */
-export function verifyEnvFromProcess(env: Record<string, string | undefined> = process.env): VerifyEnv {
-  return {
-    keys: {
-      millionverifier: env.MILLIONVERIFIER_API_KEY?.trim() || null,
-      zerobounce: env.ZEROBOUNCE_API_KEY?.trim() || null,
-    },
-    pricing: getPricing(env),
-  }
-}
-
 /** Settings-aware env: MillionVerifier/ZeroBounce keys resolve through the
  * settings store (DB first, env fallback) the same way lib/instantly/client.ts
  * and lib/notify/mail.ts do, so a key saved on /settings takes effect at once. */

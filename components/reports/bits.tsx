@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { Pill, type PillTone } from '@/components/dashboard/primitives'
 import { LEVEL_WORDS, type RunwayLevel } from '@/lib/reports/runway'
 import { formatCount, formatPct } from '@/components/dashboard/format'
@@ -25,12 +24,6 @@ export function SourceErrors({ errors }: { errors: string[] }) {
 const LEVEL_TONE: Record<RunwayLevel, PillTone> = { ok: 'good', low: 'warn', out: 'bad', not_sending: 'neutral', no_data: 'neutral' }
 export function LevelPill({ level }: { level: RunwayLevel }) {
   return <Pill tone={LEVEL_TONE[level]}>{LEVEL_WORDS[level]}</Pill>
-}
-
-/** "no data" for null, the formatted value otherwise. */
-export function NoData({ v, children }: { v: unknown; children: ReactNode }) {
-  if (v === null || v === undefined) return <span className="text-unavailable">no data</span>
-  return <>{children}</>
 }
 
 export const fmtInt = (n: number) => Math.round(n).toLocaleString('en-US')

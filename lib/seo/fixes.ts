@@ -113,15 +113,6 @@ export function offerTemplate(site: FixSite, page: AuditPage | undefined): strin
   )
 }
 
-export function llmsTxtTemplate(site: FixSite, pages: Record<string, AuditPage>): string {
-  const home = pages['/']
-  const lines = [`# ${home?.title ?? site.name}`, '', `> ${home?.description ?? 'EDIT: one sentence on what you do and for whom.'}`, '', '## Pages']
-  for (const [path, p] of Object.entries(pages)) {
-    lines.push(`- [${p.title ?? path}](${p.url})${p.description ? `: ${p.description}` : ''}`)
-  }
-  return `${lines.join('\n')}\n`
-}
-
 function suggestTitle(site: FixSite, page: AuditPage | undefined, path: string): string {
   const brand = site.name.replace(/\s*\(.*\)\s*$/, '')
   const h1 = page?.h1?.[0]

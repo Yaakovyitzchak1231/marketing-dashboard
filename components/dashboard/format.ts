@@ -23,12 +23,6 @@ export function formatCount(n: number | null | undefined): string {
   return Math.round(n).toLocaleString('en-US')
 }
 
-/** 1234.5 -> "$1,235". null -> "—". */
-export function formatMoney(n: number | null | undefined): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return DASH
-  return `$${Math.round(n).toLocaleString('en-US')}`
-}
-
 export type DeltaTone = 'good' | 'bad' | 'neutral'
 
 export interface Delta {
