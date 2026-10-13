@@ -1,9 +1,11 @@
 /** The Overview screen: where the leads stand. Every number is a count of stored rows. */
 import type { Queryable } from '@/lib/db/types'
 import { STAGES, type Stage } from './types'
-import { loadReplyDesk } from './replies'
-import { TOUCH_COMPANY_REL } from './queries'
+import { replyDeskCounts } from './replies'
+import { TOUCH_COMPANY_REL, hasMergedIntoColumn } from './queries'
 import { overviewReadiness, type OverviewReadiness } from '../rules/readiness'
+import { PENDING_APPROVALS_COUNT_SQL } from '../ops/counters'
+import { ROUTINE_EVENT_SQL } from '../ops/routine'
 
 export interface OverviewEvent { id: number; at: Date; actor: string | null; actor_name: string | null; kind: string; summary: string; entity_type: string | null; entity_id: string | null }
 
@@ -32,28 +34,41 @@ export interface OverviewData {
   recent: OverviewEvent[]
 }
 
+/**
+ * A merged-away company or contact is a tombstone (merged_into, 0026): the lead lives on as
+ * the row it was merged into. Counting tombstones double-counts every merged lead, which is
+ * how the Overview reached 34,632. Exported so the tests pin the exact predicates.
+ */
+export function liveFilters(mergedReady: boolean): { co: string; ct: string; joinedCo: string; joinedCt: string; coJoin: string } {
+  return mergedReady
+    ? { co: 'merged_into is null', ct: 'merged_into is null', joinedCo: 'co.merged_into is null', joinedCt: 'ct.merged_into is null', coJoin: 'and exists (select 1 from lp.companies lc where lc.id = tc.co and lc.merged_into is null)' }
+    : { co: 'true', ct: 'true', joinedCo: 'true', joinedCt: 'true', coJoin: '' }
+}
+
 export async function loadOverview(db: Queryable): Promise<OverviewData> {
+  const live = liveFilters(await hasMergedIntoColumn(db))
   const [stage, totals, tasks, agents, recent, desk, readiness] = await Promise.all([
-    db.query<{ stage: Stage; n: number }>(`select stage, count(*)::int as n from lp.companies group by stage`),
+    db.query<{ stage: Stage; n: number }>(`select stage, count(*)::int as n from lp.companies where ${live.co} group by stage`),
     db.query<{
       companies: number; contacts: number; needs_research: number; research_queued: number; needs_verif_co: number
       unverified: number; ready: number; in_campaigns: number
     }>(
       `select
-         (select count(*)::int from lp.companies) as companies,
-         (select count(*)::int from lp.contacts where email_norm is not null) as contacts,
-         (select count(*)::int from lp.companies where research_status in ('needs_research', 'failed')) as needs_research,
-         (select count(*)::int from lp.companies where research_status in ('queued', 'researching')) as research_queued,
-         (select count(distinct company_id)::int from lp.contacts where email_norm is not null and verification_status = 'unverified' and company_id is not null) as needs_verif_co,
-         (select count(*)::int from lp.contacts where email_norm is not null and verification_status = 'unverified') as unverified,
-         (select count(*)::int from lp.contacts where email_norm is not null and verification_status = 'valid' and not do_not_contact
+         (select count(*)::int from lp.companies where ${live.co}) as companies,
+         (select count(*)::int from lp.contacts where email_norm is not null and ${live.ct}) as contacts,
+         (select count(*)::int from lp.companies where ${live.co} and research_status in ('needs_research', 'failed')) as needs_research,
+         (select count(*)::int from lp.companies where ${live.co} and research_status in ('queued', 'researching')) as research_queued,
+         (select count(distinct ct.company_id)::int from lp.contacts ct join lp.companies co on co.id = ct.company_id
+             where ct.email_norm is not null and ct.verification_status = 'unverified' and ${live.joinedCt} and ${live.joinedCo}) as needs_verif_co,
+         (select count(*)::int from lp.contacts where email_norm is not null and ${live.ct} and verification_status = 'unverified') as unverified,
+         (select count(*)::int from lp.contacts where email_norm is not null and ${live.ct} and verification_status = 'valid' and not do_not_contact
              and status not in ('in-Instantly', 'sent', 'replied', 'bounced', 'rejected', 'do-not-contact', 'role-based-hold', 'needs-check')) as ready,
-         (select count(distinct tc.co)::int from ${TOUCH_COMPANY_REL} tc) as in_campaigns`,
+         (select count(distinct tc.co)::int from ${TOUCH_COMPANY_REL} tc where true ${live.coJoin}) as in_campaigns`,
     ),
     db.query<{ active: number; queued: number; approvals: number }>(
       `select (select count(*)::int from lp.tasks where status in ('claimed', 'running')) as active,
               (select count(*)::int from lp.tasks where status = 'queued') as queued,
-              (select count(*)::int from lp.approvals where status = 'pending') as approvals`,
+              ${PENDING_APPROVALS_COUNT_SQL} as approvals`,
     ),
     db.query<{ id: string; display_name: string; tasks: number }>(
       `select a.id, a.display_name, count(*)::int as tasks
@@ -62,9 +77,9 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
     ),
     db.query<OverviewEvent>(
       `select e.id, e.at, e.actor, a.display_name as actor_name, e.kind, e.summary, e.entity_type, e.entity_id
-         from lp.events e left join lp.actors a on a.id = e.actor order by e.at desc, e.id desc limit 5`,
+         from lp.events e left join lp.actors a on a.id = e.actor where not ${ROUTINE_EVENT_SQL} order by e.at desc, e.id desc limit 5`,
     ),
-    loadReplyDesk(db),
+    replyDeskCounts(db),
     overviewReadiness(db),
   ])
   const byStage = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<Stage, number>
@@ -81,8 +96,8 @@ export async function loadOverview(db: Queryable): Promise<OverviewData> {
     readyToSend: Number(t.ready),
     readiness,
     inCampaigns: Number(t.in_campaigns),
-    repliesWaiting: desk.filter((d) => d.bucket === 'needs_reply').length,
-    interested: desk.filter((d) => d.bucket === 'interested').length,
+    repliesWaiting: desk.needs_reply,
+    interested: desk.interested,
     tasksActive: Number(tasks.rows[0].active),
     tasksQueued: Number(tasks.rows[0].queued),
     approvalsPending: Number(tasks.rows[0].approvals),

@@ -4,6 +4,7 @@
  * settings store (server) and SecretField / the agents panel (client or
  * server) use the same words.
  */
+import { APP_TIME_ZONE } from '@/lib/time'
 /** Values shorter than this show no characters at all ("…" only): 4 of 7 would be most of it. */
 export const MIN_LEN_FOR_LAST4 = 12
 
@@ -27,7 +28,7 @@ export function formatSetAt(at: string | Date | null | undefined, timeZone?: str
   if (Number.isNaN(d.getTime())) return null
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }
   try {
-    return d.toLocaleString('en-US', timeZone ? { ...opts, timeZone } : opts)
+    return d.toLocaleString('en-US', { ...opts, timeZone: timeZone || APP_TIME_ZONE })
   } catch {
     return d.toLocaleString('en-US', opts)
   }

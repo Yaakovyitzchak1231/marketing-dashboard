@@ -37,16 +37,21 @@ export async function queueRecompute(q: Queryable, ruleSetId: number, version: n
   )
 }
 
-/** Which companies a rule set scores. Templates score nothing. */
-function scopeSql(rs: RsRow, alias = 'c', p = 2): { sql: string; params: unknown[] } {
-  if (rs.scope === 'pool') return { sql: `${alias}.segment = $${p}`, params: [rs.segment] }
+/**
+ * Which companies a rule set scores. Templates score nothing. A merged-away company
+ * (merged_into, 0026) is a tombstone and is never in scope: scoring it counted every merged
+ * lead twice in Ready/Parked, and a refresh now drops its old verdicts as "left the scope".
+ */
+export function scopeSql(rs: Pick<RsRow, 'scope' | 'segment'>, alias = 'c', p = 2): { sql: string; params: unknown[] } {
+  const live = `${alias}.merged_into is null`
+  if (rs.scope === 'pool') return { sql: `${live} and ${alias}.segment = $${p}`, params: [rs.segment] }
   if (rs.scope === 'campaign') {
     return {
-      sql: `($${p}::text is null or ${alias}.segment = $${p})`,
+      sql: `${live} and ($${p}::text is null or ${alias}.segment = $${p})`,
       params: [rs.segment],
     }
   }
-  if (rs.scope === 'default') return { sql: 'true', params: [] }
+  if (rs.scope === 'default') return { sql: live, params: [] }
   return { sql: 'false', params: [] }
 }
 

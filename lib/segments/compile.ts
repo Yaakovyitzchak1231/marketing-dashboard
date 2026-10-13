@@ -283,8 +283,17 @@ export async function compileStoredSegment(db: Queryable, seg: StoredSegmentLike
 }
 
 /** The one SELECT every other query (counts, members, samples) is built from: distinct matching ids. */
+/**
+ * Merged-away rows (merged_into, 0026) are tombstones: the lead lives on as the row it was
+ * merged into. A segment that matched them counted every merged lead twice (and could put a
+ * tombstone into a campaign), so every match excludes them.
+ */
+export const LIVE_COMPANY_SQL = 'c.merged_into is null'
+export const LIVE_CONTACT_SQL = 'ct.merged_into is null and c.merged_into is null'
+
 export function matchQuerySql(compiled: CompiledSegment): string {
-  return `select distinct ${compiled.idSql} as id from ${compiled.fromSql} where ${compiled.whereSql}`
+  const live = compiled.entity === 'company' ? LIVE_COMPANY_SQL : LIVE_CONTACT_SQL
+  return `select distinct ${compiled.idSql} as id from ${compiled.fromSql} where (${compiled.whereSql}) and ${live}`
 }
 
 export interface SegmentCounts {
@@ -305,8 +314,8 @@ export async function countSegment(db: Queryable, compiled: CompiledSegment): Pr
       with matched as (${base})
       select
         (select count(*)::int from matched) as companies,
-        (select count(*)::int from lp.contacts ct where ct.company_id in (select id from matched)) as contacts,
-        (select count(*)::int from lp.contacts ct where ct.company_id in (select id from matched) and ${verifiedSendableSql('ct')}) as verified_sendable
+        (select count(*)::int from lp.contacts ct where ct.company_id in (select id from matched) and ct.merged_into is null) as contacts,
+        (select count(*)::int from lp.contacts ct where ct.company_id in (select id from matched) and ct.merged_into is null and ${verifiedSendableSql('ct')}) as verified_sendable
     `
     const { rows } = await db.query<{ companies: number; contacts: number; verified_sendable: number }>(sql, compiled.params)
     const r = rows[0]

@@ -6,6 +6,7 @@ import { DbNotConnected, PageFrame, btnCls, inputCls, primaryBtnCls } from '@/co
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import { Notice } from '@/components/rules/bits'
 import { TD, TH } from '@/components/reports/bits'
+import { formatInAppZone } from '@/lib/time'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,7 +123,7 @@ export default async function SuppressionsPage({ searchParams }: { searchParams:
                     <td className={`${TD} max-w-[220px] truncate`} title={r.note ?? ''}>
                       {r.note ?? '—'}
                     </td>
-                    <td className={TD}>{new Date(r.created_at).toLocaleDateString('en-US')}</td>
+                    <td className={TD}>{formatInAppZone(r.created_at, { month: 'numeric', day: 'numeric', year: 'numeric' })}</td>
                     <td className={TD}>
                       <form action={liftSuppressionAction}>
                         <input type="hidden" name="id" value={r.id} />

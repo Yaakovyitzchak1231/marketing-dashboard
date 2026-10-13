@@ -10,6 +10,8 @@ import { authDenied } from '@/lib/auth/http'
 import { getDb } from '@/lib/db'
 import { dispatchDue } from '@/lib/notify/deliver'
 import { REPLY_EVENTS } from '@/lib/webhooks/instantly'
+import { ROUTINE_EVENT_SQL } from '@/lib/ops/routine'
+import { unreadCountSql } from '@/lib/ops/counters'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -41,8 +43,8 @@ export async function GET(req: Request) {
       try {
         while (Date.now() - started < WINDOW_MS && !req.signal.aborted) {
           const { rows } = await db.query<{ ev: number | null; unread: number; n: number | null; d: string | null; rp: number | null }>(
-            `select (select max(id) from lp.events) as ev,
-                    (select count(*)::int from lp.notifications where recipient = $1 and read_at is null) as unread,
+            `select (select max(e.id) from lp.events e where not (${ROUTINE_EVENT_SQL})) as ev,
+                    ${unreadCountSql('$1')} as unread,
                     (select max(id) from lp.notifications) as n,
                     (select max(updated_at)::text from lp.deliveries) as d,
                     (select max(id) from lp.campaign_touches where event_type = any($2::text[])) as rp`,

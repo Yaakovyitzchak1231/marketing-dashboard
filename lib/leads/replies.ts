@@ -81,13 +81,8 @@ function safeUrl(v: unknown): string | null {
   }
 }
 
-export async function loadReplyDesk(db: Queryable, limitPerLead = 500): Promise<ReplyItem[]> {
-  const { rows } = await db.query<{
-    id: number; email: string | null; company_id: number | null; company_name: string | null; city: string | null
-    state: string | null; campaign_name: string | null; event_type: string; occurred_at: Date
-    payload: Record<string, unknown> | null; answered_after: boolean; replies: number; last_reply_payload: Record<string, unknown> | null
-  }>(
-    `with desk as (
+/** The desk's leads: one row per lead email, its newest desk event. Shared by the list and the counts. */
+const DESK_CTE = `with desk as (
        select t.*, lower(coalesce(t.email, ct.email_norm, t.payload->>'lead_email')) as lead_key,
               coalesce(t.company_id, ct.company_id) as co_id
          from lp.campaign_touches t
@@ -96,12 +91,45 @@ export async function loadReplyDesk(db: Queryable, limitPerLead = 500): Promise<
      ), latest as (
        select distinct on (lead_key) * from desk where lead_key is not null
         order by lead_key, occurred_at desc, id desc
-     )
+     )`
+
+const ANSWERED_AFTER_SQL = `exists (select 1 from lp.campaign_touches s
+                     where s.event_type = 'email_sent' and s.occurred_at > l.occurred_at
+                       and lower(coalesce(s.email, s.payload->>'lead_email')) = l.lead_key)`
+
+/**
+ * How many leads sit in each bucket, over EVERY lead with a desk event. The list below is
+ * capped (500 newest) to keep the page light; counting the buckets from that capped list made
+ * "Replies waiting" and "Interested" drop older leads silently once bounces, auto-replies and
+ * unsubscribes filled the 500 slots. The Overview tiles and the Replies header use these.
+ */
+export async function replyDeskCounts(db: Queryable): Promise<Record<ReplyBucket, number> & { total: number }> {
+  const { rows } = await db.query<{ event_type: string; answered_after: boolean; n: number }>(
+    `${DESK_CTE}, b as (select l.event_type, ${ANSWERED_AFTER_SQL} as answered_after from latest l)
+     select event_type, answered_after, count(*)::int as n from b group by event_type, answered_after`,
+    [DESK_EVENTS],
+  )
+  const out = Object.fromEntries(REPLY_BUCKETS.map((k) => [k, 0])) as Record<ReplyBucket, number> & { total: number }
+  out.total = 0
+  for (const r of rows) {
+    const bucket = bucketFor(r.event_type, Boolean(r.answered_after))
+    if (!bucket) continue
+    out[bucket] += Number(r.n)
+    out.total += Number(r.n)
+  }
+  return out
+}
+
+export async function loadReplyDesk(db: Queryable, limitPerLead = 500): Promise<ReplyItem[]> {
+  const { rows } = await db.query<{
+    id: number; email: string | null; company_id: number | null; company_name: string | null; city: string | null
+    state: string | null; campaign_name: string | null; event_type: string; occurred_at: Date
+    payload: Record<string, unknown> | null; answered_after: boolean; replies: number; last_reply_payload: Record<string, unknown> | null
+  }>(
+    `${DESK_CTE}
      select l.id, l.lead_key as email, l.co_id as company_id, co.name as company_name, co.city, co.state,
             coalesce(l.campaign_name, l.payload->>'campaign_name') as campaign_name, l.event_type, l.occurred_at, l.payload,
-            exists (select 1 from lp.campaign_touches s
-                     where s.event_type = 'email_sent' and s.occurred_at > l.occurred_at
-                       and lower(coalesce(s.email, s.payload->>'lead_email')) = l.lead_key) as answered_after,
+            ${ANSWERED_AFTER_SQL} as answered_after,
             (select count(*)::int from desk d where d.lead_key = l.lead_key and d.event_type = 'reply_received') as replies,
             (select d.payload from desk d where d.lead_key = l.lead_key and d.event_type = 'reply_received'
               order by d.occurred_at desc, d.id desc limit 1) as last_reply_payload

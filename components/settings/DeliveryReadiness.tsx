@@ -1,6 +1,7 @@
 import { Card, SectionHeader } from '@/components/dashboard/primitives'
 import { FEATURE_TITLES, type EnvKeyStatus } from '@/lib/setup/env'
 import type { DeliveryHealth } from '@/lib/notify/health'
+import { formatInAppZone } from '@/lib/time'
 
 export function DeliveryReadiness({ health, notificationEnv }: { health: DeliveryHealth; notificationEnv: EnvKeyStatus[] }) {
   return (
@@ -15,7 +16,7 @@ export function DeliveryReadiness({ health, notificationEnv }: { health: Deliver
                   <div key={agent.id} className="py-2 first:pt-0 last:pb-0">
                     <p className="text-sm font-medium text-ink">{agent.display_name} is @{agent.id}</p>
                     <p className="mt-1 text-xs text-ink-muted">Unread: {agent.unread}. Held: {agent.held}. Failed: {agent.failed}. No channel: {agent.no_channel}.</p>
-                    <p className="mt-1 text-xs text-ink-muted">Last check-in: {agent.last_seen_at ? new Date(agent.last_seen_at).toLocaleString() : 'not recorded'}</p>
+                    <p className="mt-1 text-xs text-ink-muted">Last check-in: {agent.last_seen_at ? formatInAppZone(agent.last_seen_at, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'not recorded'}</p>
                     <p className="mt-1 text-xs text-ink-faint">Channels: {agent.channels.length ? agent.channels.join(', ') : 'none'}</p>
                   </div>
                 ))}

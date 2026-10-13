@@ -10,7 +10,7 @@ vi.mock('server-only', () => ({}))
 vi.mock('next/navigation', () => ({ redirect: vi.fn(), useRouter: () => ({ refresh: vi.fn() }) }))
 vi.mock('@/lib/auth/session', () => ({ currentRole: vi.fn() }))
 vi.mock('@/app/actions/reports', () => ({ runSheetExportAction: vi.fn() }))
-vi.mock('@/lib/export/lead-master', () => ({ recentExports: async () => [] }))
+vi.mock('@/lib/export/lead-master', () => ({ recentExports: async () => [], liveExportCounts: async () => ({ emails: 2, leads: 1 }) }))
 vi.mock('@/lib/reports/load', async (orig) => {
   const actual = await orig<typeof import('@/lib/reports/load')>()
   return {

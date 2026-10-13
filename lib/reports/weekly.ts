@@ -8,6 +8,7 @@ import type { Queryable } from '@/lib/db/types'
 import type { DashboardData } from '@/lib/dashboard/types'
 import { bestWorst, buildCostReport, MIN_CONTACTED_TO_RANK, type CostLine } from '@/lib/reports/costs'
 import type { CampaignMeta } from '@/lib/reports/meta'
+import { PENDING_APPROVAL_SQL } from '@/lib/ops/counters'
 import { SEGMENT_LABEL } from '@/lib/reports/meta'
 import { campaignRunway, formatDays, segmentRunway, type CampaignRunway, type SegmentPool, type SegmentRunway } from '@/lib/reports/runway'
 
@@ -86,7 +87,7 @@ export async function openTasks(q: Queryable, limit = 25): Promise<OpenTaskRow[]
 
 export async function pendingApprovals(q: Queryable): Promise<{ id: number; summary: string }[]> {
   const { rows } = await q.query<{ id: number; summary: string }>(
-    `select id, summary from lp.approvals where status = 'pending' order by id desc limit 10`,
+    `select ap.id, ap.summary from lp.approvals ap where ${PENDING_APPROVAL_SQL} order by ap.id desc limit 10`,
   )
   return rows
 }

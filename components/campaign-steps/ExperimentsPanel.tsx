@@ -13,6 +13,7 @@ import { call } from './api'
 import { formatCount, formatPct } from '@/components/dashboard/format'
 import { formatPercent } from '@/components/charts/format'
 import { outcomeFormFor, parseVariantInput, type OutcomeForm } from '@/lib/experiments/form'
+import { formatInAppZone } from '@/lib/time'
 
 interface VariantCfg { key: string; weight: number }
 interface Outcome { variant: string; sends: number; positive_replies: number }
@@ -158,7 +159,7 @@ export function ExperimentsPanel({ campaignId, stepNumbers }: { campaignId: numb
                       ))}
                     </tbody>
                   </table>
-                  <p className="mt-1 text-xs text-ink-muted">{formatCount(d.assignments)} leads assigned{d.decided_at ? ` · decided ${new Date(d.decided_at).toLocaleString()}` : ''}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{formatCount(d.assignments)} leads assigned{d.decided_at ? ` · decided ${formatInAppZone(d.decided_at, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</p>
                   {e.status === 'running' ? (
                     <div className="mt-2 flex flex-wrap items-end gap-2">
                       <label className={LABEL}>Variant

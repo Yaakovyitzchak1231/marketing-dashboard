@@ -10,7 +10,7 @@ import { canAtLeast } from '@/lib/auth/roles'
 import { loadReportInputs, rangeDays } from '@/lib/reports/load'
 import { campaignRunway, formatDays, segmentRunway } from '@/lib/reports/runway'
 import { SEGMENT_LABEL } from '@/lib/reports/meta'
-import { recentExports, type ExportRun } from '@/lib/export/lead-master'
+import { liveExportCounts, recentExports, type ExportRun } from '@/lib/export/lead-master'
 import { DEFAULT_EXPORT_TAB, sheetExportConfigured } from '@/lib/export/sheets'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +30,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     ...cr.filter((c) => c.level === 'low' || c.level === 'out').map((c) => ({ key: c.id, name: c.name, days: c.days, level: c.level })),
   ]
   let exportsList: ExportRun[] = []
-  if (inp.db && !inp.dbError) exportsList = await recentExports(inp.db).catch(() => [])
+  let liveCounts: { emails: number; leads: number } | null = null
+  if (inp.db && !inp.dbError) {
+    ;[exportsList, liveCounts] = await Promise.all([recentExports(inp.db).catch(() => []), liveExportCounts(inp.db).catch(() => null)])
+  }
   const sheetReady = sheetExportConfigured()
   // Both exports need editor access (the route and the action refuse a viewer), so a viewer gets a plain line, not a dead link.
   const canExport = canAtLeast(await currentRole(), 'editor')
@@ -91,13 +94,18 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               To write the Sheet tab, set LEAD_MASTER_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON (share the Sheet with that service account as Editor). The CSV works without them.
             </p>
           ) : null}
+          {liveCounts ? (
+            <p className="mt-3 text-xs text-ink-muted" data-testid="export-live-counts">
+              A copy written now: {liveCounts.leads.toLocaleString('en-US')} leads, {liveCounts.emails.toLocaleString('en-US')} rows (one row per email address).
+            </p>
+          ) : null}
           {exportsList.length ? (
             <ul className="mt-3 space-y-1 text-xs text-ink-muted">
               {exportsList.map((e) => (
                 <li key={e.id}>
                   {new Date(e.started_at).toLocaleString('en-US', { timeZone: inp.data.range.timezone, dateStyle: 'medium', timeStyle: 'short' })}:{' '}
                   {e.target === 'sheet' ? 'Sheet tab' : 'CSV'} · {e.status}
-                  {e.row_count !== null ? ` · ${e.row_count.toLocaleString('en-US')} rows` : ''}
+                  {e.row_count !== null ? ` · ${e.row_count.toLocaleString('en-US')} email rows as of that day` : ''}
                   {e.error ? ` · ${e.error}` : ''}
                 </li>
               ))}

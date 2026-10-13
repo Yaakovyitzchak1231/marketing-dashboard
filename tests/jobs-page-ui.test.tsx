@@ -12,6 +12,12 @@ const jobsFixture = vi.hoisted(() => ({ jobs: [] as unknown[], runs: [] as unkno
 vi.mock('@/lib/jobs/store', () => ({
   listJobs: vi.fn(async () => jobsFixture.jobs),
   listJobRuns: vi.fn(async () => jobsFixture.runs),
+  // The page reads each job's newest run and the failed runs on their own (fixtures are newest-first).
+  latestRunPerJob: vi.fn(async () => {
+    const seen = new Set<string>()
+    return (jobsFixture.runs as { job_name: string }[]).filter((r) => (seen.has(r.job_name) ? false : (seen.add(r.job_name), true)))
+  }),
+  recentFailedRuns: vi.fn(async () => (jobsFixture.runs as { status: string }[]).filter((r) => r.status === 'failed' || r.status === 'timeout')),
 }))
 const campaignsFixture = vi.hoisted(() => ({ campaigns: [] as unknown[] }))
 vi.mock('@/lib/campaigns/store', () => ({

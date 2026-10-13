@@ -52,7 +52,7 @@ const SQL = `
       select t.campaign_name, t.event_type, t.occurred_at from lp.campaign_touches t
        where t.contact_id = ct.id order by t.occurred_at desc, t.id desc limit 1
     ) lt on true
-   where ct.email_norm is not null and ct.id > $1
+   where ct.email_norm is not null and ct.merged_into is null and co.merged_into is null and ct.id > $1
    order by ct.id
    limit $2`
 
@@ -88,14 +88,33 @@ export function csvLine(values: string[]): string {
   return values.map(csvField).join(',')
 }
 
-export async function exportCsv(q: Queryable): Promise<{ csv: string; rows: number }> {
+/** The copy has one row per email address, so `rows` counts emails; `leads` counts the distinct leads (companies) behind them. */
+export async function exportCsv(q: Queryable): Promise<{ csv: string; rows: number; leads: number }> {
   const lines = [csvLine([...EXPORT_COLUMNS])]
   let n = 0
+  const leads = new Set<string>()
   for await (const page of exportRows(q)) {
-    for (const r of page) lines.push(csvLine(EXPORT_COLUMNS.map((c) => r[c])))
+    for (const r of page) {
+      lines.push(csvLine(EXPORT_COLUMNS.map((c) => r[c])))
+      leads.add(r.lead_id)
+    }
     n += page.length
   }
-  return { csv: lines.join('\r\n') + '\r\n', rows: n }
+  return { csv: lines.join('\r\n') + '\r\n', rows: n, leads: leads.size }
+}
+
+/**
+ * What a copy written right now would hold: email rows and the leads behind them, counted live
+ * with the export's own filter. The Reports screen shows this beside past runs, so a run's
+ * row count (emails, frozen on the day it was written) is never read as today's lead count.
+ */
+export async function liveExportCounts(q: Queryable): Promise<{ emails: number; leads: number }> {
+  const { rows } = await q.query<{ emails: number; leads: number }>(
+    `select count(*)::int as emails, count(distinct co.id)::int as leads
+       from lp.contacts ct join lp.companies co on co.id = ct.company_id
+      where ct.email_norm is not null and ct.merged_into is null and co.merged_into is null`,
+  )
+  return { emails: Number(rows[0]?.emails ?? 0), leads: Number(rows[0]?.leads ?? 0) }
 }
 
 // ---------------------------------------------------------------- runs log
