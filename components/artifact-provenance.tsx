@@ -218,7 +218,7 @@ export function ArtifactProvenance({
             {COPY.workspace.whatItIsBody}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-line/70 bg-white/50 px-2.5 py-1.5 text-[11px] text-ink-faint">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-control border border-line/70 bg-white/50 px-2.5 py-1.5 text-2xs text-ink-faint">
           <span>{COPY.workspace.boundaryTitle}</span>
           <span className="px-1.5">·</span>
           <span>{COPY.workspace.everyRevision}</span>
@@ -236,7 +236,7 @@ export function ArtifactProvenance({
           actually recorded (approved). Nothing here does. */}
       <div
         data-testid="boundary-badge"
-        className="mt-3 flex items-center gap-2 rounded-md border border-line/70 bg-white/60 px-3 py-2 text-[11px] text-ink-muted"
+        className="mt-3 flex items-center gap-2 rounded-control border border-line/70 bg-white/60 px-3 py-2 text-2xs text-ink-muted"
       >
         <span className="flex items-center gap-2">
           <span className="font-medium uppercase tracking-[0.06em]">
@@ -268,7 +268,7 @@ export function ArtifactProvenance({
           {revisions.length > 0 && (
             <button
               type="button"
-              className="text-[11px] text-ink-muted underline underline-offset-2 hover:text-ink"
+              className="text-2xs text-ink-muted underline underline-offset-2 hover:text-ink"
               onClick={() => setRevisions([])}
             >
               {COPY.workspace.restoreThisVersion}
@@ -284,7 +284,7 @@ export function ArtifactProvenance({
           <div className="mt-2 overflow-x-auto rounded-md border border-line bg-white/50">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-line text-[11px] uppercase tracking-[0.06em] text-ink-muted">
+                <tr className="border-b border-line text-2xs uppercase tracking-[0.06em] text-ink-muted">
                   <th className="px-3 py-2 text-left">#{' '}
                     {COPY.workspace.changeHistory}</th>
                   <th className="px-3 py-2 text-left">{COPY.workspace.changeKind}</th>
@@ -301,7 +301,7 @@ export function ArtifactProvenance({
                       <td className="px-3 py-2 text-ink">{actorOrDefault(r.actor)}</td>
                       <td className="px-3 py-2 text-ink">{r.change_kind ?? ''}</td>
                       <td className="px-3 py-2 text-ink">{r.change_message ?? ''}</td>
-                      <td className="px-3 py-2 text-[11px] text-ink-faint">
+                      <td className="px-3 py-2 text-2xs text-ink-faint">
                         {formatIso(r.created_at)}
                       </td>
                     </tr>
@@ -317,7 +317,7 @@ export function ArtifactProvenance({
               <button
                 key={r.id}
                 type="button"
-                className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink"
+                className="rounded border border-line bg-white/60 px-2.5 py-1 text-2xs text-ink"
                 onClick={() => restoreRevision(r.revision_number)}
               >
                 {COPY.workspace.restoreThisVersion} #{r.revision_number}
@@ -333,7 +333,7 @@ export function ArtifactProvenance({
           <h3 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             {COPY.workspace.approvals}
           </h3>
-          <span className="text-[11px] text-ink-faint">
+          <span className="text-2xs text-ink-faint">
             {COPY.workspace.everyApproval}
           </span>
         </div>
@@ -347,10 +347,10 @@ export function ArtifactProvenance({
             {approvals.map((a) => (
               <li
                 key={a.id}
-                className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-line/60 px-2.5 py-1.5"
+                className="flex flex-wrap items-start justify-between gap-2 rounded-control border border-line/60 px-2.5 py-1.5"
               >
                 <div>
-                  <p className="text-[11px] text-ink">
+                  <p className="text-2xs text-ink">
                     {a.status === 'approved'
                       ? COPY.workspace.approvedByActor(a.actor ?? COPY.workspace.authorNotRecorded)
                       : a.status === 'requested'
@@ -360,10 +360,10 @@ export function ArtifactProvenance({
                           : a.status}
                   </p>
                   {a.reason ? (
-                    <p className="mt-0.5 text-[11px] text-ink-faint">{a.reason}</p>
+                    <p className="mt-0.5 text-2xs text-ink-faint">{a.reason}</p>
                   ) : null}
                 </div>
-                <span className="text-[11px] text-ink-faint">
+                <span className="text-2xs text-ink-faint">
                   {formatIso(a.created_at)}
                 </span>
               </li>
@@ -374,7 +374,7 @@ export function ArtifactProvenance({
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-2xs text-ink disabled:opacity-40"
             onClick={() => approve()}
             disabled={!authorized}
           >
@@ -382,7 +382,7 @@ export function ArtifactProvenance({
           </button>
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-2xs text-ink disabled:opacity-40"
             onClick={() => requestChanges(owner)}
             disabled={!authorized}
           >
@@ -390,7 +390,7 @@ export function ArtifactProvenance({
           </button>
           <button
             type="button"
-            className="rounded border border-line bg-white/60 px-2.5 py-1 text-[11px] text-ink disabled:opacity-40"
+            className="rounded border border-line bg-white/60 px-2.5 py-1 text-2xs text-ink disabled:opacity-40"
             onClick={() => dismissApproval()}
             disabled={!authorized}
           >
@@ -405,7 +405,7 @@ export function ArtifactProvenance({
           <h3 className="text-xs font-medium uppercase tracking-[0.08em] text-ink-muted">
             {COPY.workspace.comments}
           </h3>
-          <span className="text-[11px] text-ink-faint">
+          <span className="text-2xs text-ink-faint">
             {COPY.workspace.noComments}
           </span>
         </div>
@@ -415,16 +415,16 @@ export function ArtifactProvenance({
         ) : (
           <ul className="mt-2 space-y-2 text-xs">
             {comments.map((c) => (
-              <li key={c.id} className="rounded-md border border-line/60 px-2.5 py-1.5">
+              <li key={c.id} className="rounded-control border border-line/60 px-2.5 py-1.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[11px] text-ink">
+                  <span className="text-2xs text-ink">
                     {c.author ?? COPY.workspace.authorNotRecorded}
                   </span>
-                  <span className="text-[11px] text-ink-faint">
+                  <span className="text-2xs text-ink-faint">
                     {formatIso(c.created_at)}
                   </span>
                 </div>
-                <p className="mt-0.5 text-[11px] text-ink-faint">{c.text}</p>
+                <p className="mt-0.5 text-2xs text-ink-faint">{c.text}</p>
               </li>
             ))}
           </ul>
@@ -432,7 +432,7 @@ export function ArtifactProvenance({
 
         {rowName && artifactId ? (
           <form onSubmit={submitComment} className="mt-2 flex flex-wrap gap-2">
-            <label className="flex-1 min-w-0 rounded border border-line bg-white/60 px-2.5 py-1.5 text-[11px] text-ink">
+            <label className="flex-1 min-w-0 rounded border border-line bg-white/60 px-2.5 py-1.5 text-2xs text-ink">
               {COPY.workspace.commentOn(rowName)}
               <input
                 value={commentText}
@@ -443,7 +443,7 @@ export function ArtifactProvenance({
             </label>
             <button
               type="submit"
-              className="shrink-0 rounded bg-ink px-3 py-1.5 text-[11px] text-white disabled:opacity-40"
+              className="shrink-0 rounded bg-ink px-3 py-1.5 text-2xs text-white disabled:opacity-40"
               disabled={!commentText.trim()}
             >
               {COPY.workspace.save}
