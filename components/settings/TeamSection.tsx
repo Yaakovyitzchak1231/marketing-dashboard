@@ -18,7 +18,7 @@ const ROLE_HINT: Record<Role, string> = {
   viewer: 'Read-only',
 }
 
-const selectCls = 'rounded-card border border-line bg-surface px-2 py-1 text-[13px] text-ink focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
+const selectCls = 'rounded-control border border-line bg-surface px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted'
 
 function MemberRow({ member, canManage, isOnlyOwner, roleAction, removeAction }: { member: TeamMemberRow; canManage: boolean; isOnlyOwner: boolean; roleAction: RoleAction; removeAction: RemoveAction }) {
   const [roleState, roleFormAction, rolePending] = useActionState<TeamFormResult | null, FormData>(roleAction, null)
@@ -29,8 +29,8 @@ function MemberRow({ member, canManage, isOnlyOwner, roleAction, removeAction }:
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-soft py-3 last:border-b-0" data-testid={`team-member-${member.id}`}>
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-medium text-ink">{member.display_name}</p>
-        <p className="truncate text-[12px] text-ink-faint">{member.email}</p>
+        <p className="truncate text-sm font-medium text-ink">{member.display_name}</p>
+        <p className="truncate text-xs text-ink-faint">{member.email}</p>
       </div>
       <div className="flex items-center gap-2">
         {canManage ? (
@@ -51,22 +51,22 @@ function MemberRow({ member, canManage, isOnlyOwner, roleAction, removeAction }:
           confirmRemove ? (
             <form action={removeFormAction} className="flex items-center gap-1">
               <input type="hidden" name="actor_id" value={member.id} />
-              <button type="submit" disabled={removePending || lockedOwner} className="text-[12px] font-medium text-bad underline disabled:opacity-50">
+              <button type="submit" disabled={removePending || lockedOwner} className="text-xs font-medium text-bad underline disabled:opacity-50">
                 {removePending ? 'Removing…' : 'Confirm'}
               </button>
-              <button type="button" onClick={() => setConfirmRemove(false)} className="text-[12px] text-ink-faint underline">
+              <button type="button" onClick={() => setConfirmRemove(false)} className="text-xs text-ink-faint underline">
                 Cancel
               </button>
             </form>
           ) : (
-            <button type="button" onClick={() => setConfirmRemove(true)} disabled={lockedOwner} title={lockedOwner ? 'The last owner cannot be removed' : 'Remove'} className="text-[12px] text-ink-faint underline hover:text-bad disabled:opacity-40 disabled:no-underline">
+            <button type="button" onClick={() => setConfirmRemove(true)} disabled={lockedOwner} title={lockedOwner ? 'The last owner cannot be removed' : 'Remove'} className="text-xs text-ink-faint underline hover:text-bad disabled:opacity-40 disabled:no-underline">
               Remove
             </button>
           )
         ) : null}
       </div>
-      {roleState && !roleState.ok ? <p className="w-full text-[12px] text-bad">{roleState.message}</p> : null}
-      {removeState && !removeState.ok ? <p className="w-full text-[12px] text-bad">{removeState.message}</p> : null}
+      {roleState && !roleState.ok ? <p className="w-full text-xs text-bad">{roleState.message}</p> : null}
+      {removeState && !removeState.ok ? <p className="w-full text-xs text-bad">{removeState.message}</p> : null}
     </div>
   )
 }
@@ -76,15 +76,15 @@ function AddMemberForm({ action }: { action: AddAction }) {
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2 border-t border-line-soft pt-3">
       <div>
-        <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-name">Name</label>
-        <input id="team-name" name="display_name" required placeholder="Izzy" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
+        <label className="mb-1 block text-2xs text-ink-faint" htmlFor="team-name">Name</label>
+        <input id="team-name" name="display_name" required placeholder="Izzy" className="rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
       </div>
       <div>
-        <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-email">Email</label>
-        <input id="team-email" name="email" type="email" required placeholder="izzy@tapdash.co" className="rounded-card border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
+        <label className="mb-1 block text-2xs text-ink-faint" htmlFor="team-email">Email</label>
+        <input id="team-email" name="email" type="email" required placeholder="izzy@tapdash.co" className="rounded-control border border-line bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-muted" />
       </div>
       <div>
-        <label className="mb-1 block text-[11px] text-ink-faint" htmlFor="team-role">Role</label>
+        <label className="mb-1 block text-2xs text-ink-faint" htmlFor="team-role">Role</label>
         <select id="team-role" name="role" defaultValue="viewer" className={selectCls}>
           {(['owner', 'editor', 'viewer'] as Role[]).map((r) => (
             <option key={r} value={r}>
@@ -110,8 +110,8 @@ export function TeamSection({ members, isOwner, addAction, roleAction, removeAct
   const activeOwners = members.filter((m) => m.active && m.role === 'owner').length
   return (
     <div data-testid="team-section">
-      <p className="mb-1 text-[12px] leading-snug text-ink-faint">
-        Owner sees and does everything. Editor can edit leads, campaigns and segments. Viewer is read-only. They sign in at <code className="rounded bg-canvas px-1 font-numeric text-[12px] text-ink">/login</code> with the email added here.
+      <p className="mb-1 text-xs leading-snug text-ink-faint">
+        Owner sees and does everything. Editor can edit leads, campaigns and segments. Viewer is read-only. They sign in at <code className="rounded bg-canvas px-1 font-numeric text-xs text-ink">/login</code> with the email added here.
       </p>
       {members.filter((m) => m.active).length ? (
         <div>
@@ -122,7 +122,7 @@ export function TeamSection({ members, isOwner, addAction, roleAction, removeAct
             ))}
         </div>
       ) : (
-        <p className="text-[12.5px] text-ink-faint">Just you so far.</p>
+        <p className="text-xs text-ink-faint">Just you so far.</p>
       )}
       {isOwner ? <AddMemberForm action={addAction} /> : null}
     </div>
