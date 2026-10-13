@@ -59,7 +59,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
           <Link
             key={s.id}
             href={`/seo/audit?site=${s.id}`}
-            className={`rounded-card border px-2.5 py-1 text-[12px] ${s.id === site?.id ? 'border-accent text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
+            className={`rounded-card border px-2.5 py-1 text-xs ${s.id === site?.id ? 'border-accent text-accent' : 'border-line text-ink-muted hover:text-ink'}`}
           >
             {s.name}
           </Link>
@@ -77,7 +77,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
         <EmptyNote>{site ? `${site.name} hasn't been audited yet. Press "Re-run audit".` : 'Add a site first.'}</EmptyNote>
       ) : (
         <>
-          <p className="text-[12px] text-ink-faint">
+          <p className="text-xs text-ink-faint">
             Audit #{audit.id} of {site?.base_url.replace(/^https?:\/\//, '')} · {when(audit.finished_at ?? audit.started_at)} · fetched from the {audit.fetched_from ?? 'dashboard server'} ·{' '}
             {audit.status === 'done' ? `${audit.passed} pass, ${audit.failed} fix, ${audit.warned} improve${blockedN ? `, ${blockedN} blocked` : ''}, ${unreadN ?? '—'} couldn't check` : audit.status}
             {audit.error ? ` · ${audit.error}` : ''}
@@ -92,10 +92,10 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
                       <div>
                         <CheckPill status={c.status} reason={c.reason} />
                       </div>
-                      <p className="text-[13px] font-medium text-ink">{c.label}</p>
-                      <div className="text-[13px] leading-snug text-ink-muted">
+                      <p className="text-sm font-medium text-ink">{c.label}</p>
+                      <div className="text-sm leading-snug text-ink-muted">
                         <Detail c={c} />
-                        {c.fix && c.status !== 'pass' ? <p className="mt-1 text-[12px] text-ink">{c.status === 'info' ? 'Note' : 'Review'}: {c.fix}</p> : null}
+                        {c.fix && c.status !== 'pass' ? <p className="mt-1 text-xs text-ink">{c.status === 'info' ? 'Note' : 'Review'}: {c.fix}</p> : null}
                       </div>
                     </li>
                   ))}
@@ -103,7 +103,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
               </Card>
             </section>
           ))}
-          <p className="text-[12px] text-ink-faint">
+          <p className="text-xs text-ink-faint">
             Actionable findings appear on the <Link href={`/seo/todos?site=${audit.site_id}`} className="text-accent underline">fix list</Link>. Informational checks are not required fixes and are excluded from the pass/fix counts. Blocked means the site kept our checker out, with the reason shown; it is not counted as a fix.
           </p>
         </>
@@ -113,7 +113,7 @@ export default async function SeoAudit({ searchParams }: { searchParams: Promise
         <section>
           <SectionHeader title="History" />
           <Card>
-            <table className="w-full text-[12px]">
+            <table className="w-full text-xs">
               <thead className="text-left text-ink-faint">
                 <tr>
                   <th className="px-4 py-2 font-medium">Run</th>
