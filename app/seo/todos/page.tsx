@@ -22,7 +22,7 @@ function Row({ f }: { f: FixTask }) {
   const sev = f.payload.fix.severity
   return (
     <li className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between" data-testid="seo-fix-row">
-      <Link href={`/seo/todos/${f.id}`} className="min-w-0 text-[13px] text-ink hover:text-accent">
+      <Link href={`/seo/todos/${f.id}`} className="min-w-0 text-sm text-ink hover:text-accent">
         {f.payload.fix.title}
         <span className="text-ink-faint"> · {f.site_name}</span>
       </Link>
@@ -51,7 +51,7 @@ export default async function SeoTodos({ searchParams }: { searchParams: Promise
   return (
     <div className="space-y-6">
       <Flash sp={sp} />
-      <div className="flex flex-wrap gap-1.5 text-[12px]">
+      <div className="flex flex-wrap gap-1.5 text-xs">
         <Link href="/seo/todos" className={`rounded-card border px-2.5 py-1 ${!siteId ? 'border-accent text-accent' : 'border-line text-ink-muted'}`}>All sites</Link>
         {sites.map((s) => (
           <Link key={s.id} href={`/seo/todos?site=${s.id}`} className={`rounded-card border px-2.5 py-1 ${siteId === s.id ? 'border-accent text-accent' : 'border-line text-ink-muted'}`}>
