@@ -10,7 +10,7 @@ import { listPools } from '@/lib/pools/store'
 import { LeadsTable, type SortLink } from '@/components/leads/LeadsTable'
 import { ViewTabs, FilterBar, Pagination, KanbanBoard, CampaignGroups, RegionGroups } from '@/components/leads/LeadViews'
 import { FilterDrawer } from '@/components/leads/FilterDrawer'
-import { shortDate } from '@/components/leads/pills'
+import { dateTime } from '@/components/leads/pills'
 import { VerifyButton } from '@/components/verify/VerifyButton'
 import { BUTTON, BUTTON_PRIMARY } from '@/components/app/PageShell'
 
@@ -85,7 +85,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       const dir = current ? (q.dir === 'asc' ? 'desc' : 'asc') : defaultDir(k)
       return { key: k, href: leadsHref(q, { sort: k, dir }), dir: current ? q.dir : undefined }
     })
-    const updatedLabels = Object.fromEntries(page.rows.map((r) => [r.id, shortDate(r.updated_at)]))
+    const updatedLabels = Object.fromEntries(page.rows.map((r) => [r.id, dateTime(r.updated_at)]))
     body = page.rows.length ? (
       <>
         <LeadsTable rows={page.rows} sortLinks={sortLinks} updatedLabels={updatedLabels} showResearch={q.view === 'research'} />
