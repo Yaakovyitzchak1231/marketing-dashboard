@@ -251,6 +251,23 @@ function ShellChrome({ children }: { children: ReactNode }) {
     return () => root.removeAttribute('data-nav-menu-open')
   }, [drawer])
 
+  // The drawer is phone/tablet only (lg:hidden). Growing to desktop width while
+  // it is open would leave an invisible dialog holding the scroll lock and
+  // hiding the comment pill, so reaching lg closes it.
+  useEffect(() => {
+    if (!drawer || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    if (mq.matches) {
+      setDrawer(false)
+      return
+    }
+    const onChange = (e: { matches: boolean }) => {
+      if (e.matches) setDrawer(false)
+    }
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [drawer])
+
   const current = activeHref(pathname)
   const currentLabel = NAV_ITEMS.find((i) => i.href === current)?.label ?? ''
 

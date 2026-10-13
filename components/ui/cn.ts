@@ -6,7 +6,8 @@ const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
       'font-size': [{ text: ['2xs', 'metric', 'metric-sm'] }],
-      rounded: [{ rounded: ['control', 'card', 'sheet'] }],
+      rounded: [{ rounded: ['control', 'card', 'input', 'sheet'] }],
+      shadow: [{ shadow: ['card', 'raised', 'overlay'] }],
     },
   },
 })

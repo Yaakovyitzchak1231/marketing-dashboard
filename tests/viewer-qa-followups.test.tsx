@@ -3,10 +3,12 @@
  * Follow-ups from the prod viewer QA after #96 (Oct 12):
  *  1. A viewer's refused inline edit reads as view-only, not "Couldn't reach the server";
  *     viewers don't enter inline-edit mode at all.
- *  2. The More button drops its "· Settings" name while the Inbox badge shows.
- *  3. The phone nav drawer stacks above the comment layer and hides the "My comments" pill.
+ *  2. (Retired with the UI rebuild: the top bar's "More · Settings" button is gone; the
+ *     Inbox badge now lives in the side rail, covered by tests/app-shell.test.tsx.)
+ *  3. The phone nav drawer stacks above the comment layer and hides the "My comments" pill:
+ *     now the app shell's drawer, covered by tests/app-shell.test.tsx.
  */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import React from 'react'
 import type { LiveChange } from '@/components/ops/live'
@@ -42,7 +44,6 @@ import { EditFields } from '@/components/leads/EditFields'
 import { CommentForm } from '@/components/leads/CommentForm'
 import { BulkBar } from '@/components/leads/BulkBar'
 import { ViewOnlyGuard } from '@/components/auth/ViewOnlyGuard'
-import { AppNav, moreLabelFits } from '@/components/nav/AppNav'
 import { updateEntityAction } from '@/app/actions/edit'
 import {
   COULD_NOT_REACH,
@@ -55,12 +56,6 @@ import {
   thrownWriteText,
 } from '@/components/auth/viewOnly'
 import { VIEWER_REFUSAL } from '@/components/auth/useRole'
-
-function pushUnread(unread: number) {
-  act(() => {
-    for (const l of live.listeners) l({ unread, last_event_id: null, last_reply_id: null, first: false })
-  })
-}
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -224,88 +219,5 @@ describe('lead edit form, comments and bulk actions', () => {
     fireEvent.click(apply)
     expect(heard).toHaveBeenCalledTimes(2)
     window.removeEventListener(VIEW_ONLY_EVENT, heard)
-  })
-})
-
-describe('nav: Inbox badge vs "More · Settings"', () => {
-  it('moreLabelFits: drops the name only when it would crowd the badge (numbers measured at 1440/1366)', () => {
-    // "· Settings" takes 66px (62 + the button's 4px gap). Prod QA: with "99+" the gap was 7px.
-    expect(moreLabelFits(7, 66, 66)).toBe(false) // shown, 99+ badge -> 7px left: drop it
-    expect(moreLabelFits(73, 0, 66)).toBe(false) // hidden, 99+ badge: showing it would leave 7px: stay hidden
-    expect(moreLabelFits(43, 66, 66)).toBe(true) // no badge: 43px left
-    expect(moreLabelFits(109, 0, 66)).toBe(true) // inbox cleared: it fits again
-    expect(moreLabelFits(73, 0, 30)).toBe(true) // a short name ("· Jobs") fits next to "99+"
-    expect(moreLabelFits(5, 0, 0)).toBe(true) // never measured at a width that shows it: nothing to decide
-  })
-
-  it('AppNav drops "· Settings" when the measured bar would crowd the 99+ badge, and brings it back', () => {
-    role.value = 'owner'
-    pathname.value = '/settings'
-    // A tiny layout model of the 1440 bar (jsdom has no layout): More ends at 1135 without its
-    // name and 1201 with it; the Inbox link starts at 1244, or 1208 with the "99+" badge.
-    const isLabel = (el: Element) => el.tagName === 'SPAN' && (el.textContent ?? '').trim().startsWith('·')
-    const hasLabel = () => Array.from(document.querySelectorAll('span')).some(isLabel)
-    const badge = () => !!document.querySelector('[data-live-bell] span')
-    const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      return isLabel(this) ? 62 : 0
-    })
-    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      const r = (left: number, right: number) => ({ left, right, width: right - left, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
-      if (isLabel(this)) return r(1135, 1197)
-      if (this.hasAttribute('data-live-bell')) return r(badge() ? 1208 : 1244, 1290)
-      if (this.tagName === 'BUTTON' && /More/.test(this.textContent ?? '')) return r(1080, hasLabel() ? 1201 : 1135)
-      return r(0, 0)
-    })
-    try {
-      render(<AppNav />)
-      const more = within(screen.getByRole('navigation', { name: 'Screens' })).getByRole('button', { name: /More/ })
-      expect(more).toHaveTextContent('· Settings')
-      pushUnread(120)
-      expect(screen.getByRole('link', { name: '120 unread' })).toHaveTextContent('99+')
-      expect(more).not.toHaveTextContent('Settings')
-      pushUnread(0)
-      expect(more).toHaveTextContent('· Settings')
-    } finally {
-      width.mockRestore()
-      rect.mockRestore()
-    }
-  })
-})
-
-describe('phone drawer vs the comment layer', () => {
-  it('while the drawer is open the bar stacks above the comment layer (z-[55]) and <html> hides the pill', () => {
-    pathname.value = '/campaigns'
-    const { container } = render(<AppNav />)
-    const bar = container.firstElementChild as HTMLElement
-    expect(bar.className).toMatch(/\bz-30\b/)
-    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
-    expect(bar.className).toMatch(/z-\[55\]/)
-    expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(true)
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(bar.className).toMatch(/\bz-30\b/)
-    expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(false)
-  })
-
-  it('growing to desktop width while the drawer is open closes it (pill and scrolling come back)', () => {
-    let fire: ((e: { matches: boolean }) => void) | null = null
-    const mq = {
-      matches: false,
-      media: '(min-width: 768px)',
-      addEventListener: (_: string, cb: (e: { matches: boolean }) => void) => { fire = cb },
-      removeEventListener: () => { fire = null },
-    }
-    const mm = vi.spyOn(window, 'matchMedia').mockReturnValue(mq as unknown as MediaQueryList)
-    try {
-      pathname.value = '/campaigns'
-      render(<AppNav />)
-      fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
-      expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(true)
-      act(() => fire?.({ matches: true }))
-      expect(screen.queryByRole('navigation', { name: 'All screens' })).toBeNull()
-      expect(document.documentElement.hasAttribute('data-nav-menu-open')).toBe(false)
-      expect(document.documentElement.style.overflow).toBe('')
-    } finally {
-      mm.mockRestore()
-    }
   })
 })
