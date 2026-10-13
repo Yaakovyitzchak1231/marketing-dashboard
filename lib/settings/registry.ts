@@ -173,7 +173,7 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     secret: false,
     envFallback: 'WARMBLY_URL',
     placeholder: 'https://your-warmbly-host',
-    help: 'Where the self-hosted Warmbly instance lives (later: warm-up stats on the dashboard).',
+    help: 'Where the self-hosted Warmbly instance lives, e.g. https://ovh-hermes.taila95862.ts.net. Empty: the Warmbly row on /tools is used.',
     validate: isUrl,
   },
   {
@@ -182,7 +182,8 @@ export const SETTINGS_REGISTRY: SettingSpec[] = [
     group: 'Sending',
     secret: true,
     envFallback: 'WARMBLY_API_KEY',
-    help: 'API key for the Warmbly instance above.',
+    help: 'A read-only Warmbly API key (Warmbly → Settings → API keys, "Read only" preset). Shows mailboxes, warm-up and campaigns on /tools; it cannot send.',
+    testable: true,
   },
   // ------------------------------------------------------------- Verification
   {

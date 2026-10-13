@@ -68,6 +68,7 @@ import { setOwnerResearchExhausted } from '../rules/owner-research.ts'
 import { RulesError } from '../rules/schema.ts'
 import { listPageCommentsFor, readPageCommentAs, replyToPageComment, setPageCommentResolved } from '../page-comments/core.ts'
 import { INTEGRATION_OPS } from '../integrations/ops.ts'
+import { WARMBLY_OPS } from '../warmbly/ops.ts'
 import { INSTANTLY_RECONCILE_OPS } from '../instantly/ops.ts'
 import { SOURCES_HEALTH_OPS } from '../sources/ops.ts'
 import { MERGE_OPS } from '../merge/ops.ts'
@@ -500,6 +501,8 @@ export const OPS: Record<string, Op> = {
   ...SETTINGS_OPS,
   // Tools hub (lib/integrations/ops.ts): the tools Yaakov runs, their health and numbers.
   ...INTEGRATION_OPS,
+  // Warmbly (lib/warmbly/ops.ts, TAP-118): live read-only mailboxes / warm-up / campaigns.
+  ...WARMBLY_OPS,
   ...JOB_OPS,
   // Lead event stream (lib/events/ops.ts): track_event(s), recent_lead_events, event type registry.
   ...LEAD_EVENT_OPS,

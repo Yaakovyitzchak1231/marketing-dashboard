@@ -114,6 +114,14 @@ export async function testSecretAction(_prev: FormResult | null, f: FormData): P
       await client.get('/campaigns', { limit: 1 })
       return { ok: true, message: 'Instantly accepted the key.' }
     }
+    if (key === 'warmbly.api_key') {
+      const { warmblyConfig } = await import('@/lib/warmbly/config')
+      const cfg = await warmblyConfig()
+      if (cfg.state === 'no_url') return { ok: false, message: 'Set the Warmbly URL first.' }
+      if (cfg.state !== 'ready') return { ok: false, message: 'Not configured.' }
+      const me = await cfg.client.me()
+      return { ok: true, message: `Warmbly accepted the key${me.organization_name ? ` (${me.organization_name})` : ''}.` }
+    }
     return { ok: false, message: 'No test is wired up for this one yet.' }
   } catch (e) {
     return { ok: false, message: (e as Error).message.slice(0, 300) }

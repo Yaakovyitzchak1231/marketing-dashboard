@@ -113,6 +113,21 @@ and writes health + numbers here; the dashboard never calls a tool directly.
 The dashboard shows this at `/tools`: a card per active tool (link, health,
 latest numbers, optionally filtered to one campaign), docs/sheets as plain
 link cards.
+
+### Warmbly, read live (lib/warmbly/, TAP-118)
+
+Warmbly is the one tool the dashboard reads directly, because it is public over
+HTTPS (its Tailscale Funnel) and has a scoped read-only API key; the others stay
+tailnet-only behind the runner. `lib/warmbly/client.ts` is GET-only, and the key
+it is given is a Warmbly "Read only" preset key (READ_* permissions; Warmbly
+answers 403 to anything that writes). Key: `warmbly.api_key` on /settings, else
+`WARMBLY_API_KEY`. URL: `warmbly.url`, else `WARMBLY_URL`, else the `warmbly` row's
+public `url`. The /tools page shows the result in a Warmbly panel.
+
+| op | args | notes |
+|---|---|---|
+| `warmbly_snapshot` | `{}` | live read: connection, mailboxes (status, warm-up on/paused/off, SPF/DKIM/DMARC, sending state), campaigns, last-14-day warm-up totals, today's allowance; each part `{ok, value}` or `{ok:false, error}`; never the key; Viewer can run it |
+
 ## 7. Background jobs (the runner on Yaakov's OVH server)
 
 `lp.jobs` is the schedule; `lp.job_runs` is the log. A small runner service (not deployed yet — see
