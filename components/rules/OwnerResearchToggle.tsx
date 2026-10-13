@@ -33,9 +33,9 @@ export function OwnerResearchToggle({ companyId, exhausted, at, by }: { companyI
       setBusy(false)
     }
   }
-  const btn = 'rounded-card border border-line bg-surface px-2.5 py-1 text-[12px] text-ink hover:border-ink-faint disabled:opacity-50'
+  const btn = 'rounded-control border border-line bg-surface px-2.5 py-1 text-xs text-ink hover:border-ink-faint disabled:opacity-50'
   return (
-    <div className="text-[12.5px] text-ink-muted">
+    <div className="text-xs text-ink-muted">
       {exhausted ? (
         <p>
           Owner research exhausted{at ? ` on ${at}` : ''}{by ? ` by ${by}` : ''}: the role inbox can go out in role-inbox batches (no-name copy).
@@ -45,7 +45,7 @@ export function OwnerResearchToggle({ companyId, exhausted, at, by }: { companyI
       )}
       {open ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="note (optional)" aria-label="Note" className="rounded-card border border-line bg-surface px-2 py-1 text-[12.5px]" />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="note (optional)" aria-label="Note" className="rounded-control border border-line bg-surface px-2 py-1 text-xs" />
           <button type="button" className={btn} disabled={busy} onClick={send}>
             {exhausted ? 'Yes, reopen research' : 'Yes, mark exhausted'}
           </button>
