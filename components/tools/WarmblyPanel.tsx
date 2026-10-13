@@ -126,13 +126,28 @@ function Campaigns({ rows }: { rows: CampaignRow[] }) {
   )
 }
 
+/**
+ * A list's size. Use the total Warmbly reported. Without one, the page length is only a true count
+ * when the list was not cut off; otherwise it is a floor, shown as "N+", never as the total.
+ */
+function ListCount({ total, shown, truncated }: { total: number | null; shown: number; truncated: boolean }) {
+  if (total !== null) return <N v={total} />
+  return truncated ? (
+    <>
+      <N v={shown} />+
+    </>
+  ) : (
+    <N v={shown} />
+  )
+}
+
 function Snapshot({ snap }: { snap: WarmblySnapshot }) {
   const { mailboxes, campaigns, warmup, allowance } = snap
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Mailboxes">{mailboxes.ok ? <N v={mailboxes.value.total ?? mailboxes.value.rows.length} /> : <Dash />}</Stat>
-        <Stat label="Campaigns">{campaigns.ok ? <N v={campaigns.value.total ?? campaigns.value.rows.length} /> : <Dash />}</Stat>
+        <Stat label="Mailboxes">{mailboxes.ok ? <ListCount total={mailboxes.value.total} shown={mailboxes.value.rows.length} truncated={mailboxes.value.truncated} /> : <Dash />}</Stat>
+        <Stat label="Campaigns">{campaigns.ok ? <ListCount total={campaigns.value.total} shown={campaigns.value.rows.length} truncated={campaigns.value.truncated} /> : <Dash />}</Stat>
         <Stat label="Warm-up sent, 14 days">{warmup.ok ? <N v={warmup.value.sent} /> : <Dash />}</Stat>
         <Stat label="Warm-up replies, 14 days">{warmup.ok ? <N v={warmup.value.replied} /> : <Dash />}</Stat>
       </div>
@@ -169,7 +184,10 @@ function Snapshot({ snap }: { snap: WarmblySnapshot }) {
         {!campaigns.ok ? (
           <PartError what="campaigns" part={campaigns} />
         ) : campaigns.value.rows.length ? (
-          <Campaigns rows={campaigns.value.rows} />
+          <>
+            <Campaigns rows={campaigns.value.rows} />
+            {campaigns.value.truncated ? <p className="mt-1 text-2xs text-ink-faint">Showing the first {campaigns.value.rows.length}; open Warmbly for the rest.</p> : null}
+          </>
         ) : (
           <EmptyNote>No campaigns in Warmbly yet. Instantly is still the sender.</EmptyNote>
         )}
@@ -179,7 +197,10 @@ function Snapshot({ snap }: { snap: WarmblySnapshot }) {
   )
 }
 
-export function WarmblyPanel({ view }: { view: WarmblyView }) {
+/** What the panel can show: a read result, or "the page could not load Warmbly's settings at all". */
+export type WarmblyPanelView = WarmblyView | { state: 'error' }
+
+export function WarmblyPanel({ view }: { view: WarmblyPanelView }) {
   let body: ReactNode
   let meta: ReactNode = null
   if (view.state === 'no_url') {
@@ -188,6 +209,8 @@ export function WarmblyPanel({ view }: { view: WarmblyView }) {
         No Warmbly address yet. Set <span className="font-medium">Warmbly URL</span> on <Link href="/settings" className="text-accent hover:underline">Settings</Link>.
       </p>
     )
+  } else if (view.state === 'error') {
+    body = <p className="text-xs text-ink-muted">Warmbly could not be read just now (its settings failed to load). Try again, or check Warmbly on Settings.</p>
   } else if (view.state === 'no_key') {
     body = (
       <p className="text-xs text-ink-muted">

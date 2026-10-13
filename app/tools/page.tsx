@@ -8,8 +8,8 @@ import { LinkCard, ToolCard } from '@/components/tools/ToolCard'
 import { ToolForm } from '@/components/tools/ToolForm'
 import { DataSourcesSection } from '@/components/sources/DataSourcesSection'
 import { sourcesHealth } from '@/lib/sources/health'
-import { WarmblyPanel } from '@/components/tools/WarmblyPanel'
-import { loadWarmblyView, type WarmblyView } from '@/lib/warmbly/config'
+import { WarmblyPanel, type WarmblyPanelView } from '@/components/tools/WarmblyPanel'
+import { loadWarmblyView } from '@/lib/warmbly/config'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,9 +35,9 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
     listCampaigns(db, {}),
     sourcesHealth(db),
     // Live read of his Warmbly (TAP-118); a failure renders in words inside the panel.
-    loadWarmblyView(now).catch((e): WarmblyView | null => {
+    loadWarmblyView(now).catch((e): WarmblyPanelView => {
       console.error('warmbly view failed', e)
-      return null
+      return { state: 'error' }
     }),
   ])
 
@@ -82,7 +82,7 @@ export default async function ToolsPage({ searchParams }: { searchParams: SP }) 
             )}
           </div>
 
-          {warmbly ? <WarmblyPanel view={warmbly} /> : null}
+          <WarmblyPanel view={warmbly} />
 
           {docs.length ? (
             <div>

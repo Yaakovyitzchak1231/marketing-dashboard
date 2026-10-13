@@ -49,6 +49,37 @@ describe('WarmblyPanel (TAP-118)', () => {
     expect(screen.getAllByLabelText('Not reported by Warmbly').length).toBeGreaterThan(0)
   })
 
+  it('a cut-off list with no reported total shows "N+", never the page length as the total', () => {
+    const s = snap({
+      campaigns: {
+        ok: true,
+        value: { total: null, truncated: true, rows: [{ id: 'c1', name: 'First', status: 'active', dailyLimit: 50, guardrail: null }] },
+      },
+    })
+    render(<WarmblyPanel view={{ state: 'ready', baseUrl: 'https://w.example', keySource: 'env', snapshot: s }} />)
+    // The Campaigns stat reads "1+" (a floor), not "1" (a total).
+    expect(screen.getAllByText('Campaigns')[0].parentElement?.textContent).toContain('1+')
+    expect(screen.getByText(/Showing the first 1; open Warmbly for the rest\./)).toBeInTheDocument()
+  })
+
+  it('a list with no reported total that was not cut off shows its length', () => {
+    const s = snap({
+      campaigns: {
+        ok: true,
+        value: { total: null, truncated: false, rows: [{ id: 'c1', name: 'First', status: 'active', dailyLimit: 50, guardrail: null }] },
+      },
+    })
+    render(<WarmblyPanel view={{ state: 'ready', baseUrl: 'https://w.example', keySource: 'env', snapshot: s }} />)
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument()
+    expect(screen.getByText('First')).toBeInTheDocument()
+  })
+
+  it('when its settings fail to load, the section says so instead of vanishing', () => {
+    render(<WarmblyPanel view={{ state: 'error' }} />)
+    expect(screen.getByText('Warmbly')).toBeInTheDocument()
+    expect(screen.getByText(/Warmbly could not be read just now/)).toBeInTheDocument()
+  })
+
   it('a failed part shows its error in words', () => {
     const s = snap({ campaigns: { ok: false, status: 403, error: 'Warmbly answered 403: insufficient API key permissions' } })
     render(<WarmblyPanel view={{ state: 'ready', baseUrl: 'https://w.example', keySource: 'env', snapshot: s }} />)
