@@ -59,9 +59,9 @@ export default async function SuppressionsPage({ searchParams }: { searchParams:
         <SectionHeader title="Import CSV" meta="Columns: email or domain, reason (optional), campaign_id (optional), note (optional)" />
         <Card className="p-4">
           <form action={importSuppressionsCsvAction} className="flex flex-col gap-3">
-            <textarea name="csv_text" rows={4} placeholder={'email,reason\nbounced@old.com,bounced\ncompetitor.com,competitor'} className={`${inputCls} font-mono text-[12px]`} />
+            <textarea name="csv_text" rows={4} placeholder={'email,reason\nbounced@old.com,bounced\ncompetitor.com,competitor'} className={`${inputCls} font-mono text-xs`} />
             <div className="flex flex-wrap items-center gap-3">
-              <input name="csv_file" type="file" accept=".csv,text/csv" className="text-[12.5px]" />
+              <input name="csv_file" type="file" accept=".csv,text/csv" className="text-xs" />
               <select name="reason" defaultValue="manual" className={inputCls} style={{ maxWidth: 220 }}>
                 {REASONS.map((r) => (
                   <option key={r} value={r}>
