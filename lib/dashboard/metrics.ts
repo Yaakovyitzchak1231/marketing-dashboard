@@ -329,9 +329,20 @@ export function repliedLeadsFrom(input: RepliedLeadsInput): RepliedLead[] {
       (l) => !!l.timestamp_last_reply || (num(l.email_reply_count) ?? 0) > 0,
     )
     if (candidates.length === 0) continue
-    const lead =
-      candidates.find((l) => latest.campaign_id && l.campaign === latest.campaign_id) ??
-      [...candidates].sort((a, b) => Date.parse(b.timestamp_last_reply ?? '') - Date.parse(a.timestamp_last_reply ?? ''))[0]
+    let bestLead = candidates[0]
+    let maxTime = -Infinity
+    for (const c of candidates) {
+      if (latest.campaign_id && c.campaign === latest.campaign_id) {
+        bestLead = c
+        break
+      }
+      const t = Date.parse(c.timestamp_last_reply ?? '')
+      if (t > maxTime || (Number.isNaN(t) && maxTime === -Infinity)) {
+        maxTime = t
+        bestLead = c
+      }
+    }
+    const lead = bestLead
     const lastReplyAt = lead.timestamp_last_reply ?? (latest.ue_type === 2 ? latest.timestamp_email ?? null : null)
     const t = lastReplyAt ? Date.parse(lastReplyAt) : NaN
     if (!Number.isFinite(t)) continue

@@ -17,10 +17,13 @@ const SOURCE_NAMES: Record<string, string> = {
 
 export function sourceName(source: string): string {
   if (SOURCE_NAMES[source]) return SOURCE_NAMES[source]
-  const base = Object.keys(SOURCE_NAMES)
-    .filter((k) => source.startsWith(k))
-    .sort((a, b) => b.length - a.length)[0]
-  return base ? SOURCE_NAMES[base] : source
+  let bestMatch = ''
+  for (const k of Object.keys(SOURCE_NAMES)) {
+    if (source.startsWith(k) && k.length > bestMatch.length) {
+      bestMatch = k
+    }
+  }
+  return bestMatch ? SOURCE_NAMES[bestMatch] : source
 }
 
 /** Partial failures: shown, never hidden. Dismissible for this page view only. */
