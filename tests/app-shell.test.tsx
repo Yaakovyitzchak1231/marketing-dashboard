@@ -29,7 +29,9 @@ vi.mock('next/navigation', () => ({
 }))
 
 import { AppShell } from '@/components/shell/AppShell'
-import { NAV_GROUPS, NAV_ITEMS, BOTTOM_NAV, activeHref, isActive } from '@/components/shell/nav-config'
+import fs from 'node:fs'
+import path from 'node:path'
+import { NAV_GROUPS, NAV_ITEMS, BOTTOM_NAV, PALETTE_EXTRAS, activeHref, isActive } from '@/components/shell/nav-config'
 import * as legacy from '@/components/nav/AppNav'
 
 function pushUnread(unread: number) {
@@ -92,6 +94,26 @@ describe('nav config', () => {
     expect(isActive('/', '/')).toBe(true)
     expect(isActive('/leads', '/')).toBe(false)
     expect(isActive('/leadsx', '/leads')).toBe(false)
+  })
+
+  it('every nav and command-palette destination is a real route (no 404 links)', () => {
+    const root = path.resolve(__dirname, '..')
+    const exists = (href: string) => {
+      const segs = href.split('/').filter(Boolean)
+      // Walk app/, letting a dynamic [param] directory stand in for any segment.
+      let dir = path.join(root, 'app')
+      for (const seg of segs) {
+        if (fs.existsSync(path.join(dir, seg))) dir = path.join(dir, seg)
+        else {
+          const dyn = fs.readdirSync(dir).find((d) => /^\[[^.]+\]$/.test(d))
+          if (!dyn) return false
+          dir = path.join(dir, dyn)
+        }
+      }
+      return ['page.tsx', 'page.ts'].some((f) => fs.existsSync(path.join(dir, f)))
+    }
+    const all = [...NAV_ITEMS.map((i) => i.href), ...NAV_ITEMS.flatMap((i) => i.match ?? []), ...PALETTE_EXTRAS.map((p) => p.href)]
+    expect(all.filter((h) => !exists(h))).toEqual([])
   })
 
   it('the phone bottom bar holds the four daily destinations', () => {
