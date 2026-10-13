@@ -41,8 +41,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       <ActionNote note={sp.note} tone={sp.tone} />
       {low.length ? (
         <Card className="mb-5 border-warn/30 px-4 py-3">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-warn">Running low on leads</p>
-          <ul className="mt-1.5 space-y-1 text-[13px]">
+          <p className="text-xs font-semibold uppercase tracking-[0.06em] text-warn">Running low on leads</p>
+          <ul className="mt-1.5 space-y-1 text-sm">
             {low.map((l) => (
               <li key={l.key} className="flex items-center justify-between gap-2">
                 <span>{l.name}</span>
@@ -58,8 +58,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         {CARDS.map((c) => (
           <Link key={c.href} href={c.href} prefetch={false} className="block">
             <Card className="h-full px-4 py-4 hover:border-ink-faint">
-              <h2 className="text-[14px] font-semibold text-ink">{c.title}</h2>
-              <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">{c.body}</p>
+              <h2 className="text-sm font-semibold text-ink">{c.title}</h2>
+              <p className="mt-1 text-xs leading-snug text-ink-muted">{c.body}</p>
             </Card>
           </Link>
         ))}
@@ -67,10 +67,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
       <section aria-labelledby="lm-h">
         <SectionHeader id="lm-h" title="Lead Master copy (read-only)" meta="The lead database written back out. The Lead Master Leads tab is never changed." />
-        <Card className="px-4 py-4 text-[13px]">
+        <Card className="px-4 py-4 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             {!canExport ? (
-              <p className="text-[13px] text-ink-muted">CSV export needs editor access.</p>
+              <p className="text-sm text-ink-muted">CSV export needs editor access.</p>
             ) : inp.db ? (
               <a href="/api/reports/lead-master" className={BUTTON}>Download CSV</a>
             ) : (
@@ -87,12 +87,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             />
           </div>
           {!sheetReady ? (
-            <p className="mt-2 text-[12px] text-ink-faint">
+            <p className="mt-2 text-xs text-ink-faint">
               To write the Sheet tab, set LEAD_MASTER_SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON (share the Sheet with that service account as Editor). The CSV works without them.
             </p>
           ) : null}
           {exportsList.length ? (
-            <ul className="mt-3 space-y-1 text-[12px] text-ink-muted">
+            <ul className="mt-3 space-y-1 text-xs text-ink-muted">
               {exportsList.map((e) => (
                 <li key={e.id}>
                   {new Date(e.started_at).toLocaleString('en-US', { timeZone: inp.data.range.timezone, dateStyle: 'medium', timeStyle: 'short' })}:{' '}
@@ -103,7 +103,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-[12px] text-ink-faint">No copies written yet.</p>
+            <p className="mt-3 text-xs text-ink-faint">No copies written yet.</p>
           )}
         </Card>
       </section>
