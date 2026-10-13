@@ -62,7 +62,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
     for (const [k, v] of Object.entries(m)) if (v) p.set(k, v)
     return p.toString() ? `/activity?${p}` : '/activity'
   }
-  const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-[12px] ${on ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
+  const chip = (on: boolean) => `rounded-full border px-2.5 py-1 text-xs ${on ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-muted hover:text-ink'}`
   let lastDay = ''
 
   return (
@@ -87,14 +87,14 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
                   lastDay = day
                   return (
                     <li key={e.id}>
-                      {header ? <p className="border-b border-line-soft bg-canvas px-4 py-1.5 text-[11.5px] font-medium uppercase tracking-[0.05em] text-ink-faint">{header}</p> : null}
-                      <div className="flex gap-3 border-b border-line-soft px-4 py-2.5 text-[13px] last:border-0">
-                        <span className="w-[62px] shrink-0 pt-px text-[11.5px] tabular-nums text-ink-faint">
+                      {header ? <p className="border-b border-line-soft bg-canvas px-4 py-1.5 text-xs font-medium uppercase tracking-[0.05em] text-ink-faint">{header}</p> : null}
+                      <div className="flex gap-3 border-b border-line-soft px-4 py-2.5 text-sm last:border-0">
+                        <span className="w-[62px] shrink-0 pt-px text-xs tabular-nums text-ink-faint">
                           {new Date(e.at).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })}
                         </span>
                         <p className="min-w-0 leading-snug text-ink">
                           {e.task_id ? <Link href={`/team/${e.task_id}`} className="hover:text-accent">{e.summary}</Link> : e.summary}
-                          {e.actor_kind === 'agent' && e.actor ? <span className="ml-1.5 text-[11px] text-ink-faint">{e.actor_name}</span> : null}
+                          {e.actor_kind === 'agent' && e.actor ? <span className="ml-1.5 text-2xs text-ink-faint">{e.actor_name}</span> : null}
                         </p>
                       </div>
                     </li>
@@ -115,21 +115,21 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
             <SectionHeader id="approvals" title="Needs your OK" meta={<span className="tabular-nums">{approvals.length}</span>} />
             <Card className="divide-y divide-line-soft">
               {approvals.length ? approvals.map((a) => (
-                <div key={a.id} className="space-y-2 p-3 text-[13px]">
+                <div key={a.id} className="space-y-2 p-3 text-sm">
                   <div className="flex items-center gap-2">
                     <Pill tone={a.instantly_action_id || a.action === 'spend' || a.action === 'destructive' ? 'warn' : 'accent'}>{a.instantly_action_id ? 'Instantly' : a.action}</Pill>
-                    <span className="text-[11.5px] text-ink-faint">{a.requester_name} · <Ago at={a.created_at} now={now} /></span>
+                    <span className="text-xs text-ink-faint">{a.requester_name} · <Ago at={a.created_at} now={now} /></span>
                   </div>
                   <p className="leading-snug text-ink">{a.summary}</p>
                   {isValueChangePayload(a.payload) ? (
-                    <p className="text-[12px] text-ink-muted">
+                    <p className="text-xs text-ink-muted">
                       {a.payload.field_label}: <span className="tabular-nums">{a.payload.current}</span> stored → <span className="tabular-nums">{a.payload.proposed}</span> asked.{' '}
                       Approving records the decision; the number changes only when Instantly&rsquo;s data does.{' '}
                       <Link className="text-accent" href={`/leads/${a.payload.entity_id}?tab=engagement`}>Open the lead</Link>
                     </p>
                   ) : null}
-                  {a.est_cost_usd != null ? <p className="text-[12px] tabular-nums text-ink-muted">Estimated cost ${Number(a.est_cost_usd).toFixed(2)}</p> : null}
-                  {a.task_id ? <Link className="text-[12px] text-accent" href={`/team/${a.task_id}`}>Open the task</Link> : null}
+                  {a.est_cost_usd != null ? <p className="text-xs tabular-nums text-ink-muted">Estimated cost ${Number(a.est_cost_usd).toFixed(2)}</p> : null}
+                  {a.task_id ? <Link className="text-xs text-accent" href={`/team/${a.task_id}`}>Open the task</Link> : null}
                   {a.instantly_action_id ? (
                     <InstantlyApprovalCard approvalId={a.id} preview={a.payload as GatePreview} enabled={instantlyOn} />
                   ) : (
@@ -143,19 +143,19 @@ export default async function ActivityPage({ searchParams }: { searchParams: SP 
             <SectionHeader id="locks" title="Checked out" meta={<span className="tabular-nums">{locks.length}</span>} />
             <Card className="divide-y divide-line-soft">
               {locks.length ? locks.map((l) => (
-                <div key={l.resource} className="flex items-start justify-between gap-2 px-3 py-2.5 text-[12.5px]">
+                <div key={l.resource} className="flex items-start justify-between gap-2 px-3 py-2.5 text-xs">
                   <div className="min-w-0">
                     <p className="truncate text-ink">{l.resource}</p>
-                    <p className="text-[11.5px] text-ink-faint">{l.holder_name}{l.note ? ` · ${l.note}` : ''} · since <Ago at={l.acquired_at} now={now} /></p>
+                    <p className="text-xs text-ink-faint">{l.holder_name}{l.note ? ` · ${l.note}` : ''} · since <Ago at={l.acquired_at} now={now} /></p>
                   </div>
                   <form action={releaseLockAction}>
                     <input type="hidden" name="resource" value={l.resource} />
-                    <button className="text-[12px] text-ink-muted hover:text-bad" type="submit" title="Take it back (the agent loses the checkout)">Take back</button>
+                    <button className="text-xs text-ink-muted hover:text-bad" type="submit" title="Take it back (the agent loses the checkout)">Take back</button>
                   </form>
                 </div>
               )) : <EmptyNote>Nothing is checked out.</EmptyNote>}
             </Card>
-            <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">An agent checks out a campaign, list or lead before changing it, like a library book; others wait. A checkout ends on its own if the agent goes quiet.</p>
+            <p className="mt-2 text-xs leading-snug text-ink-faint">An agent checks out a campaign, list or lead before changing it, like a library book; others wait. A checkout ends on its own if the agent goes quiet.</p>
           </section>
         </aside>
       </div>
