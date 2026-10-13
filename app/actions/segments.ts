@@ -14,7 +14,7 @@ import { allFields, type FieldDef } from '@/lib/segments/fields'
 import { compileSegment, countSegment, matchingIds, sampleRows, type SegmentCounts } from '@/lib/segments/compile'
 import { readback } from '@/lib/segments/readback'
 import {
-  archiveSegment, createSegment, getSegment, listSegments, SegmentError, updateSegment, type Segment,
+  createSegment, getSegment, listSegments, SegmentError, updateSegment, type Segment,
 } from '@/lib/segments/store'
 import { isSegmentAiConfigured, segmentFromText, SegmentAiError, type SegmentFromTextOutcome } from '@/lib/segments/ai'
 import { listPresets, getPreset, presetSegmentInput, type SegmentPreset } from '@/lib/segments/presets'
@@ -159,18 +159,6 @@ export async function updateSegmentAction(
     const ME = await actorFor('editor')
     const d = db()
     const data = await d.tx((q) => updateSegment(q, ME, id, patch, 'ui'), ME)
-    touch(id)
-    return { ok: true, data }
-  } catch (e) {
-    return fail(e)
-  }
-}
-
-export async function archiveSegmentAction(id: number): Promise<{ ok: true; data: Segment } | Fail> {
-  try {
-    const ME = await actorFor('editor')
-    const d = db()
-    const data = await d.tx((q) => archiveSegment(q, ME, id, 'ui'), ME)
     touch(id)
     return { ok: true, data }
   } catch (e) {

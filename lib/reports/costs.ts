@@ -41,7 +41,6 @@ export interface Span {
 
 const DAY = 86_400_000
 const toUtc = (ymd: string) => Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(5, 7)) - 1, Number(ymd.slice(8, 10)))
-const ymd = (t: number) => new Date(t).toISOString().slice(0, 10)
 
 export function daysInMonth(month: string): number {
   const y = Number(month.slice(0, 4))
@@ -259,5 +258,3 @@ export async function verificationSpend(q: Queryable, span: Span): Promise<numbe
   )
   return Number(rows[0]?.spent ?? 0)
 }
-
-export { ymd as _ymd }

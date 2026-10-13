@@ -237,14 +237,3 @@ export async function reorderSteps(db: Db, actor: string, campaignId: number, or
     return listSteps(q, campaignId)
   }, actor)
 }
-
-/** Move one step number up or down by one (the dashboard's arrows). */
-export async function moveStep(db: Db, actor: string, campaignId: number, stepNumber: number, dir: 'up' | 'down'): Promise<StepRow[]> {
-  const nums = [...new Set((await listSteps(db, campaignId)).map((s) => s.step_number))].sort((a, b) => a - b)
-  const i = nums.indexOf(stepNumber)
-  const j = dir === 'up' ? i - 1 : i + 1
-  if (i < 0 || j < 0 || j >= nums.length) return listSteps(db, campaignId)
-  const order = [...nums]
-  ;[order[i], order[j]] = [order[j], order[i]]
-  return reorderSteps(db, actor, campaignId, order)
-}

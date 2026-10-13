@@ -20,18 +20,6 @@ export async function verificationCounts(q: Queryable): Promise<{ total: number;
   return { total, by_status: by }
 }
 
-/** Key set? Balance? Fetched server-side; the keys never reach the browser. */
-export async function providerBalances(
-  env: Record<string, string | undefined> = process.env,
-  fetchImpl?: FetchLike,
-): Promise<{ millionverifier: ProviderBalance; zerobounce: ProviderBalance }> {
-  const [mv, zb] = await Promise.all([
-    mvCredits(env.MILLIONVERIFIER_API_KEY?.trim() || undefined, fetchImpl),
-    zbCredits(env.ZEROBOUNCE_API_KEY?.trim() || undefined, fetchImpl),
-  ])
-  return { millionverifier: mv, zerobounce: zb }
-}
-
 /** Settings-aware variant: resolves MillionVerifier/ZeroBounce keys through the
  * settings store (DB first, env fallback), then fetches each provider's balance. */
 export async function providerBalancesAsync(fetchImpl?: FetchLike): Promise<{ millionverifier: ProviderBalance; zerobounce: ProviderBalance }> {

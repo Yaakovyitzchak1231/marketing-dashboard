@@ -20,8 +20,6 @@
 import 'server-only'
 import { INSTANTLY_BASE_URL } from '@/lib/instantly/client'
 
-export type WriteKind = 'pause' | 'resume' | 'add_leads'
-
 const UUIDISH = /^[0-9a-f-]{8,64}$/i
 
 export function allowedWrite(path: string): boolean {
