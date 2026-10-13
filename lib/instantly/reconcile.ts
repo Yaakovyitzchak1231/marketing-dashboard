@@ -3,6 +3,10 @@
  * read-only API to fill gaps left by a webhook delivery that never arrived
  * (Instantly does not guarantee webhook delivery; this is the safety net).
  *
+ * Writes where the webhook writes: lp.lead_events (segments, journeys, scoring) AND the
+ * lp.campaign_touches desk rows the Overview and the Replies page read. Before this a
+ * reconciled reply landed in lead_events only and never showed on the Replies page.
+ *
  * Same lp.lead_events table, same dedupe story as the live webhook
  * (lib/webhooks/instantly.ts): every insert here carries a stable
  * dedupe_key, so running this job twice — or running it after the webhook
@@ -50,6 +54,33 @@ const INTEREST_EVENT: Record<number, string> = {
   [-1]: 'lead_not_interested',
 }
 
+/**
+ * ApiLead.lt_interest_status -> the Instantly webhook event_type the reply desk buckets on
+ * (lib/leads/replies.ts EVENT_BUCKET). Statuses the desk has no bucket for (-3 Lost, -4 No Show,
+ * anything new) get no touch row; they still land in lead_events as before.
+ */
+const INTEREST_TOUCH: Record<number, string> = {
+  1: 'lead_interested',
+  2: 'lead_meeting_booked',
+  3: 'lead_meeting_completed',
+  4: 'lead_closed',
+  0: 'lead_out_of_office',
+  [-1]: 'lead_not_interested',
+  [-2]: 'lead_wrong_person',
+}
+
+/** One lp.campaign_touches row to write alongside a reconciled lead event. */
+interface TouchRow {
+  contact: ReconcileContact
+  email: string
+  instantlyCampaignId: string | null
+  campaignName: string | null
+  eventType: string
+  occurredAt: string
+  externalId: string
+  payload: Record<string, unknown>
+}
+
 export interface ReconcileSummary {
   contacts_checked: number
   leads_fetched: number
@@ -57,6 +88,8 @@ export interface ReconcileSummary {
   events_considered: number
   events_inserted: number
   events_skipped_duplicate: number
+  /** lp.campaign_touches rows written for the Replies page (new ones only). */
+  touches_inserted: number
   errors: string[]
 }
 
@@ -81,16 +114,16 @@ async function knownContacts(q: Queryable, sinceDays: number): Promise<Reconcile
   return rows
 }
 
-/** lp.campaigns rows already linked to any of these Instantly campaign ids. */
-async function dashboardCampaignsFor(q: Queryable, instantlyIds: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
+/** lp.campaigns rows already linked to any of these Instantly campaign ids (id + name). */
+async function dashboardCampaignsFor(q: Queryable, instantlyIds: string[]): Promise<Map<string, { id: number; name: string }>> {
+  const map = new Map<string, { id: number; name: string }>()
   const ids = [...new Set(instantlyIds)]
   if (!ids.length) return map
-  const { rows } = await q.query<{ id: number; instantly_campaign_id: string }>(
-    `select id, instantly_campaign_id from lp.campaigns where instantly_campaign_id = any($1::text[])`,
+  const { rows } = await q.query<{ id: number; name: string; instantly_campaign_id: string }>(
+    `select id, name, instantly_campaign_id from lp.campaigns where instantly_campaign_id = any($1::text[])`,
     [ids],
   )
-  for (const r of rows) map.set(r.instantly_campaign_id, r.id)
+  for (const r of rows) map.set(r.instantly_campaign_id, { id: r.id, name: r.name })
   return map
 }
 
@@ -169,6 +202,7 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
     events_considered: 0,
     events_inserted: 0,
     events_skipped_duplicate: 0,
+    touches_inserted: 0,
     errors: [],
   }
 
@@ -204,18 +238,49 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
     const campaignMap = await dashboardCampaignsFor(q, campaignIds)
 
     const inputs: EmitLeadEventInput[] = []
+    const touches = new Map<string, TouchRow>() // by dedupe_key, so only events that survive dedupe get a touch
     for (const lead of leads) {
       const email = normalizeEmail(lead.email ?? null)
       const contact = email ? byEmail.get(email) : undefined
       if (!email || !contact) continue
-      const input = leadEventInput(lead, contact, email, lead.campaign ? (campaignMap.get(lead.campaign) ?? null) : null)
-      if (input) inputs.push(input)
+      const campaign = lead.campaign ? campaignMap.get(lead.campaign) : undefined
+      const input = leadEventInput(lead, contact, email, campaign?.id ?? null)
+      if (!input) continue
+      inputs.push(input)
+      const eventType = lead.lt_interest_status != null ? INTEREST_TOUCH[lead.lt_interest_status] : undefined
+      if (eventType && input.occurred_at && input.dedupe_key) {
+        touches.set(input.dedupe_key, {
+          contact, email, eventType,
+          instantlyCampaignId: lead.campaign ?? null,
+          campaignName: campaign?.name ?? null,
+          occurredAt: new Date(input.occurred_at).toISOString(),
+          externalId: input.dedupe_key,
+          payload: { reconciled: true, lead_email: email, lt_interest_status: lead.lt_interest_status, campaign_name: campaign?.name ?? null },
+        })
+      }
     }
     for (const email of threads) {
       const addr = normalizeEmail(email.lead ?? null)
       const contact = addr ? byEmail.get(addr) : undefined
       if (!addr || !contact) continue
-      inputs.push(replyEventInput(email, contact, addr, email.campaign_id ? (campaignMap.get(email.campaign_id) ?? null) : null))
+      const campaign = email.campaign_id ? campaignMap.get(email.campaign_id) : undefined
+      const input = replyEventInput(email, contact, addr, campaign?.id ?? null)
+      inputs.push(input)
+      if (input.occurred_at && input.dedupe_key) {
+        touches.set(input.dedupe_key, {
+          contact, email: addr, eventType: input.type,
+          instantlyCampaignId: email.campaign_id ?? null,
+          campaignName: campaign?.name ?? null,
+          occurredAt: new Date(input.occurred_at).toISOString(),
+          externalId: input.dedupe_key,
+          // Same keys the webhook payload carries, so the Replies page reads both alike.
+          payload: {
+            reconciled: true, lead_email: addr, instantly_email_id: email.id, thread_id: email.thread_id ?? null,
+            campaign_name: campaign?.name ?? null,
+            reply_subject: email.subject ?? null, reply_text_snippet: email.content_preview ?? null,
+          },
+        })
+      }
     }
 
     summary.events_considered = inputs.length
@@ -226,6 +291,17 @@ export async function reconcileInstantly(db: Db, client: InstantlyClient, opts: 
       const results = await db.tx(async (tq) => {
         const out: Awaited<ReturnType<typeof emitLeadEvents>> = []
         for (let i = 0; i < fresh.length; i += INSERT_CHUNK) out.push(...(await emitLeadEvents(tq, fresh.slice(i, i + INSERT_CHUNK))))
+        for (const input of fresh) {
+          const t = input.dedupe_key ? touches.get(input.dedupe_key) : undefined
+          if (!t) continue
+          const ins = await tq.query<{ id: number }>(
+            `insert into lp.campaign_touches (contact_id, company_id, email, campaign_id, campaign_name, event_type, occurred_at, source, external_id, payload)
+             values ($1, $2, $3, $4, $5, $6, $7, 'instantly_reconcile', $8, $9)
+             on conflict (source, external_id) where external_id is not null do nothing returning id`,
+            [t.contact.id, t.contact.company_id, t.email, t.instantlyCampaignId, t.campaignName, t.eventType, t.occurredAt, t.externalId, JSON.stringify(t.payload)],
+          )
+          if (ins.rows[0]) summary.touches_inserted++
+        }
         return out
       }, 'instantly-ai')
       summary.events_inserted = results.filter((r) => r.inserted).length

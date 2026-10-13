@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 import { InstantlyClient } from '@/lib/instantly/client'
 import { reconcileInstantly } from '@/lib/instantly/reconcile'
+import { loadReplyDesk } from '@/lib/leads/replies'
 import { fakeInstantly } from './helpers/instantly-fake'
 import { createTestDb } from './helpers/pglite-db'
 
@@ -53,6 +54,7 @@ describe('reconcileInstantly', () => {
     // ann: interested (status 1) + a received reply. bob: no status, sent-not-received thread -> nothing.
     // bounce: no status, one received reply. old: No Show (-4, unmapped -> custom) + a received reply.
     expect(summary.events_inserted).toBe(5)
+    expect(summary.touches_inserted).toBe(4)
     expect(summary.events_skipped_duplicate).toBe(0)
 
     const postedBody = calls.find((c) => c.path === '/leads/list')?.body as { contacts: string[] }
@@ -69,12 +71,29 @@ describe('reconcileInstantly', () => {
     expect(oldCustom?.props).toMatchObject({ lt_interest_status: -4 })
   })
 
+  it('also writes the campaign_touches rows the Replies page reads', async () => {
+    // Test 1 inserted 5 lead events; 4 of them have a desk bucket (the No Show label, -4, has none).
+    const touches = await db.query<{ email: string; event_type: string; source: string }>(
+      "select email, event_type, source from lp.campaign_touches where source = 'instantly_reconcile' order by email, event_type",
+    )
+    expect(touches.rows).toHaveLength(4)
+    expect(touches.rows).toContainEqual(expect.objectContaining({ email: 'ann@shop-a.example', event_type: 'lead_interested' }))
+    expect(touches.rows).toContainEqual(expect.objectContaining({ email: 'ann@shop-a.example', event_type: 'reply_received' }))
+    expect(touches.rows.find((r) => r.email === 'bob@shop-b.example')).toBeUndefined()
+
+    const desk = await loadReplyDesk(db)
+    const bounce = desk.find((i) => i.email === 'bounce@shop-c.example')
+    expect(bounce?.bucket).toBe('needs_reply')
+    expect(desk.some((i) => i.email === 'ann@shop-a.example')).toBe(true)
+  })
+
   it('is idempotent: a second run against the same Instantly state inserts nothing new', async () => {
     const { fetchImpl } = fakeInstantly()
     const summary = await reconcileInstantly(db, client(fetchImpl))
     expect(summary.events_considered).toBeGreaterThan(0)
     expect(summary.events_inserted).toBe(0)
     expect(summary.events_skipped_duplicate).toBe(summary.events_considered)
+    expect(summary.touches_inserted).toBe(0)
   })
 
   it('records the Instantly error and still returns a summary when a call fails', async () => {
