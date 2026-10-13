@@ -6,6 +6,7 @@
  */
 import { EmptyNote } from '@/components/dashboard/primitives'
 import type { LeadEventRow } from '@/lib/leads/detail'
+import { formatInAppZone } from '@/lib/time'
 
 /** Fallback when an event's type has no registered label (shouldn't normally happen). */
 function fallbackLabel(type: string): string {
@@ -32,7 +33,7 @@ export function relativeTime(d: Date | string, now: Date = new Date()): string {
   if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`
   if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`
   if (diff < 30 * DAY) return `${Math.floor(diff / DAY)}d ago`
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatInAppZone(d, { month: 'short', day: 'numeric' })
 }
 
 export const TIMELINE_CATEGORIES = ['email', 'lifecycle', 'verification', 'web', 'social', 'meeting', 'deal', 'signal', 'custom'] as const

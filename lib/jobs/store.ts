@@ -294,6 +294,27 @@ export async function reapStale(db: Db, actor = 'system'): Promise<string[]> {
   }, actor)
 }
 
+/**
+ * The newest run of every job, however long ago it was. The Jobs page used to group the last
+ * 40 runs of ALL jobs, so one chatty job (journey_tick runs every minute) pushed every other
+ * job out of the window and a job that ran last night read "never run".
+ */
+export async function latestRunPerJob(db: Queryable): Promise<JobRunRow[]> {
+  const { rows } = await db.query<JobRunRow>(
+    `select distinct on (job_name) * from lp.job_runs order by job_name, started_at desc, id desc`,
+  )
+  return rows
+}
+
+/** Failed or timed-out runs, newest first, read on their own so routine successes can't hide them. */
+export async function recentFailedRuns(db: Queryable, limit = 20): Promise<JobRunRow[]> {
+  const { rows } = await db.query<JobRunRow>(
+    `select * from lp.job_runs where status in ('failed', 'timeout') order by started_at desc limit $1`,
+    [Math.min(Math.max(Number(limit) || 20, 1), 200)],
+  )
+  return rows
+}
+
 export async function listJobRuns(db: Queryable, filter: { job_name?: string; limit?: number } = {}): Promise<JobRunRow[]> {
   const limit = Math.min(Math.max(Number(filter.limit) || 25, 1), 200)
   const { rows } = await db.query<JobRunRow>(

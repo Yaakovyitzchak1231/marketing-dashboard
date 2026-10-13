@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getDb } from '@/lib/db'
-import { loadReplyDesk, groupReplies, REPLY_BUCKETS, BUCKET_LABELS, type ReplyBucket, type ReplyItem } from '@/lib/leads/replies'
+import { loadReplyDesk, replyDeskCounts, groupReplies, REPLY_BUCKETS, BUCKET_LABELS, type ReplyBucket, type ReplyItem } from '@/lib/leads/replies'
 import { PageShell, DbNotConnected } from '@/components/app/PageShell'
 import { Card, EmptyNote, SectionHeader } from '@/components/dashboard/primitives'
 import { dateTime, place } from '@/components/leads/pills'
@@ -29,20 +29,22 @@ export default async function RepliesPage() {
       </PageShell>
     )
   }
-  const items = await loadReplyDesk(db)
+  const [items, counts] = await Promise.all([loadReplyDesk(db), replyDeskCounts(db)])
   const g = groupReplies(items)
-  const waiting = g.needs_reply.length
+  // Counts come from every lead; the list shows the newest 500, and says so when it is cut.
+  const waiting = counts.needs_reply
+  const capped = counts.total > items.length
   return (
     <PageShell
       title="Replies"
-      meta={`${waiting} waiting on you · ${items.length} lead${items.length === 1 ? '' : 's'} with reply events · answer in Instantly’s Unibox`}
+      meta={`${waiting} waiting on you · ${counts.total} lead${counts.total === 1 ? '' : 's'} with reply events${capped ? ` (newest ${items.length} listed)` : ''} · answer in Instantly’s Unibox`}
     >
       <nav aria-label="Reply groups" className="-mx-4 mb-5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
         <ul className="flex w-max gap-1.5">
           {REPLY_BUCKETS.map((b) => (
             <li key={b}>
               <a href={`#${b}`} className="block whitespace-nowrap rounded-full border border-line bg-surface px-2.5 py-1 text-xs text-ink-muted hover:text-ink">
-                {BUCKET_LABELS[b]} <span className="tabular-nums text-ink">{g[b].length}</span>
+                {BUCKET_LABELS[b]} <span className="tabular-nums text-ink">{counts[b]}</span>
               </a>
             </li>
           ))}

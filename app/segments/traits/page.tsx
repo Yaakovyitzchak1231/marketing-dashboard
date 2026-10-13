@@ -4,6 +4,7 @@ import { ensureTraitFieldsRegistered } from '@/lib/traits/register'
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import { defineTraitAction, archiveTraitAction, previewTraitAction, computePreviewFromQuery } from '@/app/actions/traits'
 import { isUndefinedTable } from '@/lib/db/errors'
+import { formatInAppZone } from '@/lib/time'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,7 +85,7 @@ export default async function TraitsPage({ searchParams }: { searchParams: Promi
                       <td className="px-4 py-2"><Pill tone="neutral">{t.entity}</Pill></td>
                       <td className="px-4 py-2">{t.definition.aggregation}</td>
                       <td className="px-4 py-2">{t.definition.window_days ? `${t.definition.window_days}d` : 'all time'}</td>
-                      <td className="px-4 py-2 text-ink-faint">{t.last_computed_at ? new Date(t.last_computed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never'}</td>
+                      <td className="px-4 py-2 text-ink-faint">{t.last_computed_at ? formatInAppZone(t.last_computed_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never'}</td>
                       <td className="px-4 py-2 text-right">
                         <form action={archiveTraitAction}>
                           <input type="hidden" name="key" value={t.key} />

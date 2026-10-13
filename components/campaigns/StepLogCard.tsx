@@ -1,5 +1,6 @@
 import { Card, EmptyNote, Pill, SectionHeader } from '@/components/dashboard/primitives'
 import type { StepLogRow } from '@/lib/actions/execute'
+import { formatInAppZone } from '@/lib/time'
 
 const tone = (s: StepLogRow['status']) => (s === 'ok' ? 'good' : s === 'failed' ? 'bad' : 'neutral')
 
@@ -27,7 +28,7 @@ export function StepLogCard({ entries }: { entries: StepLogRow[] }) {
               {entries.map((e) => (
                 <tr key={e.id} className="border-t border-line-soft">
                   <td className="py-1 pr-2 whitespace-nowrap text-ink-muted">
-                    {new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {formatInAppZone(e.created_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </td>
                   <td className="py-1 pr-2 font-mono">{e.step_key}</td>
                   <td className="py-1 pr-2 font-mono">{e.action}</td>

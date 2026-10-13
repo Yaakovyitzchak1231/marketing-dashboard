@@ -24,11 +24,12 @@ export async function overviewReadiness(q: Queryable): Promise<OverviewReadiness
       q.query<{ tier: string; n: number; stale: number }>(
         `select e.tier, count(*)::int as n, count(*) filter (where e.stale)::int as stale
            from lp.lead_evaluations e join lp.rule_sets s on s.id = e.rule_set_id and s.scope = 'pool' and not s.archived
+           join lp.companies c on c.id = e.company_id and c.merged_into is null
           group by e.tier`,
       ),
       q.query<{ n: number; companies: number }>(
         `select (select count(*)::int from lp.rule_recompute where status in ('queued', 'running')) as n,
-                (select count(*)::int from lp.companies) as companies`,
+                (select count(*)::int from lp.companies where merged_into is null) as companies`,
       ),
       topParkReasons(q, null, 5),
     ])

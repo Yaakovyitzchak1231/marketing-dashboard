@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db'
 import { listCampaigns } from '@/lib/campaigns/store'
-import { listJobRuns, listJobs } from '@/lib/jobs/store'
+import { latestRunPerJob, listJobs, recentFailedRuns } from '@/lib/jobs/store'
+import { formatInAppZone } from '@/lib/time'
 import { loadRunnerSignals, runnerLabel, runnerStatus, type RunnerStatus } from '@/lib/jobs/runner-status'
 import { Card, EmptyNote, Pill, SectionHeader, type PillTone } from '@/components/dashboard/primitives'
 import { saveJobAction, runJobNowAction, toggleJobAction } from '@/app/actions/jobs'
@@ -25,7 +26,7 @@ const abs = (iso: string | null) => {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+  return formatInAppZone(d, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 /** A short, human reading of the common cron shapes; falls back to the raw expression for anything else. */
@@ -86,9 +87,10 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     )
   }
 
-  const [jobs, runs, campaigns, runnerSignals] = await Promise.all([
+  const [jobs, runs, failingRuns, campaigns, runnerSignals] = await Promise.all([
     listJobs(db),
-    listJobRuns(db, { limit: 40 }),
+    latestRunPerJob(db),
+    recentFailedRuns(db, 20),
     listCampaigns(db, {}),
     loadRunnerSignals(db).catch(() => null),
   ])
@@ -101,7 +103,6 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
     list.push(r)
     runsByJob.set(r.job_name, list)
   }
-  const failingRuns = runs.filter((r) => r.status === 'failed' || r.status === 'timeout').slice(0, 20)
 
   return (
     <main className="mx-auto max-w-shell px-4 py-6 sm:px-6">

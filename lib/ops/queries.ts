@@ -1,4 +1,6 @@
 import type { Queryable } from '../db/types.ts'
+import { PENDING_APPROVAL_SQL, unreadCountSql } from './counters.ts'
+import { ROUTINE_EVENT_SQL } from './routine.ts'
 
 export interface ActorView {
   id: string
@@ -28,7 +30,7 @@ export async function listActors(q: Queryable): Promise<ActorView[]> {
             (select count(*)::int from lp.tasks t where t.claimed_by = a.id and t.status in ('claimed', 'running', 'blocked', 'needs_approval')) as active_tasks,
             (select count(*)::int from lp.tasks t where t.assigned_to = a.id and t.status = 'queued') as queued_for,
             (select count(*)::int from lp.locks l where l.holder = a.id and l.lease_expires_at > now()) as locks_held,
-            (select count(*)::int from lp.notifications n where n.recipient = a.id and n.read_at is null) as unread,
+            ${unreadCountSql('a.id')} as unread,
             (select count(*)::int from lp.agent_memory m where m.scope = a.id) as memory_notes,
             (select count(*)::int from lp.delivery_channels c where c.actor_id = a.id and c.enabled) as channels,
             a.paused_at, (select p.display_name from lp.actors p where p.id = a.paused_by) as paused_by_name, a.pause_reason
@@ -129,7 +131,7 @@ export async function pendingApprovals(q: Queryable) {
   const { rows } = await q.query<{ id: number; action: string; summary: string; est_cost_usd: number | null; requested_by: string; requester_name: string; task_id: number | null; created_at: Date; expires_at: Date | null; payload: unknown; instantly_action_id: number | null }>(
     `select ap.id, ap.action, ap.summary, ap.est_cost_usd, ap.requested_by, a.display_name as requester_name, ap.task_id, ap.created_at, ap.expires_at, ap.payload, ap.instantly_action_id
        from lp.approvals ap join lp.actors a on a.id = ap.requested_by
-      where ap.status = 'pending' and (ap.expires_at is null or ap.expires_at > now())
+      where ${PENDING_APPROVAL_SQL}
       order by ap.created_at`,
   )
   return rows
@@ -156,11 +158,18 @@ export interface FeedEvent {
   task_id: number | null
 }
 
-export async function feed(q: Queryable, f: { actor?: string | null; kind_prefix?: string | null; limit?: number; before_id?: number | null } = {}): Promise<FeedEvent[]> {
+/**
+ * The human-facing activity feed. Routine job runs (ROUTINE_EVENT_SQL) are left out unless the
+ * caller filters by a kind prefix (asking for "job" events by name shows them) or passes
+ * include_routine.
+ */
+export async function feed(q: Queryable, f: { actor?: string | null; kind_prefix?: string | null; limit?: number; before_id?: number | null; include_routine?: boolean } = {}): Promise<FeedEvent[]> {
+  const hideRoutine = !f.include_routine && !f.kind_prefix
   const { rows } = await q.query<FeedEvent>(
     `select e.id, e.at, e.actor, a.display_name as actor_name, a.kind as actor_kind, e.kind, e.summary, e.entity_type, e.entity_id, e.task_id
        from lp.events e left join lp.actors a on a.id = e.actor
       where ($1::text is null or e.actor = $1) and ($2::text is null or e.kind like $2 || '%') and ($4::bigint is null or e.id < $4)
+        ${hideRoutine ? `and not ${ROUTINE_EVENT_SQL}` : ''}
       order by e.id desc limit $3`,
     [f.actor ?? null, f.kind_prefix ?? null, Math.min(Math.max(f.limit ?? 100, 1), 500), f.before_id ?? null],
   )
@@ -195,7 +204,8 @@ export async function actorDetail(q: Queryable, id: string) {
     [id],
   )
   const locks = await q.query<{ resource: string; note: string | null; lease_expires_at: Date }>('select resource, note, lease_expires_at from lp.locks where holder = $1 and lease_expires_at > now()', [id])
-  const events = await feed(q, { actor: id, limit: 30 })
+  // The runner's own page is where its routine runs belong; everyone else's feed leaves them out.
+  const events = await feed(q, { actor: id, limit: 30, include_routine: id === 'system' })
   return { actor: a.rows[0], current: current.rows, queued: queued.rows, reports: reports.rows, memory: memory.rows, notifications: notifications.rows, locks: locks.rows, events }
 }
 
