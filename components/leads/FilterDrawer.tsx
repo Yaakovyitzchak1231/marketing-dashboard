@@ -181,23 +181,23 @@ export function FilterDrawer({
   const activeCount = activeSegId ? 1 : activeRowCount
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-card border border-line bg-surface px-2 py-1">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-control border border-line bg-surface px-2 py-1">
         <FilterBadge activeCount={activeCount} matching={activeSegId || activeHasAdHoc ? matching : null} />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-1 w-[420px] max-w-[90vw] rounded-card border border-line bg-surface p-3 text-[13px] shadow-card">
+        <div className="absolute right-0 top-full z-30 mt-1 w-[420px] max-w-[90vw] rounded-card border border-line bg-surface p-3 text-sm shadow-card">
           <div className="mb-2 flex gap-1 border-b border-line-soft pb-2">
             {(['standard', 'saved', 'behaviour'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                className={`rounded-card px-2 py-1 text-[12px] ${tab === t ? 'bg-accent-soft text-ink' : 'text-ink-faint hover:text-ink'}`}
+                className={`rounded-card px-2 py-1 text-xs ${tab === t ? 'bg-accent-soft text-ink' : 'text-ink-faint hover:text-ink'}`}
               >
                 {t === 'standard' ? 'Standard' : t === 'saved' ? 'Saved segments' : 'Behaviour'}
               </button>
             ))}
-            <button type="button" className="ml-auto text-[12px] text-ink-faint hover:text-ink" onClick={() => setOpen(false)}>
+            <button type="button" className="ml-auto text-xs text-ink-faint hover:text-ink" onClick={() => setOpen(false)}>
               Close
             </button>
           </div>
@@ -216,7 +216,7 @@ export function FilterDrawer({
                   ))}
                 </ul>
               ) : (
-                <p className="text-[12px] text-ink-faint">No saved segments yet -- build one in the Standard or Behaviour tab and “Save as segment”.</p>
+                <p className="text-xs text-ink-faint">No saved segments yet -- build one in the Standard or Behaviour tab and “Save as segment”.</p>
               )}
               <div className="flex gap-2 border-t border-line-soft pt-2">
                 <button type="button" className={BUTTON_PRIMARY} disabled={!segChoice} onClick={applySaved}>
@@ -240,41 +240,41 @@ export function FilterDrawer({
                         <select value={r.field} onChange={(e) => {
                           const f = fieldsByKey.get(e.target.value)
                           patchRow(r.id, { field: e.target.value, op: f ? (f.operators ?? OPS_BY_TYPE[f.type])[0] : r.op, value: '', value2: '' })
-                        }} className="rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]">
+                        }} className="rounded-control border border-line bg-surface px-1.5 py-1 text-xs">
                           {companyFields.map((f) => (
                             <option key={f.key} value={f.key}>{f.label}</option>
                           ))}
                         </select>
-                        <select value={r.op} onChange={(e) => patchRow(r.id, { op: e.target.value })} className="rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]">
+                        <select value={r.op} onChange={(e) => patchRow(r.id, { op: e.target.value })} className="rounded-control border border-line bg-surface px-1.5 py-1 text-xs">
                           {(fieldsByKey.get(r.field)?.operators ?? OPS_BY_TYPE[fieldsByKey.get(r.field)?.type ?? 'text']).map((op) => (
                             <option key={op} value={op}>{OP_LABEL[op] ?? op}</option>
                           ))}
                         </select>
                         {!NO_VALUE_OPS.has(r.op) ? (
-                          <input value={r.value} onChange={(e) => patchRow(r.id, { value: e.target.value })} placeholder={r.op === 'in' || r.op === 'not_in' ? 'a, b, c' : 'value'} className="w-24 rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]" />
+                          <input value={r.value} onChange={(e) => patchRow(r.id, { value: e.target.value })} placeholder={r.op === 'in' || r.op === 'not_in' ? 'a, b, c' : 'value'} className="w-24 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                         ) : null}
                         {TWO_VALUE_OPS.has(r.op) ? (
-                          <input value={r.value2} onChange={(e) => patchRow(r.id, { value2: e.target.value })} placeholder="and" className="w-20 rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]" />
+                          <input value={r.value2} onChange={(e) => patchRow(r.id, { value2: e.target.value })} placeholder="and" className="w-20 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                         ) : null}
                         <button type="button" onClick={() => removeRow(r.id)} className="ml-auto text-ink-faint hover:text-bad">×</button>
                       </li>
                     ) : (
                       <li key={r.id} className="flex flex-wrap items-center gap-1">
-                        <select value={r.event_type} onChange={(e) => patchRow(r.id, { event_type: e.target.value })} className="rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]">
+                        <select value={r.event_type} onChange={(e) => patchRow(r.id, { event_type: e.target.value })} className="rounded-control border border-line bg-surface px-1.5 py-1 text-xs">
                           {eventTypes.map((e) => (
                             <option key={e.key} value={e.key}>{e.label}</option>
                           ))}
                         </select>
-                        <select value={r.count_op} onChange={(e) => patchRow(r.id, { count_op: e.target.value as EventRow['count_op'] })} className="rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]">
+                        <select value={r.count_op} onChange={(e) => patchRow(r.id, { count_op: e.target.value as EventRow['count_op'] })} className="rounded-control border border-line bg-surface px-1.5 py-1 text-xs">
                           <option value="gte">at least</option>
                           <option value="gt">more than</option>
                           <option value="eq">exactly</option>
                           <option value="lt">fewer than</option>
                           <option value="lte">at most</option>
                         </select>
-                        <input value={r.count} onChange={(e) => patchRow(r.id, { count: e.target.value })} className="w-12 rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]" />
-                        <span className="text-[11px] text-ink-faint">times, within</span>
-                        <input value={r.within_last_days} onChange={(e) => patchRow(r.id, { within_last_days: e.target.value })} placeholder="days" className="w-14 rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]" />
+                        <input value={r.count} onChange={(e) => patchRow(r.id, { count: e.target.value })} className="w-12 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
+                        <span className="text-2xs text-ink-faint">times, within</span>
+                        <input value={r.within_last_days} onChange={(e) => patchRow(r.id, { within_last_days: e.target.value })} placeholder="days" className="w-14 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                         <button type="button" onClick={() => removeRow(r.id)} className="ml-auto text-ink-faint hover:text-bad">×</button>
                       </li>
                     ),
@@ -283,7 +283,7 @@ export function FilterDrawer({
               <button type="button" className={BUTTON} onClick={tab === 'standard' ? addFieldRow : addEventRow}>
                 + {tab === 'standard' ? 'Add a filter' : 'Add a behaviour'}
               </button>
-              {preview ? <p className="text-[12px] text-ink">{preview.companies.toLocaleString('en-US')} matching right now.</p> : null}
+              {preview ? <p className="text-xs text-ink">{preview.companies.toLocaleString('en-US')} matching right now.</p> : null}
               <div className="flex flex-wrap items-center gap-2 border-t border-line-soft pt-2">
                 <button type="button" className={BUTTON_PRIMARY} disabled={!definition} onClick={applyBuilt}>
                   Apply
@@ -293,12 +293,12 @@ export function FilterDrawer({
                     Clear
                   </button>
                 ) : null}
-                <input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="Save as segment…" className="min-w-0 flex-1 rounded-card border border-line bg-surface px-1.5 py-1 text-[12px]" />
+                <input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="Save as segment…" className="min-w-0 flex-1 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                 <button type="button" className={BUTTON} disabled={busy || !definition || !saveName.trim()} onClick={saveAsSegment}>
                   Save
                 </button>
               </div>
-              {note ? <p className="text-[12px] text-bad">{note}</p> : null}
+              {note ? <p className="text-xs text-bad">{note}</p> : null}
             </div>
           )}
         </div>
