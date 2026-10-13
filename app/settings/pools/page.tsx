@@ -9,7 +9,7 @@ import { isUndefinedTable } from '@/lib/db/errors'
 
 export const dynamic = 'force-dynamic'
 
-const label = 'mb-1 block text-[12px] font-medium text-ink-muted'
+const label = 'mb-1 block text-xs font-medium text-ink-muted'
 
 export default async function PoolsSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams
@@ -38,7 +38,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
 
       {needsMigration ? (
         <Card className="p-4">
-          <p className="text-[13px] text-ink-muted">Needs migration 0020 — it runs on the next production deploy.</p>
+          <p className="text-sm text-ink-muted">Needs migration 0020 — it runs on the next production deploy.</p>
         </Card>
       ) : (
         <>
@@ -48,7 +48,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
               <EmptyNote>No pools yet.</EmptyNote>
             ) : (
               <Card className="overflow-x-auto p-0">
-                <table className="w-full border-collapse text-[13px]">
+                <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-line">
                       <th className={TH}>Label</th>
@@ -64,7 +64,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
                       <tr key={p.id} className="border-b border-line/60 align-top">
                         <td className={TD}>{p.label}</td>
                         <td className={TD}>
-                          <code className="rounded bg-canvas px-1 font-numeric text-[12px]">{p.id}</code>
+                          <code className="rounded bg-canvas px-1 font-numeric text-xs">{p.id}</code>
                         </td>
                         <td className={TD}>{p.description ?? <span className="text-ink-faint">Not set</span>}</td>
                         <td className={TD}>{p.sort}</td>
@@ -76,7 +76,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
                               <input name="label" defaultValue={p.label} aria-label="Label" className={`${inputCls} w-28`} />
                               <input name="description" defaultValue={p.description ?? ''} placeholder="Description" aria-label="Description" className={`${inputCls} w-40`} />
                               <input name="sort" defaultValue={String(p.sort)} aria-label="Sort" className={`${inputCls} w-16`} />
-                              <label className="flex items-center gap-1 text-[12px] text-ink-muted">
+                              <label className="flex items-center gap-1 text-xs text-ink-muted">
                                 <input type="checkbox" name="active" defaultChecked={p.active} />
                                 Active
                               </label>
@@ -92,7 +92,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
                 </table>
               </Card>
             )}
-            <p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-ink-faint">
+            <p className="mt-2 max-w-3xl text-xs leading-relaxed text-ink-faint">
               Inactive pools are not offered for new campaigns, but rows that already use them keep working. Renaming a pool&apos;s ID updates every
               campaign, company, segment and rule set that points at it.
             </p>
@@ -136,7 +136,7 @@ export default async function PoolsSettingsPage({ searchParams }: { searchParams
               </Card>
             </section>
           ) : (
-            <p className="text-[12px] text-ink-faint">Only owners can create or edit pools.</p>
+            <p className="text-xs text-ink-faint">Only owners can create or edit pools.</p>
           )}
         </>
       )}
