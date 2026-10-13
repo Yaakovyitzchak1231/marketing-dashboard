@@ -178,6 +178,19 @@ describe('repliedLeadsFrom', () => {
     expect(r[2].company).toBeNull()
     expect(repliedLeadsFrom({ ...base, start: null, end: '2026-10-08', limit: 1 })).toHaveLength(1)
   })
+  it('a lead record with no reply time never hides a later one that has it', () => {
+    const email = 'dup@shop-e.example'
+    const thread = { id: 't1', lead: email, campaign_id: C3, ue_type: 2, timestamp_email: '2026-10-05T12:00:00Z', content_preview: 'hello' } as ApiEmail
+    // The first record qualifies only by its reply count and has no timestamp; the second has the real reply time.
+    const dupLeads = [
+      { id: 'a', email, campaign: C1, email_reply_count: 1, timestamp_last_reply: null },
+      { id: 'b', email, campaign: C2, email_reply_count: 1, timestamp_last_reply: '2026-10-06T15:00:00Z' },
+    ] as unknown as ApiLead[]
+    const r = repliedLeadsFrom({ ...base, threads: [thread], leads: dupLeads, start: '2026-10-01', end: '2026-10-08' })
+    expect(r).toHaveLength(1)
+    expect(r[0].lastReplyAt).toBe('2026-10-06T15:00:00.000Z')
+    expect(r[0].campaignId).toBe(C2)
+  })
   it('the range is judged in the dashboard timezone', () => {
     // 2026-10-07T17:23Z is Oct 7 in New York; a range ending Oct 6 excludes it.
     expect(repliedLeadsFrom({ ...base, start: '2026-10-07', end: '2026-10-07' }).map((x) => x.email)).toEqual(['ann@shop-a.example'])

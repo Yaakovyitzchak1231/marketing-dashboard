@@ -337,7 +337,8 @@ export function repliedLeadsFrom(input: RepliedLeadsInput): RepliedLead[] {
         break
       }
       const t = Date.parse(c.timestamp_last_reply ?? '')
-      if (t > maxTime || (Number.isNaN(t) && maxTime === -Infinity)) {
+      // A lead with no usable reply time never beats one that has it; with none, the first stays.
+      if (Number.isFinite(t) && t > maxTime) {
         maxTime = t
         bestLead = c
       }
