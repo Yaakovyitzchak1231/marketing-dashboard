@@ -53,10 +53,10 @@ describe('QuietHoursField', () => {
     expect(screen.getByLabelText('Quiet hours end')).toHaveValue('08:00')
   })
 
-  it('unset: "Not set" badge, and Save writes both keys through the single-setting action', async () => {
+  it('unset: "Not set" badge, and Save sends start and end together in one call', async () => {
     const calls: [string, string][] = []
     const action = async (_p: FormResult | null, f: FormData): Promise<FormResult> => {
-      calls.push([String(f.get('key')), String(f.get('value'))])
+      calls.push([String(f.get('start')), String(f.get('end'))])
       return { ok: true }
     }
     render(<QuietHoursField start={null} end={null} action={action} />)
@@ -65,10 +65,96 @@ describe('QuietHoursField', () => {
     fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '07:30' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText(/Saved: no emails from 22:00 to 07:30/)).toBeInTheDocument()
-    expect(calls).toEqual([
-      ['workspace.quiet_hours_start', '22:00'],
-      ['workspace.quiet_hours_end', '07:30'],
-    ])
+    expect(calls).toEqual([['22:00', '07:30']])
+  })
+})
+
+describe('QuietHoursField clear', () => {
+  const recorder = () => {
+    const calls: [string, string][] = []
+    const action = async (_p: FormResult | null, f: FormData): Promise<FormResult> => {
+      calls.push([String(f.get('start')), String(f.get('end'))])
+      return { ok: true }
+    }
+    return { calls, action }
+  }
+
+  it('a saved range has a Clear button that sends both ends blank in one call and empties the pickers', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(await screen.findByText('Cleared: no workspace quiet hours.')).toBeInTheDocument()
+    expect(calls).toEqual([['', '']])
+    expect(screen.getByLabelText('Quiet hours start')).toHaveValue('')
+    expect(screen.getByLabelText('Quiet hours end')).toHaveValue('')
+  })
+
+  it('emptying both fields and pressing Save also clears', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.change(screen.getByLabelText('Quiet hours start'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Cleared: no workspace quiet hours.')).toBeInTheDocument()
+    expect(calls).toEqual([['', '']])
+  })
+
+  it('emptying only one field is refused on the client and calls nothing', async () => {
+    const { calls, action } = recorder()
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.change(screen.getByLabelText('Quiet hours end'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/Pick both a start and an end time/)).toBeInTheDocument()
+    expect(calls).toEqual([])
+  })
+
+  it('a server refusal on Clear is shown and the pickers keep their values', async () => {
+    const action = async (): Promise<FormResult> => ({ ok: false, message: 'Only a person can change settings.' })
+    render(<QuietHoursField start="21:00" end="08:00" action={action} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(await screen.findByText('Only a person can change settings.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Quiet hours start')).toHaveValue('21:00')
+  })
+
+  it('a half-set stored pair can be cleared, and a wholly unset one has nothing to clear', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end={null} action={noopForm} />)
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start={null} end={null} action={noopForm} />)
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+  })
+})
+
+describe('QuietHoursField with a bad stored pair', () => {
+  it('a half-set pair is "Incomplete", says which end is saved and that sends are held, not "Not set"', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end={null} action={noopForm} />)
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.getByText(/only the start \(21:00\) is saved\..*hold their sends until this is fixed/)).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start="" end="08:00" action={noopForm} />)
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText(/only the end \(08:00\) is saved/)).toBeInTheDocument()
+  })
+
+  it('equal ends, or times that are not HH:MM, are "Not valid" with the reason', () => {
+    const { unmount } = render(<QuietHoursField start="09:00" end="09:00" action={noopForm} />)
+    expect(screen.getByText('Not valid')).toBeInTheDocument()
+    expect(screen.queryByText('Not set')).toBeNull()
+    expect(screen.getByText(/Start and end are the same time \(09:00\)/)).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start="9pm" end="08:00" action={noopForm} />)
+    expect(screen.getByText(/not both 24-hour HH:MM/)).toBeInTheDocument()
+  })
+
+  it('a sound pair and a wholly unset pair show no problem text', () => {
+    const { unmount } = render(<QuietHoursField start="21:00" end="08:00" action={noopForm} />)
+    expect(screen.queryByText(/hold their sends/)).toBeNull()
+    expect(screen.getByText('21:00 to 08:00')).toBeInTheDocument()
+    unmount()
+    render(<QuietHoursField start={null} end={null} action={noopForm} />)
+    expect(screen.getByText('Not set')).toBeInTheDocument()
+    expect(screen.queryByText(/hold their sends/)).toBeNull()
   })
 })
 

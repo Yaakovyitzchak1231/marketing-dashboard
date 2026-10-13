@@ -11,6 +11,7 @@
  */
 import type { Db, Queryable } from '../db/types.ts'
 import { validateGraph, type JourneyGraph } from './graph.ts'
+import { validateSettingsSendControls } from './send-controls.ts'
 
 export const JOURNEY_STATUSES = ['draft', 'testing', 'live', 'paused', 'sunset'] as const
 export type JourneyStatus = (typeof JOURNEY_STATUSES)[number]
@@ -100,6 +101,9 @@ export async function upsertJourney(db: Db, actor: string, input: UpsertJourneyI
   }
   if (input.goal != null && !isObject(input.goal)) throw new JourneyError('goal must be an object')
   if (input.settings != null && !isObject(input.settings)) throw new JourneyError('settings must be an object')
+  // Bad send controls are refused here, with every problem named, so they never reach the send gate.
+  const sendProblems = validateSettingsSendControls(input.settings)
+  if (sendProblems.length) throw new JourneyError(`settings.send_controls is invalid: ${sendProblems.join('; ')}`)
   return db.tx(async (q) => {
     if (input.trigger_id != null) {
       const t = await q.query('select 1 from lp.triggers where id = $1', [input.trigger_id])
