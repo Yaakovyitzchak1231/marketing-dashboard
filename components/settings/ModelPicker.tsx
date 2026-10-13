@@ -73,12 +73,12 @@ export function ModelPicker({
   return (
     <div className="border-b border-line-soft py-3 last:border-b-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <label htmlFor={settingKey} className="text-[13px] font-medium text-ink">
+        <label htmlFor={settingKey} className="text-sm font-medium text-ink">
           {label}
         </label>
         {source === 'env' ? <Pill tone="neutral">from env</Pill> : null}
       </div>
-      {help ? <p className="mt-0.5 text-[12px] leading-snug text-ink-faint">{help}</p> : null}
+      {help ? <p className="mt-0.5 text-xs leading-snug text-ink-faint">{help}</p> : null}
       <form action={formAction} className="mt-2 flex flex-wrap items-start gap-2">
         <input type="hidden" name="key" value={settingKey} />
         {showSelect ? (
@@ -119,7 +119,7 @@ export function ModelPicker({
           {pending ? 'Saving…' : 'Save'}
         </button>
       </form>
-      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-faint">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
         {!providerReady ? <span>Set the AI provider base URL above to pick from its model list.</span> : null}
         {providerReady && loading ? <span>Loading the provider’s models…</span> : null}
         {providerReady && !loading && loadError ? <span className="text-warn">{loadError} You can type a model name instead.</span> : null}
@@ -135,7 +135,7 @@ export function ModelPicker({
         ) : null}
       </div>
       {state ? (
-        <p className={`mt-1.5 text-[12px] ${state.ok ? 'text-ink-muted' : 'text-bad'}`} role="status">
+        <p className={`mt-1.5 text-xs ${state.ok ? 'text-ink-muted' : 'text-bad'}`} role="status">
           {state.message}
         </p>
       ) : null}
