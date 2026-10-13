@@ -34,16 +34,16 @@ export default async function SeoSites({ searchParams }: { searchParams: Promise
               {sites.map((s) => (
                 <li key={s.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid="seo-site-row">
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-ink">
+                    <p className="text-sm font-medium text-ink">
                       {s.name} {s.active ? null : <Pill tone="neutral">paused</Pill>}
                     </p>
-                    <p className="text-[12px] text-ink-faint">
+                    <p className="text-xs text-ink-faint">
                       <a className="underline" href={s.base_url} target="_blank" rel="noreferrer">{s.base_url.replace(/^https?:\/\//, '')}</a>
                       {' · '}
                       {[s.platform, s.host && `on ${s.host}`, s.campaign && `campaign: ${s.campaign}`].filter(Boolean).join(' · ') || 'no platform set'}
                     </p>
-                    <p className="text-[12px] text-ink-faint">Pages audited: / {s.pages.join(' ')}</p>
-                    <p className="text-[12px] text-ink-faint">
+                    <p className="text-xs text-ink-faint">Pages audited: / {s.pages.join(' ')}</p>
+                    <p className="text-xs text-ink-faint">
                       WordPress actions:{' '}
                       {s.platform === 'wordpress' ? (wpMatchesSite(wp, s.base_url) ? <span className="text-good">connected</span> : <span>not connected (set WP_SITE_URL, WP_USER, WP_APP_PASSWORD)</span>) : 'not WordPress, so fixes come as copy-paste steps'}
                     </p>
@@ -73,15 +73,15 @@ export default async function SeoSites({ searchParams }: { searchParams: Promise
         <Card className="px-4 py-4">
           <form action={addSiteAction} className="grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="return_to" value="/seo/sites" />
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Website address
               <input name="base_url" required placeholder="tapdash.co" className={`${inputCls} mt-1`} />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Name
               <input name="name" placeholder="TapDash for contractors" className={`${inputCls} mt-1`} />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Platform
               <select name="platform" defaultValue="wordpress" className={`${inputCls} mt-1`}>
                 <option value="wordpress">WordPress</option>
@@ -89,7 +89,7 @@ export default async function SeoSites({ searchParams }: { searchParams: Promise
                 <option value="other">Other</option>
               </select>
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Host
               <select name="host" defaultValue="siteground" className={`${inputCls} mt-1`}>
                 <option value="siteground">SiteGround</option>
@@ -97,11 +97,11 @@ export default async function SeoSites({ searchParams }: { searchParams: Promise
                 <option value="">Other / not sure</option>
               </select>
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Campaign
               <input name="campaign" placeholder="jewelers, builders, contractors…" className={`${inputCls} mt-1`} />
             </label>
-            <label className="text-[12px] text-ink-muted">
+            <label className="text-xs text-ink-muted">
               Key pages to audit (besides the home page)
               <input name="pages" placeholder="/jewelers/ /pricing/" className={`${inputCls} mt-1`} />
             </label>
