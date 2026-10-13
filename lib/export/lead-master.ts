@@ -107,14 +107,25 @@ export async function exportCsv(q: Queryable): Promise<{ csv: string; rows: numb
  * What a copy written right now would hold: email rows and the leads behind them, counted live
  * with the export's own filter. The Reports screen shows this beside past runs, so a run's
  * row count (emails, frozen on the day it was written) is never read as today's lead count.
+ *
+ * `leadsWithoutEmail` is the live leads the copy leaves out because they have no email address yet
+ * (e.g. a fresh import still waiting for research). Overview's lead count includes them, so
+ * Overview leads = `leads` + `leadsWithoutEmail` (TAP-170).
  */
-export async function liveExportCounts(q: Queryable): Promise<{ emails: number; leads: number }> {
-  const { rows } = await q.query<{ emails: number; leads: number }>(
-    `select count(*)::int as emails, count(distinct co.id)::int as leads
+export async function liveExportCounts(q: Queryable): Promise<{ emails: number; leads: number; leadsWithoutEmail: number }> {
+  const { rows } = await q.query<{ emails: number; leads: number; without_email: number }>(
+    `select count(*)::int as emails, count(distinct co.id)::int as leads,
+            (select count(*)::int from lp.companies c
+              where c.merged_into is null
+                and not exists (select 1 from lp.contacts x where x.company_id = c.id and x.email_norm is not null and x.merged_into is null)) as without_email
        from lp.contacts ct join lp.companies co on co.id = ct.company_id
       where ct.email_norm is not null and ct.merged_into is null and co.merged_into is null`,
   )
-  return { emails: Number(rows[0]?.emails ?? 0), leads: Number(rows[0]?.leads ?? 0) }
+  return {
+    emails: Number(rows[0]?.emails ?? 0),
+    leads: Number(rows[0]?.leads ?? 0),
+    leadsWithoutEmail: Number(rows[0]?.without_email ?? 0),
+  }
 }
 
 // ---------------------------------------------------------------- runs log

@@ -30,7 +30,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     ...cr.filter((c) => c.level === 'low' || c.level === 'out').map((c) => ({ key: c.id, name: c.name, days: c.days, level: c.level })),
   ]
   let exportsList: ExportRun[] = []
-  let liveCounts: { emails: number; leads: number } | null = null
+  let liveCounts: { emails: number; leads: number; leadsWithoutEmail: number } | null = null
   if (inp.db && !inp.dbError) {
     ;[exportsList, liveCounts] = await Promise.all([recentExports(inp.db).catch(() => []), liveExportCounts(inp.db).catch(() => null)])
   }
@@ -96,7 +96,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           ) : null}
           {liveCounts ? (
             <p className="mt-3 text-xs text-ink-muted" data-testid="export-live-counts">
-              A copy written now: {liveCounts.leads.toLocaleString('en-US')} leads, {liveCounts.emails.toLocaleString('en-US')} rows (one row per email address).
+              A copy written now: {liveCounts.leads.toLocaleString('en-US')} leads with an email, {liveCounts.emails.toLocaleString('en-US')} rows (one row per email address).
+              {liveCounts.leadsWithoutEmail
+                ? ` ${liveCounts.leadsWithoutEmail.toLocaleString('en-US')} more ${liveCounts.leadsWithoutEmail === 1 ? 'lead has' : 'leads have'} no email yet, so ${liveCounts.leadsWithoutEmail === 1 ? 'it is' : 'they are'} counted on Overview but not in the copy.`
+                : ''}
             </p>
           ) : null}
           {exportsList.length ? (
