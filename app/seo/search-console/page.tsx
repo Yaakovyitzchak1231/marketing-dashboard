@@ -9,7 +9,7 @@ function Rows({ rows, label }: { rows: GscRow[]; label: string }) {
   if (!rows.length) return <EmptyNote>No rows returned for this period.</EmptyNote>
   return (
     <Card className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-[12px]">
+      <table className="w-full min-w-[520px] text-xs">
         <thead className="text-left text-ink-faint">
           <tr>
             <th className="px-4 py-2 font-medium">{label}</th>
@@ -76,7 +76,7 @@ export default async function SeoSearchConsole() {
             </p>
           </SetupCard>
         ) : gscErr ? (
-          <p role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">Search Console didn&rsquo;t answer: {gscErr}</p>
+          <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">Search Console didn&rsquo;t answer: {gscErr}</p>
         ) : report ? (
           <div className="space-y-4">
             <Rows rows={report.queries} label="Search" />
@@ -98,7 +98,7 @@ export default async function SeoSearchConsole() {
             />
           </SetupCard>
         ) : bingErr ? (
-          <p role="alert" className="rounded-card border border-bad/30 bg-bad-soft px-3 py-2 text-[13px] text-bad">Bing didn&rsquo;t answer: {bingErr}</p>
+          <p role="alert" className="rounded-control border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">Bing didn&rsquo;t answer: {bingErr}</p>
         ) : bingRows ? (
           <Rows rows={bingRows} label="Search" />
         ) : null}
