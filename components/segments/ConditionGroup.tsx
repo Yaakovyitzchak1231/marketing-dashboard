@@ -33,15 +33,15 @@ export function ConditionGroupCard({
   return (
     <Card className="space-y-2 p-3" data-testid="condition-group">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-ink-faint">{label} (all must match)</span>
-        <button type="button" onClick={onRemoveGroup} className="text-[12px] text-ink-faint underline decoration-line underline-offset-2 hover:text-bad">
+        <span className="text-2xs uppercase tracking-wide text-ink-faint">{label} (all must match)</span>
+        <button type="button" onClick={onRemoveGroup} className="text-xs text-ink-faint underline decoration-line underline-offset-2 hover:text-bad">
           Remove group
         </button>
       </div>
       <div className="space-y-2 divide-y divide-line">
         {group.conditions.map((c, i) => (
           <div key={i} className={i > 0 ? 'pt-2' : ''}>
-            {i > 0 ? <p className="mb-1 text-[11px] font-semibold text-ink-faint">and</p> : null}
+            {i > 0 ? <p className="mb-1 text-2xs font-semibold text-ink-faint">and</p> : null}
             <ConditionRow cond={c} fields={fields} onChange={(next) => updateCondition(i, next)} onRemove={() => removeCondition(i)} />
           </div>
         ))}
