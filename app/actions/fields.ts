@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation'
 import { getDb } from '@/lib/db'
 import { actorFor } from '@/lib/auth/act'
 import { AuthError } from '@/lib/auth/roles'
-import { FieldError, archiveField, defineField, updateField } from '@/lib/fields/store'
+import { FieldError, archiveField, defineField } from '@/lib/fields/store'
 
 function db() {
   const d = getDb()
@@ -58,23 +58,4 @@ export async function archiveFieldAction(f: FormData) {
   }
   revalidatePath('/settings/fields')
   back({ saved: 'Archived.' })
-}
-
-export async function updateFieldAction(f: FormData) {
-  try {
-    const ME = await actorFor('owner')
-    const optionsRaw = s(f, 'options')
-    await updateField(db(), ME, {
-      id: Number(s(f, 'id')),
-      label: s(f, 'label') || undefined,
-      options: optionsRaw ? optionsRaw.split(',').map((o) => o.trim()).filter(Boolean) : undefined,
-      via: 'ui',
-    })
-  } catch (e) {
-    const m = msg(e)
-    if (!m) throw e
-    back({ error: m })
-  }
-  revalidatePath('/settings/fields')
-  back({ saved: 'Updated.' })
 }

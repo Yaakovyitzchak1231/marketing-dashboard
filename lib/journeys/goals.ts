@@ -34,7 +34,3 @@ export function goalKey(goal: string | null | undefined): string | null {
   const g = BY_KEY.get(goal) ?? BY_LABEL.get(goal.toLowerCase())
   return g ? g.key : null
 }
-
-export function isGoalKey(v: string | null | undefined): boolean {
-  return v != null && BY_KEY.has(v)
-}

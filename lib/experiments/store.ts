@@ -125,18 +125,6 @@ export async function getExperiment(q: Queryable, id: number): Promise<Experimen
   return r.rows.length ? row(r.rows[0]) : null
 }
 
-export async function getExperimentForStep(
-  q: Queryable,
-  campaignId: number,
-  stepNumber: number,
-): Promise<Experiment | null> {
-  const r = await q.query<Record<string, unknown>>(
-    'select * from lp.experiments where campaign_id = $1 and step_number = $2',
-    [campaignId, stepNumber],
-  )
-  return r.rows.length ? row(r.rows[0]) : null
-}
-
 export async function listExperiments(q: Queryable, campaignId: number): Promise<Experiment[]> {
   const r = await q.query<Record<string, unknown>>(
     'select * from lp.experiments where campaign_id = $1 order by step_number',

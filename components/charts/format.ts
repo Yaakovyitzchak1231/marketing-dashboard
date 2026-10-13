@@ -46,12 +46,6 @@ export function formatCurrency(n: number | null | undefined): string {
   return usdFmt.format(n)
 }
 
-/** A raw count cell. A missing count -> an em dash, so a column of numbers keeps its rhythm. */
-export function formatCell(n: number | null | undefined): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return EM_DASH
-  return intFmt.format(n)
-}
-
 /** "2026-09-28" -> "Sep 28". An unparseable date is returned as-is, never "Invalid Date". */
 export function formatDay(dateStr: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr ?? '')

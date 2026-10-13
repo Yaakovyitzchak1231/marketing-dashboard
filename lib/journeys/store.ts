@@ -200,11 +200,6 @@ export async function approveVersion(db: Db, actor: string, journeyId: number, v
   }, actor)
 }
 
-/** Approve the journey's current version. */
-export function approveCurrentVersion(db: Db, actor: string, journeyId: number): Promise<Journey> {
-  return approveVersion(db, actor, journeyId, null)
-}
-
 /** True when the version has an owner approval. Send-capable nodes check it for the run's own version. */
 export async function versionApproved(q: Queryable, journeyId: number, version: number): Promise<boolean> {
   const { rows } = await q.query(
