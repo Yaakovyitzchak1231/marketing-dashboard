@@ -105,7 +105,7 @@ export const GEO_OPS: Record<string, Op> = {
     run: async (db) => {
       const [{ rows: zips }, { rows: bySource }, { rows: all }] = await Promise.all([
         db.query<{ country: string; n: number }>(`select country, count(*)::int as n from lp.postal_centroids group by country order by country`),
-        db.query<{ geo_source: string; n: number }>(`select geo_source, count(*)::int as n from lp.company_geo group by geo_source order by geo_source`),
+        db.query<{ geo_source: string; n: number }>(`select g.geo_source, count(*)::int as n from lp.company_geo g join lp.companies c on c.id = g.company_id where c.merged_into is null group by g.geo_source order by g.geo_source`),
         db.query<{ n: number }>(`select count(*)::int as n from lp.companies where merged_into is null`),
       ])
       const located = bySource.reduce((s, r) => s + r.n, 0)

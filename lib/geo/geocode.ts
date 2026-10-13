@@ -40,6 +40,13 @@ export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 const USER_AGENT = 'TapDash-marketing-dashboard/1.0 (radius search; https://github.com/Yaakovyitzchak1231/marketing-dashboard)'
 const MAX_PLACE_CHARS = 200
 
+let lastNominatim = Promise.resolve()
+function throttled<T>(fn: () => Promise<T>): Promise<T> {
+  const run = lastNominatim.then(fn)
+  lastNominatim = run.then(() => new Promise((r) => setTimeout(r, 1100)), () => new Promise((r) => setTimeout(r, 1100)))
+  return run
+}
+
 export class GeocodeError extends Error {
   constructor(message: string) {
     super(message)
@@ -144,7 +151,7 @@ export async function geocodePlace(db: Queryable, place: string, opts: GeocodeOp
 
   if (opts.offline) return null
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike)
-  const hit = await fromNominatim(place.trim(), fetchImpl)
+  const hit = await throttled(() => fromNominatim(place.trim(), fetchImpl))
   await toCache(db, key, hit, 'nominatim')
   return hit
 }
