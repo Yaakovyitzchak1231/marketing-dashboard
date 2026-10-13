@@ -137,17 +137,14 @@ export async function geocodePlace(db: Queryable, place: string, opts: GeocodeOp
   const zip = ZIP_RE.exec(key)
   if (zip) return fromZip(db, zip[1]) // a ZIP is answered by the table alone, never guessed elsewhere
 
-  const cached = await fromCache(db, key)
-  if (cached !== undefined) return cached
-
   const cs = CITY_STATE_RE.exec(place.trim())
   if (cs) {
     const hit = await fromCityState(db, cs[1], cs[2])
-    if (hit) {
-      await toCache(db, key, hit, 'city_centroid')
-      return hit
-    }
+    if (hit) return hit
   }
+
+  const cached = await fromCache(db, key)
+  if (cached !== undefined) return cached
 
   if (opts.offline) return null
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as FetchLike)
