@@ -40,7 +40,7 @@ export function StageSelect({ companyId, stage, name }: { companyId: number; sta
         value={value}
         disabled={state === 'saving'}
         onChange={(e) => change(e.target.value as Stage)}
-        className="max-w-[130px] rounded-[3px] border border-line bg-canvas px-1.5 py-0.5 text-[11px] text-ink-muted"
+        className="max-w-[130px] rounded-[3px] border border-line bg-canvas px-1.5 py-0.5 text-2xs text-ink-muted"
       >
         {STAGES.map((s) => (
           <option key={s} value={s}>
@@ -48,7 +48,7 @@ export function StageSelect({ companyId, stage, name }: { companyId: number; sta
           </option>
         ))}
       </select>
-      {state === 'error' ? <span className="text-[11px] text-bad">Not saved</span> : null}
+      {state === 'error' ? <span className="text-2xs text-bad">Not saved</span> : null}
     </span>
   )
 }
