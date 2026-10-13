@@ -222,7 +222,7 @@ export function weeklyMarkdown(r: WeeklyReport): string {
     ['New leads contacted', 'contacted', false],
     ['Replies', 'replied', false],
     ['Reply rate', 'replyRate', true],
-    ['Interested', 'interested', false],
+    ['Marked interested (Instantly)', 'interested', false],
     ['Meetings booked', 'meetings', false],
     ['Bounces', 'bounced', false],
     ['Bounce rate', 'bounceRate', true],
