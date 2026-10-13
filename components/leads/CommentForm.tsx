@@ -48,13 +48,13 @@ export function CommentForm({ companyId, handles }: { companyId: number; handles
         onChange={(e) => setBody(e.target.value)}
         rows={3}
         placeholder={`Note or ask a teammate: ${handles.slice(0, 3).map((h) => `@${h}`).join(', ')}…`}
-        className="w-full resize-y rounded-card border border-line bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint"
+        className="w-full resize-y rounded-control border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
       />
       <div className="mt-2 flex items-center gap-3">
         <button type="submit" className={BUTTON_PRIMARY} disabled={busy || !body.trim()}>
           {busy ? 'Posting…' : 'Comment'}
         </button>
-        {error ? <span role="alert" className="text-[12px] text-bad">{error}</span> : null}
+        {error ? <span role="alert" className="text-xs text-bad">{error}</span> : null}
       </div>
     </form>
   )
