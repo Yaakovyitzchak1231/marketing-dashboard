@@ -14,8 +14,8 @@ import { TD, TH } from '@/components/reports/bits'
 
 export const dynamic = 'force-dynamic'
 
-const small = `${inputCls} !px-2 !py-1 text-[12.5px]`
-const tiny = 'rounded-card border border-line bg-surface px-1.5 py-0.5 text-[11.5px] text-ink-muted hover:border-ink-faint'
+const small = `${inputCls} !px-2 !py-1 text-xs`
+const tiny = 'rounded-control border border-line bg-surface px-1.5 py-0.5 text-xs text-ink-muted hover:border-ink-faint'
 
 function FieldSelect({ name, value }: { name: string; value?: string }) {
   return <input name={name} defaultValue={value ?? ''} list="rule-fields" className={small} placeholder="field" aria-label="Field" />
@@ -68,7 +68,7 @@ function ReqRow({ r, i, n }: { r: Requirement | null; i: number | 'new'; n: numb
             <button name="intent" value={`req-del:${i}`} className={tiny} aria-label="Remove">Remove</button>
           </span>
         ) : (
-          <span className="text-[11.5px] text-ink-faint">fill to add</span>
+          <span className="text-xs text-ink-faint">fill to add</span>
         )}
       </td>
     </tr>
@@ -116,7 +116,7 @@ function FldRow({ f, i, n }: { f: PersonalizationField | null; i: number | 'new'
             <button name="intent" value={`fld-del:${i}`} className={tiny} aria-label="Remove">Remove</button>
           </span>
         ) : (
-          <span className="text-[11.5px] text-ink-faint">fill to add</span>
+          <span className="text-xs text-ink-faint">fill to add</span>
         )}
       </td>
     </tr>
@@ -174,11 +174,11 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
 
       {proposals.map((p) => (
         <Card key={p.approval_id} className="mb-4 border-warn/40 p-4">
-          <p className="text-[13.5px] font-semibold text-ink">
+          <p className="text-sm font-semibold text-ink">
             {p.requested_by_name ?? p.requested_by} proposed a change (#{p.approval_id}){p.status === 'approved' ? ', approved on Activity, not applied yet' : ''}
           </p>
-          {p.note ? <p className="mt-0.5 text-[12.5px] text-ink-muted">“{p.note}”</p> : null}
-          <ul className="mt-1 list-disc pl-5 text-[12.5px] text-ink-muted">
+          {p.note ? <p className="mt-0.5 text-xs text-ink-muted">“{p.note}”</p> : null}
+          <ul className="mt-1 list-disc pl-5 text-xs text-ink-muted">
             {p.changes.map((ch, k) => (
               <li key={k}>{changeWords(ch)}</li>
             ))}
@@ -206,7 +206,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
         />
         {rs.scope !== 'template' ? (
           <Card className="p-4">
-            <p className="font-numeric text-[13px] tabular-nums text-ink">
+            <p className="font-numeric text-sm tabular-nums text-ink">
               {c ? (
                 <>
                   Ready-personalized {c.ready_personalized.toLocaleString('en-US')} · Ready-generic {c.ready_generic.toLocaleString('en-US')} · Parked{' '}
@@ -218,7 +218,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
               )}
             </p>
             {reasons.length ? (
-              <ul className="mt-2 text-[12.5px] text-ink-muted">
+              <ul className="mt-2 text-xs text-ink-muted">
                 {reasons.map((r) => (
                   <li key={r.rule}>
                     <span className="font-numeric tabular-nums">{r.n.toLocaleString('en-US')}</span> parked by: {r.label}
@@ -240,7 +240,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
         <input type="hidden" name="req.count" value={rs.requirements.length} />
         <input type="hidden" name="fld.count" value={rs.fields.length} />
         <section className="mb-6">
-          <label className="mb-3 block max-w-md text-[12px] text-ink-muted">
+          <label className="mb-3 block max-w-md text-xs text-ink-muted">
             Name
             <input name="name" defaultValue={rs.name} className={inputCls} required />
           </label>
@@ -301,14 +301,14 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
           <button name="intent" value="save" className={primaryBtnCls}>
             Save and re-score
           </button>
-          <span className="text-[12px] text-ink-faint">Every change is logged with who made it, old → new.</span>
+          <span className="text-xs text-ink-faint">Every change is logged with who made it, old → new.</span>
         </div>
       </form>
 
       <section className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card className="p-4">
-          <p className="text-[13.5px] font-semibold text-ink">Fields you can use</p>
-          <ul className="mt-1 space-y-0.5 text-[12px] text-ink-muted">
+          <p className="text-sm font-semibold text-ink">Fields you can use</p>
+          <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">
             {FIELD_CATALOG.map((f) => (
               <li key={f.key}>
                 <code className="text-ink">{f.key}</code> {f.label}
@@ -324,8 +324,8 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
           </ul>
         </Card>
         <Card className="p-4">
-          <p className="text-[13.5px] font-semibold text-ink">Always on (standing rules)</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[12px] text-ink-muted">
+          <p className="text-sm font-semibold text-ink">Always on (standing rules)</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-ink-muted">
             {STANDING_RULES.map((r) => (
               <li key={r.code}>{r.label}</li>
             ))}
@@ -333,7 +333,7 @@ export default async function RuleSetPage({ params, searchParams }: { params: Pr
           {rs.scope === 'campaign' || rs.scope === 'template' ? (
             <form action={archiveRulesAction} className="mt-4 flex items-center gap-2 border-t border-line pt-3">
               <input type="hidden" name="rule_set_id" value={rs.id} />
-              <label className="text-[12px] text-ink-muted">
+              <label className="text-xs text-ink-muted">
                 <input type="checkbox" name="confirm" value="yes" /> {rs.scope === 'campaign' ? 'Remove these rules (the campaign goes back to its pool\u2019s)' : 'Remove this template'}
               </label>
               <button className={btnCls}>Remove</button>
