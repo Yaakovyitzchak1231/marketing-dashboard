@@ -17,6 +17,7 @@ import {
   type SegmentEntity,
 } from './definition.ts'
 import { requireField, type FieldDef } from './fields.ts'
+import { boundingBox } from '../geo/distance.ts'
 import { ensureTraitFieldsRegistered } from '../traits/register.ts'
 
 const MAX_SEGMENT_DEPTH = 3
@@ -154,6 +155,21 @@ function compileQuality(entity: SegmentEntity, cond: Extract<Condition, { kind: 
   return cond.op === 'verified_sendable' ? base : `not (${base})`
 }
 
+/** Radius (TAP-171): an index-friendly bounding box first, then the exact great-circle
+ *  distance (lp.miles_between, migration 0070). Position lives in lp.company_geo, keyed
+ *  by company -- c is in FROM for both entities, so a contact is "near" when its company
+ *  is. A company with no position row never matches; it is never treated as 0,0. */
+function compileRadius(cond: Extract<Condition, { kind: 'radius' }>, add: Adder): string {
+  const box = boundingBox(cond.lat, cond.lng, cond.miles)
+  const parts = [
+    'g.company_id = c.id',
+    `g.latitude between ${add(box.minLat)}::float8 and ${add(box.maxLat)}::float8`,
+  ]
+  if (box.minLng != null && box.maxLng != null) parts.push(`g.longitude between ${add(box.minLng)}::float8 and ${add(box.maxLng)}::float8`)
+  parts.push(`lp.miles_between(${add(cond.lat)}::float8, ${add(cond.lng)}::float8, g.latitude, g.longitude) <= ${add(cond.miles)}::float8`)
+  return `exists (select 1 from lp.company_geo g where ${parts.join(' and ')})`
+}
+
 async function compileSegmentRef(
   ctx: CompileContext,
   entity: SegmentEntity,
@@ -198,6 +214,7 @@ async function compileCondition(ctx: CompileContext, entity: SegmentEntity, cond
     case 'relative_date': return compileRelativeDate(entity, cond, add)
     case 'campaign_membership': return compileCampaignMembership(cond, add)
     case 'quality': return compileQuality(entity, cond)
+    case 'radius': return compileRadius(cond, add)
     case 'in_segment':
     case 'not_in_segment':
       return compileSegmentRef(ctx, entity, cond, add)

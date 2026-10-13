@@ -16,10 +16,12 @@
  *   event               a count of lp.lead_events of one type, in a window, vs N
  *   relative_date       one date field vs another date field (or "now"), offset by N days
  *   in_segment / not_in_segment   membership in another (same-entity) segment
+ *   radius              within N miles of a point (TAP-171; lat/lng from lib/geo/geocode.ts)
  *   campaign_membership in a specific campaign / any active campaign / never contacted
  *   quality             suppressed / not_suppressed / verified_sendable / not_verified_sendable
  */
 import { getField, type FieldType } from './fields.ts'
+import { isValidLatLng, MAX_RADIUS_MILES } from '../geo/distance.ts'
 
 export class DefinitionError extends Error {
   constructor(message: string) {
@@ -93,6 +95,17 @@ export interface QualityCondition {
   op: 'suppressed' | 'not_suppressed' | 'verified_sendable' | 'not_verified_sendable'
 }
 
+/** Leads whose company sits within `miles` of a point (TAP-171). The point is stored
+ *  resolved (lat/lng), so a saved segment never depends on a geocoder at compile time;
+ *  `place` keeps the words it came from, for the readback and the builder. */
+export interface RadiusCondition {
+  kind: 'radius'
+  lat: number
+  lng: number
+  miles: number
+  place?: string
+}
+
 export type Condition =
   | FieldCondition
   | EventCondition
@@ -100,6 +113,7 @@ export type Condition =
   | SegmentRefCondition
   | CampaignMembershipCondition
   | QualityCondition
+  | RadiusCondition
 
 export interface ConditionGroup {
   conditions: Condition[]
@@ -252,6 +266,24 @@ function validateQualityCondition(c: Record<string, unknown>): QualityCondition 
   return { kind: 'quality', op: c.op as QualityCondition['op'] }
 }
 
+function validateRadiusCondition(c: Record<string, unknown>): RadiusCondition {
+  assertOnlyKeys(c, ['kind', 'lat', 'lng', 'miles', 'place'], 'radius condition')
+  if (c.lat == null || c.lng == null) {
+    fail('radius condition: lat and lng are required -- look the place up first (geocode_place, or send "place" to segment_preview / create_segment / update_segment and it is resolved for you)')
+  }
+  const lat = Number(c.lat)
+  const lng = Number(c.lng)
+  if (!isValidLatLng(lat, lng)) fail('radius condition: lat must be between -90 and 90 and lng between -180 and 180')
+  const miles = Number(c.miles)
+  if (!Number.isFinite(miles) || miles <= 0 || miles > MAX_RADIUS_MILES) fail(`radius condition: miles must be a number above 0 and at most ${MAX_RADIUS_MILES}`)
+  const out: RadiusCondition = { kind: 'radius', lat, lng, miles }
+  if (c.place != null) {
+    if (typeof c.place !== 'string' || c.place.length > 200) fail('radius condition: place must be a string of at most 200 characters')
+    if (c.place.trim()) out.place = c.place.trim()
+  }
+  return out
+}
+
 function validateCondition(raw: unknown): Condition {
   if (!isPlainObject(raw)) fail('each condition must be an object')
   switch (raw.kind) {
@@ -262,6 +294,7 @@ function validateCondition(raw: unknown): Condition {
     case 'not_in_segment': return validateSegmentRefCondition(raw, 'not_in_segment')
     case 'campaign_membership': return validateCampaignMembershipCondition(raw)
     case 'quality': return validateQualityCondition(raw)
+    case 'radius': return validateRadiusCondition(raw)
     default:
       fail(`unknown condition kind "${String((raw as Record<string, unknown>).kind)}"`)
   }

@@ -69,6 +69,12 @@ function qualityPhrase(c: Extract<Condition, { kind: 'quality' }>): string {
   }
 }
 
+function radiusPhrase(c: Extract<Condition, { kind: 'radius' }>): string {
+  const miles = Number.isInteger(c.miles) ? String(c.miles) : c.miles.toFixed(1)
+  const where = c.place ?? `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`
+  return `within ${miles} ${c.miles === 1 ? 'mile' : 'miles'} of ${where}`
+}
+
 function conditionPhrase(c: Condition): string {
   switch (c.kind) {
     case 'field': return fieldPhrase(c)
@@ -76,6 +82,7 @@ function conditionPhrase(c: Condition): string {
     case 'relative_date': return relativeDatePhrase(c)
     case 'campaign_membership': return campaignPhrase(c)
     case 'quality': return qualityPhrase(c)
+    case 'radius': return radiusPhrase(c)
     case 'in_segment': return `in segment #${c.segment_id}`
     case 'not_in_segment': return `not in segment #${c.segment_id}`
   }

@@ -19,6 +19,8 @@ const aiModule = () => import('./ai.ts')
 import { ensureTraitFieldsRegistered } from '../traits/register.ts'
 import { segmentStats } from './stats.ts'
 import { checkSegmentAlerts } from './alerts.ts'
+import { resolveRadiusPlaces } from '../geo/resolve.ts'
+import { GeocodeError } from '../geo/geocode.ts'
 
 type Args = Record<string, unknown>
 type Op = { args: string; run: (db: Db, actor: string, a: Args) => Promise<unknown> }
@@ -30,6 +32,7 @@ function wrap(run: Op['run']): Op['run'] {
     } catch (e) {
       if (e instanceof SegmentError) throw new OpsError(e.message, e.status)
       if (e instanceof DefinitionError) throw new OpsError(e.message, 400)
+      if (e instanceof GeocodeError) throw new OpsError(e.message, 400)
       if (e instanceof Error && e.name === 'SegmentAiError') throw new OpsError(e.message, 400)
       throw e
     }
@@ -83,8 +86,10 @@ export const SEGMENT_OPS: Record<string, Op> = {
   },
   create_segment: {
     args: '{name, entity, definition, description?, kind?, campaign_id?}',
-    run: wrap((db, actor, a) =>
-      db.tx(
+    run: wrap(async (db, actor, a) => {
+      // A radius condition may carry just {place, miles}; resolve it to lat/lng first (TAP-171).
+      const definition = await resolveRadiusPlaces(db, a.definition)
+      return db.tx(
         (q) =>
           createSegment(q, actor, {
             name: String(a.name ?? ''),
@@ -92,26 +97,27 @@ export const SEGMENT_OPS: Record<string, Op> = {
             kind: a.kind === 'static' ? 'static' : 'dynamic',
             campaign_id: a.campaign_id == null ? null : id(a.campaign_id, 'campaign_id'),
             entity: a.entity as 'company' | 'contact',
-            definition: a.definition,
+            definition,
           }),
         actor,
-      ),
-    ),
+      )
+    }),
   },
   update_segment: {
     args: '{id, name?, description?, campaign_id?, definition?}',
-    run: wrap((db, actor, a) =>
-      db.tx(
+    run: wrap(async (db, actor, a) => {
+      const definition = a.definition === undefined ? undefined : await resolveRadiusPlaces(db, a.definition)
+      return db.tx(
         (q) =>
           updateSegment(q, actor, id(a.id), {
             name: a.name === undefined ? undefined : String(a.name),
             description: a.description === undefined ? undefined : a.description == null ? null : String(a.description),
             campaign_id: a.campaign_id === undefined ? undefined : a.campaign_id == null ? null : id(a.campaign_id, 'campaign_id'),
-            definition: a.definition,
+            definition,
           }),
         actor,
-      ),
-    ),
+      )
+    }),
   },
   archive_segment: {
     args: '{id}',
@@ -122,7 +128,7 @@ export const SEGMENT_OPS: Record<string, Op> = {
   segment_preview: {
     args: '{definition} or {entity, include?, exclude?}',
     run: wrap(async (db, _actor, a) => {
-      const def = validateDefinition(rawDefinitionArg(a))
+      const def = validateDefinition(await resolveRadiusPlaces(db, rawDefinitionArg(a)))
       const compiled = await compileSegment(db, def)
       const [counts, sample] = await Promise.all([countSegment(db, compiled), sampleRows(db, compiled, 10)])
       return { entity: def.entity, counts, sample, readback: readback(def) }
