@@ -335,7 +335,11 @@ const REPLY_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000
  *    same Instantly campaign, when both name one).
  */
 export async function withoutWebhookDuplicates(q: Queryable, inputs: EmitLeadEventInput[]): Promise<EmitLeadEventInput[]> {
-  const contactIds = [...new Set(inputs.map((i) => i.contact_id).filter((x): x is number => x != null))]
+  const contactIdsSet = new Set<number>()
+  for (const i of inputs) {
+    if (i.contact_id != null) contactIdsSet.add(i.contact_id)
+  }
+  const contactIds = Array.from(contactIdsSet)
   if (!contactIds.length) return inputs
   const { rows } = await q.query<{ contact_id: string | number; type: string; instantly_campaign_id: string | null; occurred_at: Date | string; email_id: string | null }>(
     `select contact_id, type, instantly_campaign_id, occurred_at, props->>'instantly_email_id' as email_id

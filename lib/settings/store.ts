@@ -326,7 +326,12 @@ export async function listActorKinds(q: Queryable): Promise<ActorKindsRow[]> {
 /** Which task kinds an agent picks up (empty = any). A person-only change, same bar as pausing an agent. */
 export async function setActorTakesKinds(db: Db, actor: string, actorId: string, kinds: string[], opts: { via: Via; note?: string } = { via: 'ui' }): Promise<ActorKindsRow> {
   if (!(await isHuman(db, actor))) throw new SettingsError('Only a person can change which task kinds an agent takes.', 403)
-  const clean = Array.from(new Set(kinds.map((k) => k.trim().toLowerCase()).filter(Boolean)))
+  const cleanSet = new Set<string>()
+  for (const k of kinds) {
+    const s = k.trim().toLowerCase()
+    if (s) cleanSet.add(s)
+  }
+  const clean = Array.from(cleanSet)
   for (const k of clean) {
     if (!/^[a-z][a-z0-9_]{0,60}$/.test(k)) throw new SettingsError(`"${k}" is not a valid task kind (lowercase letters, digits, underscore).`, 400)
   }

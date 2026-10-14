@@ -120,7 +120,15 @@ async function resolveCompanies(q: Queryable, input: { company_ids?: unknown; em
   }
   const unknownEmails: string[] = []
   if (Array.isArray(input.emails) && input.emails.length) {
-    const emails = [...new Set(input.emails.map((e) => String(e ?? '').trim().toLowerCase()).filter(Boolean))].slice(0, 5000)
+    const emailsSet = new Set<string>()
+    for (const e of input.emails) {
+      const s = String(e ?? '').trim().toLowerCase()
+      if (s) {
+        emailsSet.add(s)
+        if (emailsSet.size >= 5000) break
+      }
+    }
+    const emails = Array.from(emailsSet)
     const { rows } = await q.query<{ email_norm: string; company_id: number }>(
       'select email_norm, company_id from lp.contacts where email_norm = any($1::text[])',
       [emails],

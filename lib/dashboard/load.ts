@@ -445,7 +445,12 @@ export async function loadAccounts(ctx: DashboardContext): Promise<Stage<SenderA
 /** Replied leads still waiting on you, newest reply first. */
 export async function loadReplies(ctx: DashboardContext): Promise<Stage<RepliedLead[]>> {
   const errors: SourceError[] = []
-  const threadContacts = [...new Set(ctx.threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
+  const threadContactsSet = new Set<string>()
+  for (const e of ctx.threads) {
+    const s = e.lead?.toLowerCase()
+    if (s) threadContactsSet.add(s)
+  }
+  const threadContacts = Array.from(threadContactsSet)
   let leads: ApiLead[] | null = []
   if (threadContacts.length) {
     try {

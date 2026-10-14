@@ -125,7 +125,12 @@ export async function forgetContact(db: Db, actor: string, input: ForgetContactI
       [contactId],
     )
     const ids = personRows.map((r) => Number(r.id))
-    const emails = [...new Set(personRows.map((r) => normalizeEmail(r.email)).filter((e): e is string => Boolean(e)))]
+    const emailsSet = new Set<string>()
+    for (const r of personRows) {
+      const e = normalizeEmail(r.email)
+      if (e) emailsSet.add(e)
+    }
+    const emails = Array.from(emailsSet)
 
     await q.query(
       `update lp.contacts set email = null, email_norm = null, first_name = null, last_name = null, suggested_first_name = null,
