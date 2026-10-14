@@ -58,7 +58,12 @@ function checkOptions(type: FieldType, options: unknown): string[] {
   if (!Array.isArray(list) || list.some((o) => typeof o !== 'string')) {
     throw new FieldError('options must be an array of strings.')
   }
-  const cleaned = Array.from(new Set(list.map((o) => String(o).trim()).filter(Boolean)))
+  const cleanedSet = new Set<string>()
+  for (const o of list) {
+    const s = String(o).trim()
+    if (s) cleanedSet.add(s)
+  }
+  const cleaned = Array.from(cleanedSet)
   if (!cleaned.length) throw new FieldError(`A ${type === 'select' ? 'select' : 'multi-select'} field needs at least one option.`)
   return cleaned
 }

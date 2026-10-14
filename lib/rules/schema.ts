@@ -181,7 +181,12 @@ function maxAge(v: unknown, def: FieldDef, what: string): number | null {
 
 function listValue(v: unknown): string[] {
   const arr = Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []
-  return [...new Set(arr.map((x) => String(x).trim()).filter(Boolean))]
+  const set = new Set<string>()
+  for (const x of arr) {
+    const s = String(x).trim()
+    if (s) set.add(s)
+  }
+  return Array.from(set)
 }
 
 export function parseRequirement(raw: unknown, taken: Set<string>, n: number): Requirement {
