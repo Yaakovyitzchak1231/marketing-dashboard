@@ -164,7 +164,7 @@ function ActionButton({
       data-testid={testId}
       disabled={disabled}
       onClick={onClick}
-      className="rounded border border-line px-2.5 py-1 text-sm text-ink"
+      className="rounded border border-line px-2.5 py-1 text-sm text-ink outline-none transition-colors hover:border-ink-faint hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ink-muted disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -502,7 +502,7 @@ export function SharedWorkspace({
                     type="submit"
                     data-testid="dismiss"
                     disabled={!canAct()}
-                    className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink"
+                    className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink outline-none transition-colors hover:border-ink-faint hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ink-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {COPY.workspace.dismiss}
                   </button>
@@ -540,7 +540,7 @@ export function SharedWorkspace({
                       <button
                         type="submit"
                         data-testid={`comment-submit-${row.id}`}
-                        className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink"
+                        className="w-fit rounded border border-line px-2.5 py-1 text-sm text-ink outline-none transition-colors hover:border-ink-faint hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ink-muted disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {COPY.workspace.commentOn(row.label)}
                       </button>
