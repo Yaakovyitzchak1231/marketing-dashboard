@@ -238,10 +238,15 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
   }
 
   // ---- Phase 1.5: the shape of phase 2, from what phase 1 already returned ---------
-  const earliestCreated = listed
-    .map((c) => (c.timestamp_created ? Date.parse(c.timestamp_created) : NaN))
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b)[0]
+  let earliestCreated: number | undefined = undefined
+  for (const c of listed) {
+    if (c.timestamp_created) {
+      const t = Date.parse(c.timestamp_created)
+      if (Number.isFinite(t) && (earliestCreated === undefined || t < earliestCreated)) {
+        earliestCreated = t
+      }
+    }
+  }
   const dailyStart = range.start ?? (earliestCreated !== undefined ? dateInZone(new Date(earliestCreated), timeZone) : addDays(range.end, -(ALL_TIME_FALLBACK_DAYS - 1)))
 
   // Campaigns worth a per-campaign call: those with activity in the range (when we know it).
