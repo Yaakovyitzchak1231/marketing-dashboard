@@ -238,10 +238,16 @@ export async function loadSummary(rangeKey: RangeKey = '30d', opts: LoadOptions 
   }
 
   // ---- Phase 1.5: the shape of phase 2, from what phase 1 already returned ---------
-  const earliestCreated = listed
-    .map((c) => (c.timestamp_created ? Date.parse(c.timestamp_created) : NaN))
-    .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b)[0]
+  // ⚡ Bolt: replace map().filter().sort()[0] with O(N) single loop
+  let earliestCreated: number | undefined
+  for (const c of listed) {
+    if (c.timestamp_created) {
+      const t = Date.parse(c.timestamp_created)
+      if (Number.isFinite(t) && (earliestCreated === undefined || t < earliestCreated)) {
+        earliestCreated = t
+      }
+    }
+  }
   const dailyStart = range.start ?? (earliestCreated !== undefined ? dateInZone(new Date(earliestCreated), timeZone) : addDays(range.end, -(ALL_TIME_FALLBACK_DAYS - 1)))
 
   // Campaigns worth a per-campaign call: those with activity in the range (when we know it).
@@ -445,7 +451,13 @@ export async function loadAccounts(ctx: DashboardContext): Promise<Stage<SenderA
 /** Replied leads still waiting on you, newest reply first. */
 export async function loadReplies(ctx: DashboardContext): Promise<Stage<RepliedLead[]>> {
   const errors: SourceError[] = []
-  const threadContacts = [...new Set(ctx.threads.map((e) => e.lead?.toLowerCase()).filter((x): x is string => !!x))]
+  // ⚡ Bolt: replace map().filter() with single loop to avoid intermediate array allocation
+  const threadContactsSet = new Set<string>()
+  for (const e of ctx.threads) {
+    const l = e.lead?.toLowerCase()
+    if (l) threadContactsSet.add(l)
+  }
+  const threadContacts = [...threadContactsSet]
   let leads: ApiLead[] | null = []
   if (threadContacts.length) {
     try {
