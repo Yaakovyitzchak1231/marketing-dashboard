@@ -256,7 +256,7 @@ export function FilterDrawer({
                         {TWO_VALUE_OPS.has(r.op) ? (
                           <input value={r.value2} onChange={(e) => patchRow(r.id, { value2: e.target.value })} placeholder="and" className="w-20 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                         ) : null}
-                        <button type="button" onClick={() => removeRow(r.id)} className="ml-auto text-ink-faint hover:text-bad">×</button>
+                        <button type="button" onClick={() => removeRow(r.id)} aria-label="Remove filter" className="ml-auto text-ink-faint hover:text-bad">×</button>
                       </li>
                     ) : (
                       <li key={r.id} className="flex flex-wrap items-center gap-1">
@@ -275,7 +275,7 @@ export function FilterDrawer({
                         <input value={r.count} onChange={(e) => patchRow(r.id, { count: e.target.value })} className="w-12 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
                         <span className="text-2xs text-ink-faint">times, within</span>
                         <input value={r.within_last_days} onChange={(e) => patchRow(r.id, { within_last_days: e.target.value })} placeholder="days" className="w-14 rounded-control border border-line bg-surface px-1.5 py-1 text-xs" />
-                        <button type="button" onClick={() => removeRow(r.id)} className="ml-auto text-ink-faint hover:text-bad">×</button>
+                        <button type="button" onClick={() => removeRow(r.id)} aria-label="Remove filter" className="ml-auto text-ink-faint hover:text-bad">×</button>
                       </li>
                     ),
                   )}

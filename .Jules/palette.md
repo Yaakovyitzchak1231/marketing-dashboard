@@ -1,3 +1,6 @@
 ## 2024-10-09 - [Keyboard Focus Visibility]
 **Learning:** [Tailwind `outline-none` removes focus rings completely, impacting keyboard users navigating forms.]
 **Action:** [Explicitly include `focus-visible:ring-2 focus-visible:ring-ink-muted` when overriding default browser outlines to maintain accessible keyboard navigation.]
+## 2024-10-17 - [Accessible Icon-Only Remove Buttons]
+**Learning:** [Many inline delete/remove buttons using '×' or '&times;' lacked ARIA labels, meaning screen reader users wouldn't know their function.]
+**Action:** [Always ensure icon-only buttons for removing or archiving items have descriptive 'aria-label' attributes like 'Remove filter' or 'Archive'.]
