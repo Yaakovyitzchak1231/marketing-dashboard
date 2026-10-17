@@ -387,7 +387,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
                     <li key={it.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-canvas px-2.5 py-1 text-xs text-ink">
                       {it.name}
                       <VerifyBadge item={it} onRecheck={() => recheck(it.id)} />
-                      <button type="button" className="text-ink-faint hover:text-bad" title="Archive" onClick={() => setStatus([it.id], 'archived')}>&times;</button>
+                      <button type="button" className="text-ink-faint hover:text-bad" aria-label="Archive" title="Archive" onClick={() => setStatus([it.id], 'archived')}>&times;</button>
                     </li>
                   ))}
                 </ul>
@@ -415,7 +415,7 @@ export function ProfileWizard({ campaignId, initial, pools: initialPools, aiConf
               {kpis.map((k, i) => (
                 <li key={`${k.metric}-${i}`} className="flex items-center justify-between rounded-control border border-line px-2.5 py-1 text-sm">
                   <span>{k.metric}: {k.target} / {k.period}</span>
-                  <button type="button" className="text-ink-faint hover:text-bad" onClick={() => setKpis((arr) => arr.filter((_, idx) => idx !== i))}>&times;</button>
+                  <button type="button" className="text-ink-faint hover:text-bad" aria-label="Remove KPI" onClick={() => setKpis((arr) => arr.filter((_, idx) => idx !== i))}>&times;</button>
                 </li>
               ))}
             </ul>
