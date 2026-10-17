@@ -112,12 +112,22 @@ function toIso(d: Date | string | null | undefined): string | null {
 }
 
 function earliest(dates: (string | null)[]): string | null {
-  const vals = dates.filter((d): d is string => Boolean(d)).sort()
-  return vals[0] ?? null
+  let min: string | null = null
+  for (const d of dates) {
+    if (d) {
+      if (min === null || d < min) min = d
+    }
+  }
+  return min
 }
 function latest(dates: (string | null)[]): string | null {
-  const vals = dates.filter((d): d is string => Boolean(d)).sort()
-  return vals.length ? vals[vals.length - 1] : null
+  let max: string | null = null
+  for (const d of dates) {
+    if (d) {
+      if (max === null || d > max) max = d
+    }
+  }
+  return max
 }
 
 /** Milestones over the lead's WHOLE history, in SQL (review fix, #79: they were taken from the
